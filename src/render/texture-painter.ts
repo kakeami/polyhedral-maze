@@ -1,0 +1,216 @@
+import type { Vec3, CellKey, Face } from '../core/types.ts';
+import { parseCell } from '../core/types.ts';
+import { add, sub, scale, mean, allClose } from '../core/vec3.ts';
+import type { MazeGraph } from '../core/maze-graph.ts';
+import type { Maze } from '../core/maze.ts';
+import { bfsShortestPath } from '../core/graph.ts';
+
+/**
+ * Compute 3D vertices of a cell polygon based on the face geometry.
+ */
+export function cellVertices3d(face: Face, cell: CellKey, n: number): Vec3[] {
+  const { row, col } = parseCell(cell);
+  const nv = face.vertices.length;
+
+  if (nv === 4) {
+    // RectGrid
+    const o = face.vertices[0]!;
+    const u = sub(face.vertices[1]!, o);
+    const v = sub(face.vertices[3]!, o);
+    const r = row, c = col;
+    return [
+      add(o, add(scale(u, c / n), scale(v, r / n))),
+      add(o, add(scale(u, (c + 1) / n), scale(v, r / n))),
+      add(o, add(scale(u, (c + 1) / n), scale(v, (r + 1) / n))),
+      add(o, add(scale(u, c / n), scale(v, (r + 1) / n))),
+    ];
+  }
+
+  if (nv === 3) {
+    // TriGrid
+    const o = face.vertices[0]!;
+    const u = sub(face.vertices[1]!, o);
+    const v = sub(face.vertices[2]!, o);
+    return triCellVerts(o, u, v, row, col, n);
+  }
+
+  if (nv === 5) {
+    // PentGrid
+    const center = mean(face.vertices);
+    const sector = Math.floor(row / n);
+    const localRow = row - sector * n;
+    const su = sub(face.vertices[sector]!, center);
+    const sv = sub(face.vertices[(sector + 1) % 5]!, center);
+    return triCellVerts(center, su, sv, localRow, col, n);
+  }
+
+  throw new Error(`Unsupported face vertex count: ${nv}`);
+}
+
+function triCellVerts(
+  origin: Vec3, u: Vec3, v: Vec3,
+  r: number, c: number, n: number,
+): Vec3[] {
+  const k = Math.floor(c / 2);
+  const vtx = (a: number, b: number): Vec3 =>
+    add(origin, add(scale(u, a / n), scale(v, b / n)));
+
+  if (c % 2 === 0) {
+    return [vtx(r - k, k), vtx(r - k + 1, k), vtx(r - k, k + 1)];
+  } else {
+    return [vtx(r - k, k), vtx(r - k, k + 1), vtx(r - k - 1, k + 1)];
+  }
+}
+
+/**
+ * Find the shared edge (2 vertices) between two adjacent cells.
+ */
+function sharedEdge(v1: Vec3[], v2: Vec3[]): [Vec3, Vec3] | null {
+  const shared: Vec3[] = [];
+  for (const a of v1) {
+    for (const b of v2) {
+      if (allClose(a, b, 1e-6)) {
+        shared.push(a);
+        break;
+      }
+    }
+  }
+  return shared.length === 2 ? [shared[0]!, shared[1]!] : null;
+}
+
+export interface MazeRenderData {
+  walls: Vec3[];       // pairs of Vec3 (p1, p2, p1, p2, ...)
+  outline: Vec3[];     // face boundary wall segments (with gaps at passages)
+  portals: Vec3[];     // midpoints of inter-face passage gaps
+  solution: Vec3[];    // solution path cell centers
+  startPos: Vec3;
+  goalPos: Vec3;
+  warpA: Vec3 | null;
+  warpB: Vec3 | null;
+}
+
+/**
+ * Compute all 3D wall segments, face outlines, and markers for rendering.
+ */
+export function computeRenderData(
+  mazeGraph: MazeGraph,
+  maze: Maze,
+  showSolution: boolean,
+): MazeRenderData {
+  const treeEdgeSet = new Set<string>();
+  for (const [a, b] of maze.tree.edges()) {
+    treeEdgeSet.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+  }
+
+  const faces = mazeGraph.polyhedron.faces();
+  const n = mazeGraph.n;
+  const walls: Vec3[] = [];
+  const outline: Vec3[] = [];
+  const portals: Vec3[] = [];
+
+  for (const face of faces) {
+    const grid = mazeGraph.grids.get(face.id)!;
+
+    // Internal walls: non-tree edges between adjacent cells
+    for (const [c1, c2] of grid.internalEdges()) {
+      const key = c1 < c2 ? `${c1}|${c2}` : `${c2}|${c1}`;
+      if (!treeEdgeSet.has(key)) {
+        const verts1 = cellVertices3d(face, c1, n);
+        const verts2 = cellVertices3d(face, c2, n);
+        const edge = sharedEdge(verts1, verts2);
+        if (edge) {
+          walls.push(edge[0], edge[1]);
+        }
+      }
+    }
+
+    // Face outline with gaps at inter-face passages
+    const faceVerts = face.vertices;
+    const nv = faceVerts.length;
+    for (let i = 0; i < nv; i++) {
+      const edgeStart = faceVerts[i]!;
+      const edgeEnd = faceVerts[(i + 1) % nv]!;
+
+      let boundaryCells: CellKey[];
+      try {
+        boundaryCells = grid.boundaryCells(edgeStart, edgeEnd);
+      } catch {
+        // Fallback: draw full edge if boundaryCells fails
+        outline.push(edgeStart, edgeEnd);
+        continue;
+      }
+
+      // Grid vertices are evenly spaced along the edge
+      const du: Vec3 = [
+        (edgeEnd[0] - edgeStart[0]) / n,
+        (edgeEnd[1] - edgeStart[1]) / n,
+        (edgeEnd[2] - edgeStart[2]) / n,
+      ];
+
+      for (let j = 0; j < boundaryCells.length; j++) {
+        const cell = boundaryCells[j]!;
+        const segStart: Vec3 = [
+          edgeStart[0] + j * du[0],
+          edgeStart[1] + j * du[1],
+          edgeStart[2] + j * du[2],
+        ];
+        const segEnd: Vec3 = [
+          edgeStart[0] + (j + 1) * du[0],
+          edgeStart[1] + (j + 1) * du[1],
+          edgeStart[2] + (j + 1) * du[2],
+        ];
+
+        if (hasInterFaceTreeEdge(cell, maze.tree)) {
+          // Gap — add portal marker at midpoint
+          portals.push([
+            (segStart[0] + segEnd[0]) / 2,
+            (segStart[1] + segEnd[1]) / 2,
+            (segStart[2] + segEnd[2]) / 2,
+          ]);
+        } else {
+          outline.push(segStart, segEnd);
+        }
+      }
+    }
+  }
+
+  // Cell center helper
+  function center(cell: CellKey): Vec3 {
+    const fid = parseCell(cell).faceId;
+    return mazeGraph.grids.get(fid)!.cellCenter3d(cell);
+  }
+
+  // Solution path
+  const solution: Vec3[] = [];
+  if (showSolution) {
+    const path = bfsShortestPath(maze.tree, maze.start, maze.goal);
+    for (const cell of path) {
+      solution.push(center(cell));
+    }
+  }
+
+  return {
+    walls,
+    outline,
+    portals,
+    solution,
+    startPos: center(maze.start),
+    goalPos: center(maze.goal),
+    warpA: maze.warp ? center(maze.warp.cellA) : null,
+    warpB: maze.warp ? center(maze.warp.cellB) : null,
+  };
+}
+
+/**
+ * Check if a cell has a tree edge to a cell on a different face.
+ */
+function hasInterFaceTreeEdge(
+  cell: CellKey,
+  tree: { neighbors(node: CellKey): CellKey[] },
+): boolean {
+  const cellFace = parseCell(cell).faceId;
+  for (const neighbor of tree.neighbors(cell)) {
+    if (parseCell(neighbor).faceId !== cellFace) return true;
+  }
+  return false;
+}
