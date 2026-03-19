@@ -1,0 +1,9 @@
+.dev/
+.env
+.env.*
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+dist/
+CLAUDE.md
