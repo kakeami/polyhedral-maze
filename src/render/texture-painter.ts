@@ -82,7 +82,7 @@ export interface MazeRenderData {
   walls: Vec3[];       // pairs of Vec3 (p1, p2, p1, p2, ...)
   outline: Vec3[];     // face boundary wall segments (with gaps at passages)
   portals: Vec3[];     // midpoints of inter-face passage gaps
-  solution: Vec3[];    // solution path cell centers
+  solution: Vec3[];    // solution path cell centers (with boundary midpoints)
   startPos: Vec3;
   goalPos: Vec3;
   warpA: Vec3 | null;
@@ -131,6 +131,9 @@ export function computeRenderData(
       const edgeStart = faceVerts[i]!;
       const edgeEnd = faceVerts[(i + 1) % nv]!;
 
+      // Find the adjacent face that shares this edge
+      const adjFaceId = findAdjacentFaceId(faces, face.id, edgeStart, edgeEnd);
+
       let boundaryCells: CellKey[];
       try {
         boundaryCells = grid.boundaryCells(edgeStart, edgeEnd);
@@ -160,8 +163,8 @@ export function computeRenderData(
           edgeStart[2] + (j + 1) * du[2],
         ];
 
-        if (hasInterFaceTreeEdge(cell, maze.tree)) {
-          // Gap — add portal marker at midpoint
+        if (adjFaceId !== null && hasTreeEdgeToFace(cell, maze.tree, adjFaceId)) {
+          // Gap at inter-face passage
           portals.push([
             (segStart[0] + segEnd[0]) / 2,
             (segStart[1] + segEnd[1]) / 2,
@@ -180,11 +183,34 @@ export function computeRenderData(
     return mazeGraph.grids.get(fid)!.cellCenter3d(cell);
   }
 
-  // Solution path
+  // Face lookup by id
+  const faceById = new Map<number, Face>();
+  for (const f of faces) faceById.set(f.id, f);
+
+  // Solution path with boundary midpoints at face crossings
   const solution: Vec3[] = [];
   if (showSolution) {
     const path = bfsShortestPath(maze.tree, maze.start, maze.goal);
-    for (const cell of path) {
+    for (let i = 0; i < path.length; i++) {
+      const cell = path[i]!;
+      const fid = parseCell(cell).faceId;
+
+      // Insert boundary midpoint when crossing faces
+      if (i > 0) {
+        const prevCell = path[i - 1]!;
+        const prevFid = parseCell(prevCell).faceId;
+        if (fid !== prevFid) {
+          const prevFace = faceById.get(prevFid)!;
+          const currFace = faceById.get(fid)!;
+          const v1 = cellVertices3d(prevFace, prevCell, n);
+          const v2 = cellVertices3d(currFace, cell, n);
+          const edge = sharedEdge(v1, v2);
+          if (edge) {
+            solution.push(scale(add(edge[0], edge[1]), 0.5));
+          }
+        }
+      }
+
       solution.push(center(cell));
     }
   }
@@ -202,15 +228,37 @@ export function computeRenderData(
 }
 
 /**
- * Check if a cell has a tree edge to a cell on a different face.
+ * Find the adjacent face that shares the given edge (two vertices) with the current face.
  */
-function hasInterFaceTreeEdge(
+function findAdjacentFaceId(
+  faces: Face[],
+  currentFaceId: number,
+  edgeStart: Vec3,
+  edgeEnd: Vec3,
+): number | null {
+  for (const f of faces) {
+    if (f.id === currentFaceId) continue;
+    let hasStart = false;
+    let hasEnd = false;
+    for (const v of f.vertices) {
+      if (allClose(v, edgeStart, 1e-6)) hasStart = true;
+      if (allClose(v, edgeEnd, 1e-6)) hasEnd = true;
+    }
+    if (hasStart && hasEnd) return f.id;
+  }
+  return null;
+}
+
+/**
+ * Check if a cell has a tree edge to a cell on the specified target face.
+ */
+function hasTreeEdgeToFace(
   cell: CellKey,
   tree: { neighbors(node: CellKey): CellKey[] },
+  targetFaceId: number,
 ): boolean {
-  const cellFace = parseCell(cell).faceId;
   for (const neighbor of tree.neighbors(cell)) {
-    if (parseCell(neighbor).faceId !== cellFace) return true;
+    if (parseCell(neighbor).faceId === targetFaceId) return true;
   }
   return false;
 }

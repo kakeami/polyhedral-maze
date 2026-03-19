@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face, Vec3 } from '../core/types.ts';
 import type { MazeRenderData } from './texture-painter.ts';
@@ -42,20 +45,28 @@ export function createScene(container: HTMLElement): SceneContext {
   scene.add(dir);
 
   let mazeGroup: THREE.Group | null = null;
+  let lineMaterials: LineMaterial[] = [];
 
   function updateMaze(polyhedron: Polyhedron, data: MazeRenderData) {
     if (mazeGroup) {
       scene.remove(mazeGroup);
       disposeMeshes(mazeGroup);
     }
-    mazeGroup = buildMazeGroup(polyhedron, data);
+    lineMaterials = [];
+    const resolution = new THREE.Vector2(container.clientWidth, container.clientHeight);
+    mazeGroup = buildMazeGroup(polyhedron, data, resolution, lineMaterials);
     scene.add(mazeGroup);
   }
 
   function resize() {
-    camera.aspect = container.clientWidth / container.clientHeight;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(w, h);
+    for (const mat of lineMaterials) {
+      mat.resolution.set(w, h);
+    }
   }
 
   function dispose() {
@@ -79,7 +90,12 @@ export function createScene(container: HTMLElement): SceneContext {
 
 // ─── Build 3D objects ───────────────────────────────────────────────
 
-function buildMazeGroup(polyhedron: Polyhedron, data: MazeRenderData): THREE.Group {
+function buildMazeGroup(
+  polyhedron: Polyhedron,
+  data: MazeRenderData,
+  resolution: THREE.Vector2,
+  outLineMaterials: LineMaterial[],
+): THREE.Group {
   const group = new THREE.Group();
   const faces = polyhedron.faces();
 
@@ -87,18 +103,24 @@ function buildMazeGroup(polyhedron: Polyhedron, data: MazeRenderData): THREE.Gro
   const faceMeshGroup = buildFaceMeshes(faces);
   group.add(faceMeshGroup);
 
-  // 2. Wall lines
+  // 2. Wall lines (fat lines via Line2 addon)
   if (data.walls.length > 0) {
-    const wallGeo = vecPairsToLineGeometry(data.walls);
-    const wallMat = new THREE.LineBasicMaterial({ color: 0x222222 });
-    group.add(new THREE.LineSegments(wallGeo, wallMat));
+    const wallGeo = new LineSegmentsGeometry();
+    wallGeo.setPositions(vecPairsToFlatArray(data.walls));
+    const wallMat = new LineMaterial({ color: 0x111111, linewidth: 2 });
+    wallMat.resolution.copy(resolution);
+    outLineMaterials.push(wallMat);
+    group.add(new LineSegments2(wallGeo, wallMat));
   }
 
-  // 3. Face outline
+  // 3. Face outline (fat lines)
   if (data.outline.length > 0) {
-    const outGeo = vecPairsToLineGeometry(data.outline);
-    const outMat = new THREE.LineBasicMaterial({ color: 0x111111 });
-    group.add(new THREE.LineSegments(outGeo, outMat));
+    const outGeo = new LineSegmentsGeometry();
+    outGeo.setPositions(vecPairsToFlatArray(data.outline));
+    const outMat = new LineMaterial({ color: 0x000000, linewidth: 3 });
+    outMat.resolution.copy(resolution);
+    outLineMaterials.push(outMat);
+    group.add(new LineSegments2(outGeo, outMat));
   }
 
   // 4. Solution path
@@ -109,12 +131,7 @@ function buildMazeGroup(polyhedron: Polyhedron, data: MazeRenderData): THREE.Gro
     group.add(new THREE.Line(lineGeo, lineMat));
   }
 
-  // 5. Portal markers (inter-face passages)
-  for (const pos of data.portals) {
-    group.add(makeSphere(pos, 0x2299dd, 0.02));
-  }
-
-  // 6. Start / Goal / Warp markers
+  // 5. Start / Goal / Warp markers
   const markerSize = 0.03;
   group.add(makeSphere(data.startPos, 0x22bb22, markerSize * 1.2));
   group.add(makeSphere(data.goalPos, 0xdd2222, markerSize * 1.2));
@@ -152,7 +169,7 @@ function buildFaceMeshes(faces: Face[]): THREE.Group {
     geo.setIndex(indices);
 
     const hue = face.id / total;
-    const color = new THREE.Color().setHSL(hue, 0.25, 0.82);
+    const color = new THREE.Color().setHSL(hue, 0.10, 0.95);
     const mat = new THREE.MeshStandardMaterial({
       color,
       side: THREE.DoubleSide,
@@ -168,17 +185,12 @@ function buildFaceMeshes(faces: Face[]): THREE.Group {
   return group;
 }
 
-function vecPairsToLineGeometry(pairs: Vec3[]): THREE.BufferGeometry {
-  const arr = new Float32Array(pairs.length * 3);
-  for (let i = 0; i < pairs.length; i++) {
-    const v = pairs[i]!;
-    arr[i * 3] = v[0];
-    arr[i * 3 + 1] = v[1];
-    arr[i * 3 + 2] = v[2];
+function vecPairsToFlatArray(pairs: Vec3[]): number[] {
+  const arr: number[] = [];
+  for (const v of pairs) {
+    arr.push(v[0], v[1], v[2]);
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-  return geo;
+  return arr;
 }
 
 function makeSphere(pos: Vec3, color: number, radius: number): THREE.Mesh {
