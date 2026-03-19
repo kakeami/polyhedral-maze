@@ -63,10 +63,10 @@ export function createScene(container: HTMLElement): SceneContext {
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.5;
 
-  // Lighting — warm to match twilight sky
+  // Lighting — directional light aligned with the sun
   scene.add(new THREE.AmbientLight(0xfff0e0, 0.8));
   const dir = new THREE.DirectionalLight(0xffe8c0, 1.2);
-  dir.position.set(4, 6, 4);
+  dir.position.copy(sun).multiplyScalar(10);
   scene.add(dir);
 
   let mazeGroup: THREE.Group | null = null;
