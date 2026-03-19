@@ -24,7 +24,6 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const seedInput = el<HTMLInputElement>('ctrl-seed');
   const warpCheck = el<HTMLInputElement>('ctrl-warp');
   const solutionCheck = el<HTMLInputElement>('ctrl-solution');
-  const labelsCheck = el<HTMLInputElement>('ctrl-labels');
   const metricsDiv = el<HTMLDivElement>('ctrl-metrics');
 
   const callbacks: (() => void)[] = [];
@@ -37,16 +36,11 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   // Sync slider display values
   nSlider.addEventListener('input', () => { nValue.textContent = nSlider.value; fire(); });
   kSlider.addEventListener('input', () => { kValue.textContent = kSlider.value; fire(); });
-  for (const input of [shapeSelect, algoSelect, seedInput, warpCheck, solutionCheck, labelsCheck]) {
+  for (const input of [shapeSelect, algoSelect, seedInput, warpCheck, solutionCheck]) {
     input.addEventListener('change', fire);
   }
 
   // Action buttons
-  el('btn-regenerate').addEventListener('click', () => {
-    seedInput.value = String(Number(seedInput.value) + 1);
-    fire();
-    actions.get('regenerate')?.forEach(cb => cb());
-  });
   el('btn-random').addEventListener('click', () => {
     seedInput.value = String(Math.floor(Math.random() * 999999));
     fire();
@@ -68,7 +62,6 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
       seed: Number(seedInput.value),
       warp: warpCheck.checked,
       showSolution: solutionCheck.checked,
-      showLabels: labelsCheck.checked,
     };
   }
 
@@ -82,7 +75,6 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     seedInput.value = String(p.seed);
     warpCheck.checked = p.warp;
     solutionCheck.checked = p.showSolution;
-    labelsCheck.checked = p.showLabels;
   }
 
   function setMetrics(m: MazeMetrics) {
@@ -146,11 +138,9 @@ function buildHTML(p: MazeParams): string {
     <div class="checkboxes">
       <label><input id="ctrl-warp" type="checkbox" ${p.warp ? 'checked' : ''} /> Warp</label>
       <label><input id="ctrl-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
-      <label><input id="ctrl-labels" type="checkbox" ${p.showLabels ? 'checked' : ''} /> Show labels</label>
     </div>
 
     <div class="buttons">
-      <button id="btn-regenerate">Regenerate</button>
       <button id="btn-random">Random</button>
       <button id="btn-copy-url">Copy URL</button>
       <button id="btn-export-pdf">Export PDF</button>

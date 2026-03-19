@@ -6,7 +6,6 @@ export interface MazeParams {
   seed: number;
   warp: boolean;
   showSolution: boolean;
-  showLabels: boolean;
 }
 
 export const DEFAULT_PARAMS: MazeParams = {
@@ -17,7 +16,6 @@ export const DEFAULT_PARAMS: MazeParams = {
   seed: 42,
   warp: false,
   showSolution: false,
-  showLabels: false,
 };
 
 export function encodeParams(params: MazeParams): string {
@@ -29,7 +27,6 @@ export function encodeParams(params: MazeParams): string {
   if (params.seed !== DEFAULT_PARAMS.seed) p.set('seed', String(params.seed));
   if (params.warp) p.set('warp', '1');
   if (params.showSolution) p.set('solution', '1');
-  if (params.showLabels) p.set('labels', '1');
   const qs = p.toString();
   return qs ? '?' + qs : '';
 }
@@ -44,7 +41,6 @@ export function decodeParams(search: string): MazeParams {
     seed: clamp(Number(p.get('seed') ?? DEFAULT_PARAMS.seed), 0, 999999),
     warp: p.get('warp') === '1',
     showSolution: p.get('solution') === '1',
-    showLabels: p.get('labels') === '1',
   };
 }
 
