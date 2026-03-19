@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maze Generation on the Platonic Solids: A Three-Layer Graph Model</title>
+  <meta name="description" content="Technical report on automated maze generation across all five Platonic solids using a three-layer graph model with inter-face passage constraints." />
+  <!-- Open Graph -->
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Maze Generation on the Platonic Solids: A Three-Layer Graph Model" />
+  <meta property="og:description" content="Technical report on automated maze generation across all five Platonic solids." />
+  <meta property="og:url" content="https://kakeami.github.io/polyhedral-maze/report/" />
+  <!-- KaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+  <style>
+    :root {
+      --max-width: 820px;
+      --font-serif: "Georgia", "Times New Roman", serif;
+      --font-mono: "Menlo", "Consolas", monospace;
+      --color-bg: #fff;
+      --color-text: #222;
+      --color-accent: #2c5282;
+      --color-border: #ddd;
+      --color-novel: #fff8e1;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-serif);
+      font-size: 1rem;
+      line-height: 1.7;
+      color: var(--color-text);
+      background: var(--color-bg);
+      padding: 2rem 1rem;
+    }
+    .container { max-width: var(--max-width); margin: 0 auto; }
+    a { color: var(--color-accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 1.5rem;
+    }
+    header h1 { font-size: 1.6rem; margin-bottom: 0.5rem; line-height: 1.3; }
+    header .author { font-size: 0.95rem; color: #444; margin-bottom: 0.2rem; }
+    header .affiliation { font-size: 0.85rem; color: #666; margin-bottom: 0.3rem; }
+    header .meta { font-size: 0.85rem; color: #888; }
+    h2 {
+      font-size: 1.3rem;
+      color: var(--color-accent);
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 0.3rem;
+      margin: 2rem 0 1rem;
+    }
+    h3 { font-size: 1.1rem; margin: 1.5rem 0 0.8rem; }
+    h4 { font-size: 1rem; margin: 1.2rem 0 0.6rem; }
+    p { margin-bottom: 0.8rem; text-align: justify; }
+    ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+    li { margin-bottom: 0.3rem; }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background: #f5f5f5;
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
+    }
+    pre {
+      background: #f8f8f8;
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      margin: 1rem 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border: 1px solid var(--color-border);
+      padding: 0.4rem 0.6rem;
+      text-align: center;
+    }
+    th { background: #f5f5f5; font-weight: bold; }
+    figure {
+      margin: 1.5rem 0;
+      text-align: center;
+    }
+    figcaption {
+      font-size: 0.85rem;
+      color: #555;
+      margin-top: 0.4rem;
+    }
+    .definition, .theorem, .remark {
+      border-left: 3px solid var(--color-accent);
+      padding: 0.8rem 1rem;
+      margin: 1rem 0;
+      background: #f9fbfd;
+    }
+    .definition .label, .theorem .label, .remark .label {
+      font-weight: bold;
+      color: var(--color-accent);
+      display: block;
+      margin-bottom: 0.3rem;
+    }
+    .novel {
+      border-left: 3px solid #e6a817;
+      background: var(--color-novel);
+      padding: 0.8rem 1rem;
+      margin: 1rem 0;
+    }
+    .novel .label {
+      font-weight: bold;
+      color: #b8860b;
+      display: block;
+      margin-bottom: 0.3rem;
+      font-size: 0.85rem;
+    }
+    .references { font-size: 0.85rem; }
+    .references ol { counter-reset: ref-counter; list-style: none; padding-left: 0; }
+    .references li {
+      counter-increment: ref-counter;
+      margin-bottom: 0.5rem;
+      padding-left: 2rem;
+      text-indent: -2rem;
+    }
+    .references li::before {
+      content: "[" counter(ref-counter) "] ";
+      font-weight: bold;
+    }
+    .algorithm {
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      padding: 1rem;
+      margin: 1rem 0;
+      background: #fafafa;
+    }
+    .algorithm .alg-title {
+      font-weight: bold;
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 0.3rem;
+      margin-bottom: 0.5rem;
+    }
+    .algorithm ol { margin-left: 1.5rem; }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--color-border);
+      font-size: 0.8rem;
+      color: #888;
+      text-align: center;
+    }
+    @media (max-width: 600px) {
+      table { font-size: 0.75rem; }
+      header h1 { font-size: 1.3rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <a href="../" class="back-link">&larr; Back to Demo</a>
+
+  <header>
+    <h1>Maze Generation on the Platonic Solids:<br>A Three-Layer Graph Model</h1>
+    <div class="author"><a href="https://github.com/kakeami">Kakeami</a></div>
+    <div class="affiliation">Georgia Institute of Technology</div>
+    <div class="meta">Technical Report &mdash; March 2026 &mdash; <a href="https://github.com/kakeami/polyhedral-maze">Source Code</a></div>
+  </header>
+
+  <!-- ================================================================== -->
+  <h2>Abstract</h2>
+  <!-- ================================================================== -->
+  <p>
+    We present a systematic framework for generating perfect mazes on the surfaces of all five Platonic solids&mdash;the tetrahedron, cube, octahedron, dodecahedron, and icosahedron. The core contribution is a <em>three-layer graph model</em> that separates the problem into (1)&nbsp;a macro face-adjacency graph, (2)&nbsp;per-face grid graphs tailored to each polygon type, and (3)&nbsp;a combined maze graph with a tunable inter-face passage constraint&nbsp;$k$. We show that classical spanning-tree algorithms (Kruskal, DFS backtracker, Wilson) can be applied directly to this unified graph to produce mazes with a guaranteed unique solution. We further introduce a <em>warp tunnel</em> mechanism that adds a shortcut between opposite faces while provably preserving the spanning-tree property, and observe a structural duality between the net-unfolding problem and maze generation&mdash;both reduce to finding a spanning tree, albeit on different layers of our model. Finally, we propose polyhedral-specific difficulty metrics (face crossings, face coverage) and provide an open-source interactive demo with PDF net export for paper-craft construction.
+  </p>
+
+  <!-- ================================================================== -->
+  <h2>1. Introduction</h2>
+  <!-- ================================================================== -->
+  <p>
+    Maze generation on planar grids is a well-studied topic in recreational mathematics and computer science&nbsp;[1, 2]. However, generating mazes on the surfaces of three-dimensional polyhedra introduces challenges that do not arise in the planar case: cells belonging to different faces must be connected through shared geometric edges, the grid topology varies with face shape (squares, triangles, pentagons), and the solver must reason about spatial relationships that are not directly visible from any single viewpoint.
+  </p>
+  <p>
+    Our work is motivated by a simple hands-on activity: printing a maze on an unfolded polyhedron net, cutting it out, and assembling it into a three-dimensional puzzle. This end-to-end pipeline&mdash;from algorithmic generation to physical paper craft&mdash;requires solving several interrelated problems: subdividing each face into a grid of cells, connecting grids across face boundaries in a controlled manner, generating a spanning tree over the resulting graph, and unfolding the polyhedron into a printable net.
+  </p>
+  <p>
+    While cube-surface mazes have been implemented in several hobby and course projects&nbsp;[3, 4, 5], no prior work provides a formal graph-theoretic model that generalizes to arbitrary Platonic solids, controls the number of inter-face passages, or addresses non-rectangular face grids. This paper fills that gap with the following contributions:
+  </p>
+  <ol>
+    <li>A <strong>three-layer graph model</strong> ($G_{\text{face}}$, $G_f$, $G_{\text{maze}}$) that cleanly separates macro topology from micro grid geometry (Section&nbsp;3).</li>
+    <li><strong>Grid schemes for all regular polygon types</strong>: RectGrid for squares, TriGrid for equilateral triangles, and PentGrid for regular pentagons (Section&nbsp;3.2).</li>
+    <li>A tunable <strong>inter-face passage constraint</strong>&nbsp;$k$ that controls the number of passages between adjacent faces, acting as a bottleneck parameter (Section&nbsp;3.3).</li>
+    <li>A <strong>warp tunnel</strong> mechanism with a provably tree-preserving splice operation (Section&nbsp;4.3).</li>
+    <li>An observation of <strong>structural duality</strong> between net unfolding and maze generation (Section&nbsp;5).</li>
+    <li><strong>Polyhedral difficulty metrics</strong> (face crossings, face coverage) that capture aspects unique to surface mazes (Section&nbsp;6).</li>
+  </ol>
+
+  <!-- ================================================================== -->
+  <h2>2. Related Work</h2>
+  <!-- ================================================================== -->
+
+  <h3>2.1 Planar Maze Generation</h3>
+  <p>
+    The generation of perfect mazes (i.e., spanning trees of a grid graph) is classical. Jamis Buck's comprehensive treatment&nbsp;[1] covers depth-first search (DFS) backtracking, randomized Kruskal, Prim, Aldous&ndash;Broder, Wilson's algorithm, and others. Berthier&nbsp;[2] provides a recent survey that extends coverage to topological variants (torus, cylinder, M&ouml;bius strip) without, however, proposing a concrete model for polyhedral surfaces.
+  </p>
+
+  <h3>2.2 Cube-Surface Mazes</h3>
+  <p>
+    Several implementations target the cube specifically. Vijayaraghavan and Krishnamurthy&nbsp;[3] describe a MATLAB-based system that generates a rolling-ball maze on a cube surface using recursive backtracking, with physical fabrication via FDM 3D printing. The <code>carvey_cube_maze</code> project&nbsp;[4] takes a similar approach in Python, producing SVG net outputs for CNC carving. Pullen's Daedalus&nbsp;[5] includes a "planair" mode that wraps a rectangular grid around a cube. All three are limited to cubes and lack formal graph-theoretic modeling or inter-face passage control.
+  </p>
+
+  <h3>2.3 Mazes on General Surfaces</h3>
+  <p>
+    Li and Mount&nbsp;[6] generate mazes on spherical surfaces using Voronoi tessellations, producing irregular (non-grid) cell layouts. Pedersen and Singh&nbsp;[7] create organic labyrinths on arbitrary 2D manifolds via curve-based growth simulations. Neither approach produces grid-based mazes on polyhedral faces.
+  </p>
+  <p>
+    PolyJS by Arcus&nbsp;[8] generates mazes on arbitrary polyhedra loaded from OFF files, but treats each <em>face</em> as a single cell&mdash;there is no intra-face grid subdivision. This yields mazes with at most as many cells as the polyhedron has faces (e.g., 20 cells for an icosahedron), which is far too coarse for a satisfying puzzle.
+  </p>
+
+  <h3>2.4 Holonomy Mazes</h3>
+  <p>
+    Segerman's holonomy mazes&nbsp;[9] are direction-dependent puzzles on polyhedra where a token's orientation changes as it crosses edges, gated by the holonomy group. While these are deep mathematical objects on polyhedra, they are fundamentally different from grid-based perfect mazes: there is no spanning tree, no unique solution path, and no grid subdivision.
+  </p>
+
+  <h3>2.5 Patents</h3>
+  <p>
+    U.S. Patent 4,008,895&nbsp;[10] (1977) describes a physical puzzle with passageways on polyhedral faces connected across shared edges for a rolling-ball maze. The patent covers the physical artifact but does not address automated generation, grid subdivision, or algorithmic methods.
+  </p>
+
+  <!-- ================================================================== -->
+  <h2>3. Three-Layer Graph Model</h2>
+  <!-- ================================================================== -->
+  <p>
+    We decompose the maze-generation problem on a Platonic solid $P$ into three layers. Each layer addresses a distinct aspect of the problem, and together they yield a single graph on which standard spanning-tree algorithms can operate.
+  </p>
+
+  <h3>3.1 Layer 1: Face Adjacency Graph (Macro)</h3>
+
+  <div class="definition">
+    <span class="label">Definition 1 (Face Adjacency Graph).</span>
+    Let $P = (V_P, E_P, F_P)$ be a Platonic solid with vertex set $V_P$, edge set $E_P$, and face set $F_P$. The <em>face adjacency graph</em> is $G_{\text{face}} = (F_P, A)$ where $(f_i, f_j) \in A$ if and only if faces $f_i$ and $f_j$ share an edge in $E_P$.
+  </div>
+
+  <p>
+    This is precisely the dual graph of $P$. Each node represents a face, and each edge represents a shared geometric boundary. The face adjacency graph captures the macro-level topology of the polyhedron.
+  </p>
+
+  <table>
+    <tr>
+      <th>Platonic Solid</th>
+      <th>$|F_P|$</th>
+      <th>$|A|$</th>
+      <th>Face Shape</th>
+      <th>Opposite Pairs</th>
+    </tr>
+    <tr><td>Tetrahedron</td><td>4</td><td>6</td><td>Triangle</td><td>0</td></tr>
+    <tr><td>Cube</td><td>6</td><td>12</td><td>Square</td><td>3</td></tr>
+    <tr><td>Octahedron</td><td>8</td><td>12</td><td>Triangle</td><td>4</td></tr>
+    <tr><td>Dodecahedron</td><td>12</td><td>30</td><td>Pentagon</td><td>6</td></tr>
+    <tr><td>Icosahedron</td><td>20</td><td>30</td><td>Triangle</td><td>10</td></tr>
+  </table>
+
+  <p>
+    Two faces $f_i, f_j$ are <em>opposite</em> if their outward normals $\mathbf{n}_i, \mathbf{n}_j$ satisfy $\mathbf{n}_i \cdot \mathbf{n}_j < -1 + \varepsilon$ for a small tolerance $\varepsilon$. The tetrahedron has no opposite faces; all other Platonic solids do. Opposite faces play a key role in the warp mechanism (Section&nbsp;4.3).
+  </p>
+
+  <h3>3.2 Layer 2: Per-Face Grids (Micro)</h3>
+
+  <div class="definition">
+    <span class="label">Definition 2 (Face Grid).</span>
+    For each face $f \in F_P$, a <em>face grid</em> $G_f = (C_f, W_f)$ is a graph whose nodes $C_f$ are cells and whose edges $W_f$ connect adjacent cells within the face. Each cell is identified by a tuple $(f, r, c)$ where $r$ is the row index and $c$ is the column index in a face-local coordinate system.
+  </div>
+
+  <p>
+    The grid type is determined by the face shape. We define three grid schemes, one for each polygon type that appears among the Platonic solids.
+  </p>
+
+  <div class="novel">
+    <span class="label">Novel contribution</span>
+    While rectangular grids on square faces are straightforward, the TriGrid and PentGrid schemes for triangular and pentagonal faces are, to our knowledge, the first proposed for polyhedral maze generation.
+  </div>
+
+  <h4>3.2.1 RectGrid (Square Faces &mdash; Cube)</h4>
+  <p>
+    A square face is subdivided into an $n \times n$ orthogonal grid, yielding $n^2$ cells per face. Cell $(f, r, c)$ is adjacent to its four cardinal neighbors. The cell center in 3D is computed via bilinear interpolation:
+  </p>
+  $$
+    \mathbf{p}(r, c) = \mathbf{v}_0 + \frac{r + 0.5}{n}\,(\mathbf{v}_3 - \mathbf{v}_0) + \frac{c + 0.5}{n}\,(\mathbf{v}_1 - \mathbf{v}_0)
+  $$
+  <p>
+    where $\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_3$ are face vertices defining the local frame.
+  </p>
+
+  <h4>3.2.2 TriGrid (Triangular Faces &mdash; Tetrahedron, Octahedron, Icosahedron)</h4>
+  <p>
+    An equilateral triangular face is subdivided into $n^2$ smaller triangles arranged in $n$ rows. Row $r$ ($0 \le r < n$) contains $2r + 1$ cells: $r + 1$ upward-pointing triangles ($\triangle$, even column index) and $r$ downward-pointing triangles ($\nabla$, odd column index).
+  </p>
+  <p>
+    The adjacency structure is:
+  </p>
+  <ul>
+    <li><strong>Within a row:</strong> consecutive cells $(r, c)$ and $(r, c+1)$ share an edge.</li>
+    <li><strong>Between rows:</strong> an upward triangle $\triangle(r, 2k)$ shares its base with the downward triangle $\nabla(r+1, 2k+1)$ in the row below.</li>
+  </ul>
+  <p>
+    Cell centers are computed via barycentric coordinates within the face triangle $(\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_2)$:
+  </p>
+  $$
+    \mathbf{p}(r, c) = \alpha\,\mathbf{v}_0 + \beta\,\mathbf{v}_1 + (1 - \alpha - \beta)\,\mathbf{v}_2
+  $$
+  <p>
+    where $(\alpha, \beta)$ are obtained by solving the least-squares projection $\alpha\,\mathbf{u} + \beta\,\mathbf{v} \approx \mathbf{p}$ with $\mathbf{u} = \mathbf{v}_1 - \mathbf{v}_0$ and $\mathbf{v} = \mathbf{v}_2 - \mathbf{v}_0$.
+  </p>
+
+  <h4>3.2.3 PentGrid (Pentagonal Faces &mdash; Dodecahedron)</h4>
+  <p>
+    A regular pentagonal face has no natural orthogonal subdivision. We decompose it into five isosceles triangular <em>sectors</em> by connecting the face center $\mathbf{c}_f$ to each vertex pair $(\mathbf{v}_s, \mathbf{v}_{s+1})$. Each sector is then subdivided as a TriGrid with resolution $n$, yielding $5n^2$ cells per pentagonal face.
+  </p>
+  <p>
+    The sectors are stitched together along their shared radial edges: the rightmost column of sector $s$ is connected to the leftmost column of sector $(s+1) \bmod 5$. Additionally, the five apex cells (row 0 of each sector) form a central ring.
+  </p>
+
+  <table>
+    <tr>
+      <th>Grid Type</th>
+      <th>Face Shape</th>
+      <th>Cells per Face</th>
+      <th>Solids</th>
+      <th>Total Cells ($n = 6$)</th>
+    </tr>
+    <tr><td>RectGrid</td><td>Square</td><td>$n^2$</td><td>Cube</td><td>$6 \times 36 = 216$</td></tr>
+    <tr><td>TriGrid</td><td>Triangle</td><td>$n^2$</td><td>Tet., Oct., Ico.</td><td>$4/8/20 \times 36$</td></tr>
+    <tr><td>PentGrid</td><td>Pentagon</td><td>$5n^2$</td><td>Dodecahedron</td><td>$12 \times 180 = 2160$</td></tr>
+  </table>
+
+  <h3>3.3 Layer 3: Combined Maze Graph</h3>
+
+  <div class="definition">
+    <span class="label">Definition 3 (Combined Maze Graph).</span>
+    The <em>combined maze graph</em> is
+    $$
+      G_{\text{maze}} = \Bigl(\;\bigcup_{f \in F_P} C_f,\;\; E_{\text{intra}} \cup E_{\text{inter}}\Bigr)
+    $$
+    where
+    $E_{\text{intra}} = \bigcup_{f} W_f$ collects all intra-face edges, and
+    $E_{\text{inter}} = \bigcup_{(f_i, f_j) \in A} B_{ij}$ collects inter-face edges with the constraint $|B_{ij}| \le k$ for each adjacent pair.
+  </div>
+
+  <div class="novel">
+    <span class="label">Novel contribution</span>
+    The inter-face passage constraint $k$ is a key parameter with no counterpart in prior maze generators. By varying $k$, the puzzle designer controls how freely the solver can move between faces: $k = 1$ creates tight bottlenecks that force long detours within each face, while larger $k$ values allow more fluid inter-face movement.
+  </div>
+
+  <h4>3.3.1 Boundary Cell Mapping</h4>
+  <p>
+    For two adjacent faces $f_i$ and $f_j$ sharing a geometric edge $e = (\mathbf{v}_a, \mathbf{v}_b)$, we must identify which cells on each face lie along this shared boundary. The mapping proceeds as follows:
+  </p>
+  <ol>
+    <li>Project $\mathbf{v}_a$ and $\mathbf{v}_b$ into the local coordinate frame of $f_i$ to determine which row/column of the grid lies along $e$.</li>
+    <li>Enumerate the $n$ boundary cells of $f_i$ along $e$, ordered from $\mathbf{v}_a$ toward $\mathbf{v}_b$.</li>
+    <li>Repeat for $f_j$. The two ordered lists of boundary cells are then aligned pairwise.</li>
+  </ol>
+  <p>
+    For RectGrid, boundary detection uses the projected coordinates to identify which of the four sides (top, bottom, left, right) the edge falls on. For TriGrid, the projection via least-squares determines which of the three triangle edges ($\mathbf{v}_0$&ndash;$\mathbf{v}_1$, $\mathbf{v}_0$&ndash;$\mathbf{v}_2$, or $\mathbf{v}_1$&ndash;$\mathbf{v}_2$) is involved. For PentGrid, each sector's bottom edge is tested against the 3D edge.
+  </p>
+
+  <h4>3.3.2 Passage Selection ($k$-Constraint)</h4>
+  <p>
+    Given $n$ aligned boundary cell pairs for an adjacent face pair, we select $k$ evenly spaced pairs as inter-face edges $B_{ij}$:
+  </p>
+  <ul>
+    <li>If $k \ge n$: all $n$ pairs are selected.</li>
+    <li>If $k = 1$: the middle pair $\lfloor n/2 \rfloor$ is selected.</li>
+    <li>Otherwise: pairs at indices $\bigl\lfloor i \cdot (n-1) / (k-1) \bigr\rceil$ for $i = 0, 1, \ldots, k-1$.</li>
+  </ul>
+
+  <h4>3.3.3 Maze as Spanning Tree</h4>
+
+  <div class="definition">
+    <span class="label">Definition 4 (Perfect Maze).</span>
+    A <em>perfect maze</em> on $G_{\text{maze}}$ is a spanning tree $T$ of $G_{\text{maze}}$. As a tree, $T$ is connected, acyclic, and has exactly $|V| - 1$ edges. Every pair of cells is connected by a unique path&mdash;ensuring a unique solution.
+  </div>
+
+  <p>
+    This formulation means that any spanning-tree algorithm can generate a maze on $G_{\text{maze}}$, regardless of the underlying polyhedron or grid type. The three-layer separation ensures that the algorithm need not be aware of the geometric details; it operates on a single undirected graph.
+  </p>
+
+  <!-- ================================================================== -->
+  <h2>4. Maze Generation</h2>
+  <!-- ================================================================== -->
+
+  <h3>4.1 Spanning-Tree Algorithms</h3>
+  <p>
+    We employ three classical algorithms, each producing a spanning tree of $G_{\text{maze}}$ with distinct structural characteristics.
+  </p>
+
+  <h4>4.1.1 Randomized Kruskal</h4>
+  <p>
+    All edges of $G_{\text{maze}}$ are shuffled randomly. A Union-Find structure is initialized with each cell as a singleton. Edges are processed in order; an edge $(u, v)$ is added to $T$ if $u$ and $v$ belong to different components. The algorithm terminates when $T$ has $|V| - 1$ edges.
+  </p>
+  <p>
+    <em>Properties:</em> Many short dead ends, relatively uniform branch distribution. Time complexity $O(|E| \log |E|)$.
+  </p>
+
+  <h4>4.1.2 DFS Backtracker</h4>
+  <p>
+    A stack-based depth-first traversal starts from a random cell. At each step, the current cell picks a random unvisited neighbor and carves a passage; if no unvisited neighbor exists, the algorithm backtracks. This continues until all cells are visited.
+  </p>
+  <p>
+    <em>Properties:</em> Long winding corridors, fewer dead ends. Time complexity $O(|V|)$. Generates mazes with the longest average solution paths among the three algorithms.
+  </p>
+
+  <h4>4.1.3 Wilson's Algorithm (Loop-Erased Random Walk)</h4>
+  <p>
+    Wilson's algorithm produces a <em>uniform random spanning tree</em>&mdash;each spanning tree of $G_{\text{maze}}$ is equally likely. Starting from a single-cell tree, it repeatedly performs random walks from unvisited cells until hitting the tree, erasing any loops formed during the walk, and adding the resulting path to the tree.
+  </p>
+  <p>
+    <em>Properties:</em> Unbiased distribution over all spanning trees. Expected time $O(|V|)$ but with high variance; worst case $O(|V|^3)$.
+  </p>
+
+  <h3>4.2 Start and Goal Placement</h3>
+  <p>
+    To maximize path length and encourage exploration of the entire polyhedron, we use a double-BFS diameter approximation:
+  </p>
+
+  <div class="algorithm">
+    <div class="alg-title">Algorithm 1: Start/Goal Placement</div>
+    <ol>
+      <li>Pick an arbitrary cell $v_0$. Run BFS on $T$ from $v_0$; let $v_1$ be the farthest cell.</li>
+      <li>Run BFS on $T$ from $v_1$; let $v_2$ be the farthest cell <em>on a different face</em> than $v_1$.</li>
+      <li>Set $\text{start} = v_1$, $\text{goal} = v_2$.</li>
+    </ol>
+  </div>
+
+  <p>
+    The different-face constraint ensures that the solver must cross at least one face boundary, leveraging the three-dimensional structure of the puzzle.
+  </p>
+
+  <h3>4.3 Warp Tunnel</h3>
+  <p>
+    For polyhedra with opposite face pairs, we introduce an optional <em>warp tunnel</em>: a single bidirectional passage connecting cells on opposite faces. Physically, this corresponds to piercing aligned holes through the assembled polyhedron and threading a straw between them.
+  </p>
+
+  <div class="novel">
+    <span class="label">Novel contribution</span>
+    The warp mechanism is unique to polyhedral mazes and has no planar analogue. The key challenge is adding this edge to the spanning tree $T$ without creating a cycle (which would destroy the unique-solution property).
+  </div>
+
+  <h4>4.3.1 Opposite Cell Computation</h4>
+  <p>
+    Given a cell on face $f_i$ at position $\mathbf{p}$, the corresponding cell on the opposite face $f_j$ is found by perpendicular projection through the polyhedron:
+  </p>
+  $$
+    \mathbf{p}' = \mathbf{p} - 2\,(\mathbf{p} - \mathbf{c}) \cdot \mathbf{n}_i \;\mathbf{n}_i
+  $$
+  <p>
+    where $\mathbf{c}$ is the polyhedron center and $\mathbf{n}_i$ is the outward normal of $f_i$. The target cell on $f_j$ is the one whose 3D center is nearest to $\mathbf{p}'$.
+  </p>
+
+  <h4>4.3.2 Candidate Selection (Tiered Strategy)</h4>
+  <p>
+    Not all cell pairs make good warp endpoints. We use a three-tier prioritization:
+  </p>
+  <table>
+    <tr><th>Tier</th><th>Candidate Pool</th><th>Constraint</th></tr>
+    <tr><td>1 (best)</td><td>Interior dead-end cells</td><td>Opposite cell is also an interior dead end</td></tr>
+    <tr><td>2</td><td>Interior cells</td><td>Opposite cell is also interior</td></tr>
+    <tr><td>3 (fallback)</td><td>All cells</td><td>None</td></tr>
+  </table>
+  <p>
+    Within each tier, we select the pair $(c_A, c_B)$ that maximizes the spanning-tree distance $d_T(c_A, c_B)$, ensuring the warp provides the greatest shortcut. The tiered search guarantees 100% placement success across all polyhedra and seeds.
+  </p>
+
+  <h4>4.3.3 Tree-Preserving Splice</h4>
+
+  <div class="theorem">
+    <span class="label">Proposition 1 (Splice Preserves Spanning Tree).</span>
+    Let $T$ be a spanning tree of $G_{\text{maze}}$ and let $(c_A, c_B)$ be two cells connected by a unique path $\pi = (c_A, u_1, \ldots, u_m, c_B)$ in $T$. Define $\text{mid} = \lfloor m/2 \rfloor$. Then
+    $$
+      T' = T - \{(u_{\text{mid}}, u_{\text{mid}+1})\} + \{(c_A, c_B)\}
+    $$
+    is also a spanning tree of $G_{\text{maze}} + \{(c_A, c_B)\}$.
+  </div>
+
+  <p>
+    <em>Proof sketch.</em> Removing any edge from a tree disconnects it into exactly two components. The path $\pi$ in $T$ connects $c_A$ to $c_B$; removing the edge at its midpoint splits $T$ into two subtrees, one containing $c_A$ and the other $c_B$. Adding the warp edge $(c_A, c_B)$ reconnects the two subtrees. The result has $|V| - 1$ edges and is connected, hence it is a spanning tree. $\square$
+  </p>
+
+  <p>
+    The midpoint choice for edge removal balances the sizes of the two subtrees, minimizing disruption to the overall maze structure.
+  </p>
+
+  <!-- ================================================================== -->
+  <h2>5. Unfolding Duality</h2>
+  <!-- ================================================================== -->
+
+  <div class="novel">
+    <span class="label">Novel contribution</span>
+    We observe a structural duality between the net-unfolding problem and maze generation: both reduce to finding spanning trees, but on different layers of the graph model.
+  </div>
+
+  <p>
+    An <em>unfolding</em> (or <em>net</em>) of a polyhedron $P$ is a planar layout of all faces obtained by cutting along a subset of edges and flattening. A valid net must be connected and non-overlapping. The combinatorial structure of a net is determined by which edges are cut and which are folded:
+  </p>
+  <ul>
+    <li><strong>Fold edges:</strong> edges where adjacent faces remain attached. These form a spanning tree of $G_{\text{face}}$.</li>
+    <li><strong>Cut edges:</strong> edges where the surface is separated. These are the complement of the spanning tree.</li>
+  </ul>
+  <p>
+    Thus, choosing a net is equivalent to choosing a spanning tree of the Layer-1 face adjacency graph $G_{\text{face}}$. Meanwhile, generating a maze is choosing a spanning tree of the Layer-3 combined graph $G_{\text{maze}}$. The two spanning trees operate on different layers of the same model but serve dual purposes:
+  </p>
+
+  <table>
+    <tr><th></th><th>Net Unfolding</th><th>Maze Generation</th></tr>
+    <tr><td><strong>Graph</strong></td><td>$G_{\text{face}}$ (Layer 1)</td><td>$G_{\text{maze}}$ (Layer 3)</td></tr>
+    <tr><td><strong>Tree edges</strong></td><td>Fold lines (faces stay attached)</td><td>Passages (cells connected)</td></tr>
+    <tr><td><strong>Non-tree edges</strong></td><td>Cut lines (glue tabs)</td><td>Walls (cells separated)</td></tr>
+    <tr><td><strong>Result</strong></td><td>Flat, connected net</td><td>Perfect maze with unique path</td></tr>
+  </table>
+
+  <p>
+    In our implementation, we exploit this duality: the same BFS-based tree traversal used to lay out the net (reflecting child faces across shared edges) can also inform the rendering pipeline by identifying which face boundaries are "cut" and thus require glue tabs in the printed output.
+  </p>
+
+  <!-- ================================================================== -->
+  <h2>6. Difficulty Metrics</h2>
+  <!-- ================================================================== -->
+
+  <div class="novel">
+    <span class="label">Novel contribution</span>
+    Traditional maze metrics (solution length, dead-end count) do not capture the three-dimensional navigation challenge. We introduce polyhedral-specific metrics.
+  </div>
+
+  <p>
+    Given a maze $T$ on polyhedron $P$ with start cell $s$ and goal cell $g$, let $\pi(s, g)$ denote the unique $s$&ndash;$g$ path in $T$. We define:
+  </p>
+
+  <table>
+    <tr>
+      <th>Metric</th>
+      <th>Definition</th>
+      <th>Interpretation</th>
+    </tr>
+    <tr>
+      <td>Solution length</td>
+      <td>$|\pi(s,g)|$</td>
+      <td>Number of cells in the solution path</td>
+    </tr>
+    <tr>
+      <td>Solution ratio</td>
+      <td>$|\pi(s,g)| \;/\; |V|$</td>
+      <td>Fraction of cells visited by the solution</td>
+    </tr>
+    <tr>
+      <td>Dead-end count</td>
+      <td>$|\{v \in V : \deg_T(v) = 1\}|$</td>
+      <td>Cells with only one passage (traps)</td>
+    </tr>
+    <tr>
+      <td>Dead-end density</td>
+      <td>Dead-end count $/ \; |V|$</td>
+      <td>Fraction of cells that are dead ends</td>
+    </tr>
+    <tr>
+      <td><strong>Face crossings</strong></td>
+      <td>$|\{i : \text{face}(\pi_i) \ne \text{face}(\pi_{i+1})\}|$</td>
+      <td>How often the solution crosses face boundaries</td>
+    </tr>
+    <tr>
+      <td><strong>Face coverage</strong></td>
+      <td>$|\{\text{face}(v) : v \in \pi(s,g)\}| \;/\; |F_P|$</td>
+      <td>Fraction of faces visited by the solution</td>
+    </tr>
+    <tr>
+      <td>Warp used</td>
+      <td>$\mathbf{1}[(c_A, c_B) \in \pi(s,g)]$</td>
+      <td>Whether the solution passes through the warp tunnel</td>
+    </tr>
+  </table>
+
+  <p>
+    The face crossings and face coverage metrics are unique to polyhedral surface mazes. High face crossings indicate that the solver must repeatedly re-orient themselves as they move between faces&mdash;a cognitive challenge absent in planar mazes. High face coverage ensures the puzzle makes use of the entire polyhedron rather than being confined to a subset of faces.
+  </p>
+
+  <!-- ================================================================== -->
+  <h2>7. Implementation</h2>
+  <!-- ================================================================== -->
+
+  <h3>7.1 System Overview</h3>
+  <p>
+    The system is implemented in TypeScript with a clean separation between a DOM-independent core (<code>core/</code>) containing all graph and geometric algorithms, and rendering modules (<code>render/</code>, <code>ui/</code>) that handle Three.js visualization and browser interaction.
+  </p>
+
+  <table>
+    <tr><th>Module</th><th>Responsibility</th><th>Dependencies</th></tr>
+    <tr><td><code>core/types.ts</code></td><td>Cell identifiers, face geometry, vector types</td><td>None</td></tr>
+    <tr><td><code>core/graph.ts</code></td><td>Adjacency-list graph, BFS, Union-Find</td><td>None</td></tr>
+    <tr><td><code>core/face-grid.ts</code></td><td>Abstract <code>FaceGrid</code> interface</td><td>types, vec3</td></tr>
+    <tr><td><code>core/polyhedra/*.ts</code></td><td>RectGrid, TriGrid, PentGrid + 5 solids</td><td>face-grid, vec3</td></tr>
+    <tr><td><code>core/maze-graph.ts</code></td><td>Three-layer graph construction</td><td>graph, face-grid</td></tr>
+    <tr><td><code>core/maze.ts</code></td><td>Kruskal, DFS, Wilson, warp, start/goal</td><td>graph, prng</td></tr>
+    <tr><td><code>core/metrics.ts</code></td><td>Difficulty metrics computation</td><td>graph</td></tr>
+    <tr><td><code>render/*.ts</code></td><td>Three.js scene, SVG net, PDF export</td><td>three, jspdf</td></tr>
+  </table>
+
+  <h3>7.2 Determinism</h3>
+  <p>
+    All randomized operations use a seeded PRNG (Mulberry32), ensuring full reproducibility: the same seed and parameters always produce the identical maze. This is essential for sharing puzzles via URL-encoded parameters and for enabling systematic comparisons.
+  </p>
+
+  <h3>7.3 Net Export and Paper Craft</h3>
+  <p>
+    The system generates a two-page A4 landscape PDF: page&nbsp;1 shows the maze net without the solution (for solving), and page&nbsp;2 includes the solution path and warp markers (for checking). The net includes trapezoidal glue tabs on cut edges, computed from the Layer-1 spanning tree (unfolding duality). The tab geometry uses a 15% height ratio with 50% taper to prevent overhang during folding.
+  </p>
+
+  <h3>7.4 Interactive Demo</h3>
+  <p>
+    An interactive web demo is available at <a href="https://kakeami.github.io/polyhedral-maze/">kakeami.github.io/polyhedral-maze</a>. Users can select the polyhedron type, grid resolution $n$, passage count $k$, generation algorithm, and random seed. The 3D visualization uses Three.js with OrbitControls, and mazes can be exported as PDF nets for physical construction.
+  </p>
+
+  <!-- ================================================================== -->
+  <h2>8. Conclusion and Future Work</h2>
+  <!-- ================================================================== -->
+  <p>
+    We have presented a three-layer graph model for generating perfect mazes on the surfaces of all five Platonic solids. The model cleanly separates the macro topology (face adjacency), micro geometry (per-face grids), and combined maze structure, enabling any spanning-tree algorithm to produce mazes regardless of the underlying polyhedron. The inter-face passage constraint $k$ provides a principled control over maze difficulty, and the warp tunnel mechanism adds a novel gameplay element while provably preserving the unique-solution guarantee.
+  </p>
+  <p>
+    Several directions remain open for future investigation:
+  </p>
+  <ul>
+    <li><strong>Archimedean solids:</strong> The three-layer model naturally extends to semi-regular polyhedra with mixed face types (e.g., the truncated icosahedron with hexagonal and pentagonal faces), requiring only new grid implementations for additional polygon types.</li>
+    <li><strong>Difficulty analysis:</strong> A systematic experimental comparison of algorithms (Kruskal, DFS, Wilson) across polyhedra and parameter settings ($n$, $k$), using the metrics defined in Section&nbsp;6, would quantify how maze structure varies with these factors.</li>
+    <li><strong>User studies:</strong> The physical paper-craft aspect invites studies of how three-dimensional maze solving affects spatial reasoning, particularly in educational contexts with children.</li>
+    <li><strong>Cognitive load metric:</strong> A formal metric capturing the mental effort of tracking connectivity across hidden faces of the assembled polyhedron would complement the current face-crossing count.</li>
+  </ul>
+
+  <!-- ================================================================== -->
+  <h2>References</h2>
+  <!-- ================================================================== -->
+  <div class="references">
+    <ol>
+      <li>J. Buck, <em>Mazes for Programmers: Code Your Own Twisty Little Passages</em>, Pragmatic Bookshelf, 2015.</li>
+      <li>E. Berthier, "How to Generate Perfect Mazes?," Technical Report, Universit&eacute; C&ocirc;te d'Azur, 2021. Available: <a href="https://uca.hal.science/hal-03174952/document">hal-03174952</a>.</li>
+      <li>A. Vijayaraghavan and A. Krishnamurthy, "Procedural Design of Rolling Ball Maze," UC Berkeley CS285 Course Project, 2006. Available: <a href="https://people.eecs.berkeley.edu/~sequin/CS285/PROJ_06/Adarsh--Athulan/AA_report/report.html">UC Berkeley report</a>.</li>
+      <li>randomprojectlab, "carvey_cube_maze," GitHub repository, 2019. Available: <a href="https://github.com/mit-mit-randomprojectlab/carvey_cube_maze">github.com/mit-mit-randomprojectlab/carvey_cube_maze</a>.</li>
+      <li>W. D. Pullen, "Think Labyrinth: Encyclopaedia of Encyclopedias," Astrolog. Available: <a href="https://www.astrolog.org/labyrnth/algrithm.htm">astrolog.org</a>.</li>
+      <li>X. Li and D. Mount, "Spherical Maze Generation," University of Maryland, 2017. Available: <a href="https://www.cs.umd.edu/~mount/Indep/Xue-Li/xue-scholarly-paper.pdf">cs.umd.edu</a>.</li>
+      <li>H. Pedersen and K. Singh, "Organic Labyrinths and Mazes," in <em>Proc. NPAR</em>, 2006, pp. 79&ndash;86. DOI: <a href="https://doi.org/10.1145/1124728.1124742">10.1145/1124728.1124742</a>.</li>
+      <li>M. Arcus, "PolyJS," GitHub repository. Available: <a href="https://github.com/matthewarcus/polyjs">github.com/matthewarcus/polyjs</a>.</li>
+      <li>H. Segerman, "Holonomy Mazes," 2021. Available: <a href="https://mathstodon.xyz/@henryseg/106281620265498101">mathstodon.xyz/@henryseg</a>.</li>
+      <li>D. R. Wood, "Maze Game," U.S. Patent 4,008,895, 1977. Available: <a href="https://patents.google.com/patent/US4008895A/en">patents.google.com</a>.</li>
+      <li>S.-K. Kim and R. Crawfis, "Intelligent Maze Generation Based on Topological Constraints," in <em>Proc. ICCBD</em>, IEEE, 2018, pp. 18&ndash;24. DOI: <a href="https://doi.org/10.1109/ICCBD.2018.8693301">10.1109/ICCBD.2018.8693301</a>.</li>
+    </ol>
+  </div>
+
+  <footer>
+    &copy; 2026 Kakeami. This report accompanies the open-source <a href="https://github.com/kakeami/polyhedral-maze">polyhedral-maze</a> project.
+  </footer>
+
+</div>
+</body>
+</html>
