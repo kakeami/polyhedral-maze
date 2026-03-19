@@ -82,18 +82,21 @@ export function renderNetSVG(
   }
 
   // 1.1. Net outline (light gray dashed — cut guide, outer edges only)
-  //      Unlike glue tabs, outlines are drawn on BOTH sides of each cut edge,
-  //      since both faces' edges need a visible cut guide in the net.
+  //      Offset slightly outward so it doesn't overlap boundary walls.
+  const outlineOffset = layout.width * 0.003;
   const outlinePaths: string[] = [];
   for (const face of faces) {
     const verts2d = netMap.get(face.id)!;
     const fv = face.vertices;
     const nv = fv.length;
+    const fc = flip(centroid(verts2d));
     for (let i = 0; i < nv; i++) {
       const adjFaceId = findAdjacentFaceId(faces, face.id, fv[i]!, fv[(i + 1) % nv]!);
       if (isFoldEdge(face.id, adjFaceId)) continue;
       const [p, q] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
-      outlinePaths.push(`M${p[0]},${p[1]}L${q[0]},${q[1]}`);
+      // Offset outward (away from face center)
+      const [op, oq] = offsetEdgeOutward(p, q, fc, outlineOffset);
+      outlinePaths.push(`M${op[0]},${op[1]}L${oq[0]},${oq[1]}`);
     }
   }
   if (outlinePaths.length > 0) {
@@ -168,9 +171,6 @@ export function renderNetSVG(
       const edgeEnd3d = fv[(i + 1) % nv]!;
       const adjFaceId = findAdjacentFaceId(faces, face.id, edgeStart3d, edgeEnd3d);
 
-      // Cut edges have glue tabs instead of boundary walls — skip them
-      if (!isFoldEdge(face.id, adjFaceId)) continue;
-
       let boundaryCells: CellKey[];
       try {
         boundaryCells = grid.boundaryCells(edgeStart3d, edgeEnd3d);
@@ -186,6 +186,7 @@ export function renderNetSVG(
 
       for (let j = 0; j < boundaryCells.length; j++) {
         const cell = boundaryCells[j]!;
+        // Skip wall segment where there's a passage to the adjacent face
         if (adjFaceId !== null && hasTreeEdgeToFace(cell, maze.tree, adjFaceId)) continue;
         const segStart: Vec2 = [es[0] + j * du[0], es[1] + j * du[1]];
         const segEnd: Vec2 = [es[0] + (j + 1) * du[0], es[1] + (j + 1) * du[1]];
@@ -455,6 +456,19 @@ function cellInradius(verts: Vec2[], center: Vec2): number {
     if (dist < minDist) minDist = dist;
   }
   return minDist;
+}
+
+/** Offset an edge segment outward (away from faceCenter) by `dist`. */
+function offsetEdgeOutward(a: Vec2, b: Vec2, faceCenter: Vec2, dist: number): [Vec2, Vec2] {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1e-12) return [a, b];
+  const nx = -dy / len, ny = dx / len;
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  const dot = (faceCenter[0] - mx) * nx + (faceCenter[1] - my) * ny;
+  const s = dot > 0 ? -1 : 1;
+  const ox = nx * s * dist, oy = ny * s * dist;
+  return [[a[0] + ox, a[1] + oy], [b[0] + ox, b[1] + oy]];
 }
 
 function svgEl(tag: string, attrs: Record<string, string>): SVGElement {
