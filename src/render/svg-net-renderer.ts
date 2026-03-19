@@ -57,6 +57,7 @@ export function renderNetSVG(
   };
 
   // 0. Glue tabs (drawn first, behind face backgrounds)
+  //    Only draw one tab per cut edge: the face with the smaller ID draws it.
   for (const face of faces) {
     const verts2d = netMap.get(face.id)!;
     const fv = face.vertices;
@@ -65,18 +66,64 @@ export function renderNetSVG(
     for (let i = 0; i < nv; i++) {
       const adjFaceId = findAdjacentFaceId(faces, face.id, fv[i]!, fv[(i + 1) % nv]!);
       if (isFoldEdge(face.id, adjFaceId)) continue;
+      if (adjFaceId !== null && face.id > adjFaceId) continue;
       drawGlueTab(svg, flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!), fc, tabWidth);
     }
   }
 
-  // 1. Face backgrounds
-  const totalFaces = faces.length;
+  // 1. Face backgrounds (white, fully covers glue tabs beneath)
   for (const nf of layout.faces) {
     const pts = nf.vertices2d.map(flip).map(v => `${v[0]},${v[1]}`).join(' ');
-    const hue = Math.round((nf.faceId / totalFaces) * 360);
     svg.appendChild(svgEl('polygon', {
       points: pts,
-      fill: `hsl(${hue}, 10%, 95%)`,
+      fill: '#ffffff',
+      stroke: 'none',
+    }));
+  }
+
+  // 1.1. Net outline (light gray dashed — cut guide, outer edges only)
+  //      Unlike glue tabs, outlines are drawn on BOTH sides of each cut edge,
+  //      since both faces' edges need a visible cut guide in the net.
+  const outlinePaths: string[] = [];
+  for (const face of faces) {
+    const verts2d = netMap.get(face.id)!;
+    const fv = face.vertices;
+    const nv = fv.length;
+    for (let i = 0; i < nv; i++) {
+      const adjFaceId = findAdjacentFaceId(faces, face.id, fv[i]!, fv[(i + 1) % nv]!);
+      if (isFoldEdge(face.id, adjFaceId)) continue;
+      const [p, q] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
+      outlinePaths.push(`M${p[0]},${p[1]}L${q[0]},${q[1]}`);
+    }
+  }
+  if (outlinePaths.length > 0) {
+    svg.appendChild(svgEl('path', {
+      d: outlinePaths.join(''),
+      fill: 'none',
+      stroke: '#dddddd',
+      'stroke-width': String(layout.width * 0.002),
+      'stroke-dasharray': `${layout.width * 0.006},${layout.width * 0.004}`,
+    }));
+  }
+
+  // 1.5. Cell markers (pastel fill, behind walls)
+  const markerCells: { cell: CellKey; color: string }[] = [
+    { cell: maze.start, color: '#b2f0b2' },
+    { cell: maze.goal, color: '#f0b2b2' },
+  ];
+  if (maze.warp) {
+    markerCells.push(
+      { cell: maze.warp.cellA, color: '#f0e8b2' },
+      { cell: maze.warp.cellB, color: '#f0e8b2' },
+    );
+  }
+  for (const { cell, color } of markerCells) {
+    const fid = parseCell(cell).faceId;
+    const verts = cellVerts2d(netMap.get(fid)!, cell, n).map(flip);
+    const pts = verts.map(v => `${v[0]},${v[1]}`).join(' ');
+    svg.appendChild(svgEl('polygon', {
+      points: pts,
+      fill: color,
       stroke: 'none',
     }));
   }
@@ -156,10 +203,13 @@ export function renderNetSVG(
     }));
   }
 
-  // 4. Solution path
+  // 4. Solution path (solid within adjacent faces, dashed for net jumps)
   if (showSolution) {
     const path = bfsShortestPath(maze.tree, maze.start, maze.goal);
-    const points: Vec2[] = [];
+    const solidSegments: Vec2[][] = [];
+    const dashedSegments: [Vec2, Vec2][] = [];
+    let current: Vec2[] = [];
+
     for (let i = 0; i < path.length; i++) {
       const cell = path[i]!;
       const fid = parseCell(cell).faceId;
@@ -167,52 +217,83 @@ export function renderNetSVG(
         const prevCell = path[i - 1]!;
         const prevFid = parseCell(prevCell).faceId;
         if (fid !== prevFid) {
-          const prevVerts = cellVerts2d(netMap.get(prevFid)!, prevCell, n);
-          const currVerts = cellVerts2d(netMap.get(fid)!, cell, n);
-          const edge = sharedEdge2d(prevVerts, currVerts);
-          if (edge) {
-            points.push(flip(midpoint2(edge[0], edge[1])));
+          const a = Math.min(prevFid, fid), b = Math.max(prevFid, fid);
+          const isFold = layout.foldPairs.has(`${a}:${b}`);
+          if (isFold) {
+            const prevVerts = cellVerts2d(netMap.get(prevFid)!, prevCell, n);
+            const currVerts = cellVerts2d(netMap.get(fid)!, cell, n);
+            const edge = sharedEdge2d(prevVerts, currVerts);
+            if (edge) current.push(flip(midpoint2(edge[0], edge[1])));
+          } else {
+            // Jump across the net — end solid segment, record dashed link
+            const jumpStart = current[current.length - 1]!;
+            if (current.length >= 2) solidSegments.push(current);
+            const jumpEnd = flip(cellCenter2d(netMap.get(fid)!, cell, n));
+            dashedSegments.push([jumpStart, jumpEnd]);
+            current = [jumpEnd];
+            continue;
           }
         }
       }
-      points.push(flip(cellCenter2d(netMap.get(fid)!, cell, n)));
+      current.push(flip(cellCenter2d(netMap.get(fid)!, cell, n)));
     }
-    if (points.length >= 2) {
-      const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join('');
+    if (current.length >= 2) solidSegments.push(current);
+
+    const sw = String(layout.width * 0.003);
+    const baseAttrs = {
+      stroke: '#ee3333',
+      'stroke-width': sw,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+      fill: 'none',
+      opacity: '0.8',
+    };
+    for (const seg of solidSegments) {
+      const d = seg.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join('');
+      svg.appendChild(svgEl('path', { ...baseAttrs, d }));
+    }
+    for (const [from, to] of dashedSegments) {
       svg.appendChild(svgEl('path', {
-        d,
-        stroke: '#ee3333',
-        'stroke-width': String(layout.width * 0.003),
-        'stroke-linecap': 'round',
-        'stroke-linejoin': 'round',
-        fill: 'none',
-        opacity: '0.8',
+        ...baseAttrs,
+        d: `M${from[0]},${from[1]}L${to[0]},${to[1]}`,
+        'stroke-dasharray': `${layout.width * 0.001},${layout.width * 0.004}`,
       }));
     }
   }
 
-  // 5. Markers
-  const r = layout.width * 0.008;
-  const startPos = flip(cellCenter2d(netMap.get(parseCell(maze.start).faceId)!, maze.start, n));
-  const goalPos = flip(cellCenter2d(netMap.get(parseCell(maze.goal).faceId)!, maze.goal, n));
-  svg.appendChild(svgEl('circle', {
-    cx: String(startPos[0]), cy: String(startPos[1]), r: String(r), fill: '#22bb22',
-  }));
-  svg.appendChild(svgEl('circle', {
-    cx: String(goalPos[0]), cy: String(goalPos[1]), r: String(r), fill: '#dd2222',
-  }));
+  // 4.5. Text labels on Start / Goal / Warp cells (visible in B&W print)
+  const labelCells: { cell: CellKey; label: string }[] = [
+    { cell: maze.start, label: 'S' },
+    { cell: maze.goal, label: 'G' },
+  ];
   if (maze.warp) {
-    for (const wCell of [maze.warp.cellA, maze.warp.cellB]) {
-      const wPos = flip(cellCenter2d(netMap.get(parseCell(wCell).faceId)!, wCell, n));
-      svg.appendChild(svgEl('circle', {
-        cx: String(wPos[0]), cy: String(wPos[1]),
-        r: String(r * 0.8), fill: '#eecc00', stroke: '#aa9900',
-        'stroke-width': String(r * 0.2),
-      }));
-    }
+    labelCells.push(
+      { cell: maze.warp.cellA, label: 'W' },
+      { cell: maze.warp.cellB, label: 'W' },
+    );
+  }
+  for (const { cell, label } of labelCells) {
+    const fid = parseCell(cell).faceId;
+    const verts = cellVerts2d(netMap.get(fid)!, cell, n);
+    const c = flip(centroid(verts));
+    // Inradius: min distance from centroid to any edge → safe text size
+    const flipped = verts.map(flip);
+    const inradius = cellInradius(flipped, c);
+    const fontSize = inradius * 1.2;
+    const text = svgEl('text', {
+      x: String(c[0]), y: String(c[1]),
+      'font-size': String(fontSize),
+      'font-family': 'Arial, sans-serif',
+      'font-weight': 'bold',
+      'text-anchor': 'middle',
+      'dominant-baseline': 'central',
+      fill: '#555555',
+    });
+    text.textContent = label;
+    svg.appendChild(text);
   }
 
-  // 6. Face ID labels (optional)
+  // 5. Face ID labels (optional)
   if (options.showFaceIds !== false) {
     for (const nf of layout.faces) {
       const c = flip(centroid(nf.vertices2d));
@@ -360,6 +441,20 @@ function drawGlueTab(
 
   const pts = `${a[0]},${a[1]} ${b[0]},${b[1]} ${b2[0]},${b2[1]} ${a2[0]},${a2[1]}`;
   svg.appendChild(svgEl('polygon', { points: pts, fill: '#e0e0e0', stroke: 'none' }));
+}
+
+/** Min distance from a point to any edge of a polygon — the inscribed radius. */
+function cellInradius(verts: Vec2[], center: Vec2): number {
+  let minDist = Infinity;
+  for (let i = 0; i < verts.length; i++) {
+    const a = verts[i]!, b = verts[(i + 1) % verts.length]!;
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1e-12) continue;
+    const dist = Math.abs((center[0] - a[0]) * dy - (center[1] - a[1]) * dx) / len;
+    if (dist < minDist) minDist = dist;
+  }
+  return minDist;
 }
 
 function svgEl(tag: string, attrs: Record<string, string>): SVGElement {

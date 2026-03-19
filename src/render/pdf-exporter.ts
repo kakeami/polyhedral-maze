@@ -89,16 +89,37 @@ function drawHeader(doc: jsPDF, title: string, info: string, pageW: number) {
 
 function drawLegend(doc: jsPDF, x: number, y: number, warp: boolean) {
   doc.setFontSize(8);
-  doc.setFillColor(34, 187, 34);
-  doc.circle(x + 2, y, 1.5, 'F');
-  doc.text('Start', x + 6, y + 1);
-  doc.setFillColor(221, 34, 34);
-  doc.circle(x + 2, y + 6, 1.5, 'F');
-  doc.text('Goal', x + 6, y + 7);
+  const sw = 3;
+
+  // Start: pastel green square with "S"
+  doc.setFillColor(178, 240, 178);
+  doc.rect(x, y - 1.5, sw, sw, 'F');
+  doc.setFontSize(6);
+  doc.setTextColor(85);
+  doc.text('S', x + sw / 2, y + 0.4, { align: 'center' });
+  doc.setFontSize(8);
+  doc.setTextColor(0);
+  doc.text('Start', x + sw + 2, y + 1);
+
+  // Goal: pastel red square with "G"
+  doc.setFillColor(240, 178, 178);
+  doc.rect(x, y + 4.5, sw, sw, 'F');
+  doc.setFontSize(6);
+  doc.setTextColor(85);
+  doc.text('G', x + sw / 2, y + 6.4, { align: 'center' });
+  doc.setFontSize(8);
+  doc.setTextColor(0);
+  doc.text('Goal', x + sw + 2, y + 7);
+
   if (warp) {
-    doc.setFillColor(238, 204, 0);
-    doc.circle(x + 2, y + 12, 1.5, 'F');
-    doc.text('Warp', x + 6, y + 13);
+    doc.setFillColor(240, 232, 178);
+    doc.rect(x, y + 10.5, sw, sw, 'F');
+    doc.setFontSize(6);
+    doc.setTextColor(85);
+    doc.text('W', x + sw / 2, y + 12.4, { align: 'center' });
+    doc.setFontSize(8);
+    doc.setTextColor(0);
+    doc.text('Warp', x + sw + 2, y + 13);
   }
 }
 
