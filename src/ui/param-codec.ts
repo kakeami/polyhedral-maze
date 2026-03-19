@@ -9,7 +9,7 @@ export interface MazeParams {
 }
 
 export const DEFAULT_PARAMS: MazeParams = {
-  shape: 'cube',
+  shape: 'icosahedron',
   n: 9,
   k: 3,
   algorithm: 'DFS',

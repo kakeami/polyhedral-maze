@@ -30,7 +30,7 @@ export function createScene(container: HTMLElement): SceneContext {
     100000,
   );
   // Camera aimed toward the sun (azimuth 200°) from a low angle
-  camera.position.set(2, 0.3, 4);
+  camera.position.set(3, 0.5, 6);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(container.clientWidth, container.clientHeight);
