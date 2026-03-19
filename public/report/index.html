@@ -243,7 +243,12 @@
     Segerman's holonomy mazes&nbsp;[9] are direction-dependent puzzles on polyhedra where a token's orientation changes as it crosses edges, gated by the holonomy group. While these are deep mathematical objects on polyhedra, they are fundamentally different from grid-based perfect mazes: there is no spanning tree, no unique solution path, and no grid subdivision.
   </p>
 
-  <h3>2.5 Patents</h3>
+  <h3>2.5 Maze Difficulty Metrics</h3>
+  <p>
+    Several authors have proposed quantitative metrics for maze difficulty, though none address the unique challenges of polyhedral surfaces. McClendon&nbsp;[12] introduces a "hallway complexity" measure based on the twistiness of corridors. Buck&nbsp;[1] discusses dead-end <em>count</em> as a structural indicator but does not measure how <em>deep</em> dead-end branches extend&mdash;i.e., how far a solver must travel before discovering a wrong turn. Pullen&nbsp;[5] informally mentions a "deviation distance" concept but provides no formal definition. Kim and Crawfis&nbsp;[11] propose an evaluation framework for maze generation that considers solution path properties but does not account for branch depth. To our knowledge, no prior work formalizes the depth of dead-end branches as a difficulty metric&mdash;a gap we revisit in our discussion of future work (Section&nbsp;8).
+  </p>
+
+  <h3>2.6 Patents</h3>
   <p>
     U.S. Patent 4,008,895&nbsp;[10] (1977) describes a physical puzzle with passageways on polyhedral faces connected across shared edges for a rolling-ball maze. The patent covers the physical artifact but does not address automated generation, grid subdivision, or algorithmic methods.
   </p>
@@ -369,7 +374,7 @@
 
   <div class="novel">
     <span class="label">Novel contribution</span>
-    The inter-face passage constraint $k$ is a key parameter with no counterpart in prior maze generators. By varying $k$, the puzzle designer controls how freely the solver can move between faces: $k = 1$ creates tight bottlenecks that force long detours within each face, while larger $k$ values allow more fluid inter-face movement.
+    The inter-face passage constraint $k$ is a key parameter with no counterpart in prior maze generators. By varying $k$, the puzzle designer controls a trade-off between two aspects of difficulty. Small $k$ creates bottlenecks that force long detours within each face, increasing <em>solution path length</em>. Larger $k$ values admit more inter-face passages, increasing <em>face crossings</em> (Section&nbsp;6) and the associated cognitive load of spatial reorientation&mdash;the solver must repeatedly re-orient themselves as they move between faces whose spatial relationships are not directly visible.
   </div>
 
   <h4>3.3.1 Boundary Cell Mapping</h4>
@@ -653,6 +658,7 @@
     <li><strong>Difficulty analysis:</strong> A systematic experimental comparison of algorithms (Kruskal, DFS, Wilson) across polyhedra and parameter settings ($n$, $k$), using the metrics defined in Section&nbsp;6, would quantify how maze structure varies with these factors.</li>
     <li><strong>User studies:</strong> The physical paper-craft aspect invites studies of how three-dimensional maze solving affects spatial reasoning, particularly in educational contexts with children.</li>
     <li><strong>Cognitive load metric:</strong> A formal metric capturing the mental effort of tracking connectivity across hidden faces of the assembled polyhedron would complement the current face-crossing count.</li>
+    <li><strong>Dead-end branch depth:</strong> A formal metric capturing the depth of dead-end branches&mdash;how far a solver must travel before discovering a wrong turn&mdash;would complement the current face-crossing count and could guide the design of difficulty-optimized generation algorithms. As noted in Section&nbsp;2, no prior work formalizes this notion, suggesting an opportunity for both new metrics and new algorithms that maximize "meanness."</li>
   </ul>
 
   <!-- ================================================================== -->
@@ -671,6 +677,7 @@
       <li>H. Segerman, "Holonomy Mazes," 2021. Available: <a href="https://mathstodon.xyz/@henryseg/106281620265498101">mathstodon.xyz/@henryseg</a>.</li>
       <li>D. R. Wood, "Maze Game," U.S. Patent 4,008,895, 1977. Available: <a href="https://patents.google.com/patent/US4008895A/en">patents.google.com</a>.</li>
       <li>S.-K. Kim and R. Crawfis, "Intelligent Maze Generation Based on Topological Constraints," in <em>Proc. ICCBD</em>, IEEE, 2018, pp. 18&ndash;24. DOI: <a href="https://doi.org/10.1109/ICCBD.2018.8693301">10.1109/ICCBD.2018.8693301</a>.</li>
+      <li>S. McClendon, "The Complexity and Difficulty of a Maze," in <em>Bridges: Mathematical Connections in Art, Music, and Science</em>, 2001, pp. 213&ndash;222.</li>
     </ol>
   </div>
 
