@@ -11,6 +11,7 @@ import { Icosahedron } from '../core/polyhedra/icosahedron.ts';
 import { Dodecahedron } from '../core/polyhedra/dodecahedron.ts';
 import { createScene } from '../render/three-scene.ts';
 import { computeRenderData } from '../render/texture-painter.ts';
+import { exportPDF } from '../render/pdf-exporter.ts';
 import { createControls } from './controls.ts';
 import { decodeParams, encodeParams } from './param-codec.ts';
 
@@ -28,6 +29,10 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   const controls = createControls(controlsEl, params);
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Keep latest maze state for PDF export
+  let lastMg: MazeGraph | null = null;
+  let lastMaze: ReturnType<typeof generate> | null = null;
+  let lastMetrics: ReturnType<typeof computeMetrics> | null = null;
 
   function rebuild() {
     const p = controls.getParams();
@@ -41,6 +46,10 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     });
     const metrics = computeMetrics(maze, mg);
     const renderData = computeRenderData(mg, maze, p.showSolution);
+
+    lastMg = mg;
+    lastMaze = maze;
+    lastMetrics = metrics;
 
     scene.updateMaze(polyhedron, renderData);
     controls.setMetrics(metrics);
@@ -63,7 +72,13 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   });
 
   controls.onAction('export-pdf', () => {
-    alert('PDF export coming soon');
+    if (!lastMg || !lastMaze || !lastMetrics) return;
+    const p = controls.getParams();
+    const baseUrl = window.location.origin + window.location.pathname;
+    exportPDF(p, lastMg, lastMaze, lastMetrics, baseUrl).catch(err => {
+      console.error('PDF export failed:', err);
+      alert('PDF export failed. See console for details.');
+    });
   });
 
   window.addEventListener('resize', () => scene.resize());
