@@ -147,5 +147,11 @@ function buildHTML(p: MazeParams): string {
     </div>
 
     <div id="ctrl-metrics" class="metrics"></div>
+
+    <div class="legend">
+      <span style="color:#22bb22;">&#9679;</span> Start
+      <span style="color:#dd2222; margin-left:0.8em;">&#9679;</span> Goal
+      <span style="color:#eecc00; margin-left:0.8em;">&#9679;</span> Warp
+    </div>
   `;
 }
