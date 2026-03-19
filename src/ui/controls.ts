@@ -6,6 +6,7 @@ export interface ControlsContext {
   getParams(): MazeParams;
   setParams(p: MazeParams): void;
   setMetrics(m: MazeMetrics): void;
+  getAutoRotate(): boolean;
   onChange(cb: () => void): void;
   onAction(action: string, cb: () => void): void;
 }
@@ -53,6 +54,11 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     actions.get('export-pdf')?.forEach(cb => cb());
   });
 
+  const autoRotateCheck = el<HTMLInputElement>('ctrl-auto-rotate');
+  autoRotateCheck.addEventListener('change', () => {
+    actions.get('auto-rotate')?.forEach(cb => cb());
+  });
+
   function getParams(): MazeParams {
     return {
       shape: shapeSelect.value,
@@ -93,6 +99,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     getParams,
     setParams,
     setMetrics,
+    getAutoRotate() { return autoRotateCheck.checked; },
     onChange(cb) { callbacks.push(cb); },
     onAction(action, cb) {
       if (!actions.has(action)) actions.set(action, []);
@@ -138,6 +145,7 @@ function buildHTML(p: MazeParams): string {
     <div class="checkboxes">
       <label><input id="ctrl-warp" type="checkbox" ${p.warp ? 'checked' : ''} /> Warp</label>
       <label><input id="ctrl-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
+      <label><input id="ctrl-auto-rotate" type="checkbox" checked /> Auto-rotate</label>
     </div>
 
     <div class="buttons">

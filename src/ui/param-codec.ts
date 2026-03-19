@@ -10,9 +10,9 @@ export interface MazeParams {
 
 export const DEFAULT_PARAMS: MazeParams = {
   shape: 'cube',
-  n: 6,
-  k: 2,
-  algorithm: 'KRUSKAL',
+  n: 9,
+  k: 3,
+  algorithm: 'DFS',
   seed: 42,
   warp: false,
   showSolution: false,

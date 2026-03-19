@@ -81,6 +81,10 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     });
   });
 
+  controls.onAction('auto-rotate', () => {
+    scene.controls.autoRotate = controls.getAutoRotate();
+  });
+
   window.addEventListener('resize', () => scene.resize());
 
   // Initial build
