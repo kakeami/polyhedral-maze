@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -19,28 +22,50 @@ export interface SceneContext {
 
 export function createScene(container: HTMLElement): SceneContext {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf5f5f0);
 
   const camera = new THREE.PerspectiveCamera(
     50,
     container.clientWidth / container.clientHeight,
     0.01,
-    100,
+    100000,
   );
-  camera.position.set(3, 2.5, 3);
+  // Camera aimed toward the sun (azimuth 200°) from a low angle
+  camera.position.set(2, 0.3, 4);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.4;
   container.appendChild(renderer.domElement);
 
+  // Sky (twilight atmosphere)
+  const sky = new Sky();
+  sky.scale.setScalar(450000);
+  scene.add(sky);
+
+  const skyUniforms = sky.material.uniforms as Record<string, { value: unknown }>;
+  skyUniforms['turbidity']!.value = 2;
+  skyUniforms['rayleigh']!.value = 1.5;
+  skyUniforms['mieCoefficient']!.value = 0.005;
+  skyUniforms['mieDirectionalG']!.value = 0.8;
+
+  const sun = new THREE.Vector3();
+  const phi = THREE.MathUtils.degToRad(90 - 3);   // low elevation → twilight
+  const theta = THREE.MathUtils.degToRad(200);
+  sun.setFromSphericalCoords(1, phi, theta);
+  (skyUniforms['sunPosition']!.value as THREE.Vector3).copy(sun);
+
   const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0.3, 0);  // look slightly above center → upward tilt
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.5;
 
-  // Lighting
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  // Lighting — warm to match twilight sky
+  scene.add(new THREE.AmbientLight(0xfff0e0, 0.8));
+  const dir = new THREE.DirectionalLight(0xffe8c0, 1.2);
   dir.position.set(4, 6, 4);
   scene.add(dir);
 
@@ -123,12 +148,16 @@ function buildMazeGroup(
     group.add(new LineSegments2(outGeo, outMat));
   }
 
-  // 4. Solution path
+  // 4. Solution path (fat line)
   if (data.solution.length >= 2) {
-    const pts = data.solution.map(v => new THREE.Vector3(...v));
-    const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0xee3333 });
-    group.add(new THREE.Line(lineGeo, lineMat));
+    const positions: number[] = [];
+    for (const v of data.solution) positions.push(v[0], v[1], v[2]);
+    const lineGeo = new LineGeometry();
+    lineGeo.setPositions(positions);
+    const lineMat = new LineMaterial({ color: 0xee3333, linewidth: 3 });
+    lineMat.resolution.copy(resolution);
+    outLineMaterials.push(lineMat);
+    group.add(new Line2(lineGeo, lineMat));
   }
 
   // 5. Start / Goal / Warp markers
