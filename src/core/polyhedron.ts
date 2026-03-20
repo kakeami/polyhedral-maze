@@ -1,11 +1,12 @@
-import type { Face, Vec3, EdgeVertices } from './types.ts';
+import type { Face, Vec3, EdgeVertices, FaceEdgeData } from './types.ts';
 import type { FaceGrid } from './face-grid.ts';
 import { Graph } from './graph.ts';
 import { allClose } from './vec3.ts';
+import { OPPOSITE_FACE_EPSILON } from './constants.ts';
 
 export interface Polyhedron {
   faces(): Face[];
-  faceAdjacency(): Graph<string>;
+  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData>;
   gridForFace(face: Face, n: number): FaceGrid;
 }
 
@@ -41,7 +42,7 @@ export function oppositeFace(
         target.normal[0] * f.normal[0] +
         target.normal[1] * f.normal[1] +
         target.normal[2] * f.normal[2];
-      if (d < -1 + 1e-6) {
+      if (d < -1 + OPPOSITE_FACE_EPSILON) {
         return f.id;
       }
     }
@@ -52,8 +53,8 @@ export function oppositeFace(
 export function buildFaceAdjacency(
   faces: Face[],
   sharedFn: (f1: Face, f2: Face) => EdgeVertices | null,
-): Graph<string> {
-  const g = new Graph<string>();
+): Graph<string, Record<string, unknown>, FaceEdgeData> {
+  const g = new Graph<string, Record<string, unknown>, FaceEdgeData>();
   for (const f of faces) {
     g.addNode(String(f.id));
   }
@@ -62,7 +63,7 @@ export function buildFaceAdjacency(
       const shared = sharedFn(faces[i]!, faces[j]!);
       if (shared) {
         g.addEdge(String(faces[i]!.id), String(faces[j]!.id), {
-          edge_vertices: shared,
+          edgeVertices: shared,
         });
       }
     }

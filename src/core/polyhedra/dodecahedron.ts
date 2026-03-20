@@ -2,8 +2,10 @@ import type { Face, Vec3, CellKey } from '../types.ts';
 import { cellKey, parseCell } from '../types.ts';
 import { sub, cross, normalize, dot, mean, scale, lstsq2 } from '../vec3.ts';
 import type { FaceGrid } from '../face-grid.ts';
+import { BOUNDARY_TOLERANCE } from '../constants.ts';
 import type { Polyhedron } from '../polyhedron.ts';
 import { sharedEdgeVertices, buildFaceAdjacency } from '../polyhedron.ts';
+import type { FaceEdgeData } from '../types.ts';
 import { Graph } from '../graph.ts';
 
 /**
@@ -100,7 +102,7 @@ export class PentGrid implements FaceGrid {
   boundaryCells(edgeStart: Vec3, edgeEnd: Vec3): CellKey[] {
     const fid = this.faceId;
     const n = this.n;
-    const tol = 0.1;
+    const tol = BOUNDARY_TOLERANCE;
 
     // Find which sector's bottom edge matches the given 3D edge
     for (let s = 0; s < 5; s++) {
@@ -247,7 +249,7 @@ export class Dodecahedron implements Polyhedron {
     return [...this._faces];
   }
 
-  faceAdjacency(): Graph<string> {
+  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
     return buildFaceAdjacency(this._faces, sharedEdgeVertices);
   }
 

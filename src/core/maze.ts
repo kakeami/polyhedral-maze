@@ -1,4 +1,4 @@
-import type { CellKey } from './types.ts';
+import type { CellKey, MazeNodeData } from './types.ts';
 import { parseCell } from './types.ts';
 import { Graph, UnionFind, bfsShortestPath, bfsSingleSourceLengths } from './graph.ts';
 import type { Rng } from './prng.ts';
@@ -11,8 +11,13 @@ export interface Warp {
   cellB: CellKey;
 }
 
+/** Edge data for spanning tree edges. */
+interface TreeEdgeData {
+  warp?: boolean;
+}
+
 export interface Maze {
-  tree: Graph<CellKey>;
+  tree: Graph<CellKey, MazeNodeData, TreeEdgeData>;
   start: CellKey;
   goal: CellKey;
   warp: Warp | null;
@@ -33,7 +38,11 @@ export function generate(
     throw new Error('MazeGraph is empty — did you call build()?');
   }
 
-  const builders: Record<Algorithm, (g: Graph<CellKey>, rng: Rng) => Graph<CellKey>> = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const builders: Record<
+    Algorithm,
+    (g: Graph<CellKey, MazeNodeData, any>, rng: Rng) => Graph<CellKey, MazeNodeData, TreeEdgeData>
+  > = {
     KRUSKAL: kruskal,
     DFS: dfsBacktracker,
     WILSON: wilson,
@@ -52,13 +61,16 @@ export function generate(
   return { tree, start, goal, warp: warpResult };
 }
 
-function kruskal(g: Graph<CellKey>, rng: Rng): Graph<CellKey> {
+function kruskal(
+  g: Graph<CellKey, MazeNodeData, any>,
+  rng: Rng,
+): Graph<CellKey, MazeNodeData, TreeEdgeData> {
   const edges = g.edges();
   rng.shuffle(edges);
 
-  const tree = new Graph<CellKey>();
+  const tree = new Graph<CellKey, MazeNodeData, TreeEdgeData>();
   for (const node of g.nodes()) {
-    tree.addNode(node, g.nodeData(node) ?? {});
+    tree.addNode(node, g.nodeData(node));
   }
 
   const uf = new UnionFind<CellKey>();
@@ -71,10 +83,13 @@ function kruskal(g: Graph<CellKey>, rng: Rng): Graph<CellKey> {
   return tree;
 }
 
-function dfsBacktracker(g: Graph<CellKey>, rng: Rng): Graph<CellKey> {
-  const tree = new Graph<CellKey>();
+function dfsBacktracker(
+  g: Graph<CellKey, MazeNodeData, any>,
+  rng: Rng,
+): Graph<CellKey, MazeNodeData, TreeEdgeData> {
+  const tree = new Graph<CellKey, MazeNodeData, TreeEdgeData>();
   for (const node of g.nodes()) {
-    tree.addNode(node, g.nodeData(node) ?? {});
+    tree.addNode(node, g.nodeData(node));
   }
 
   const nodes = g.nodes();
@@ -97,10 +112,13 @@ function dfsBacktracker(g: Graph<CellKey>, rng: Rng): Graph<CellKey> {
   return tree;
 }
 
-function wilson(g: Graph<CellKey>, rng: Rng): Graph<CellKey> {
-  const tree = new Graph<CellKey>();
+function wilson(
+  g: Graph<CellKey, MazeNodeData, any>,
+  rng: Rng,
+): Graph<CellKey, MazeNodeData, TreeEdgeData> {
+  const tree = new Graph<CellKey, MazeNodeData, TreeEdgeData>();
   for (const node of g.nodes()) {
-    tree.addNode(node, g.nodeData(node) ?? {});
+    tree.addNode(node, g.nodeData(node));
   }
 
   const nodes = g.nodes();
@@ -135,7 +153,7 @@ function wilson(g: Graph<CellKey>, rng: Rng): Graph<CellKey> {
 }
 
 function findWarp(
-  tree: Graph<CellKey>,
+  tree: Graph<CellKey, MazeNodeData, TreeEdgeData>,
   mazeGraph: MazeGraph,
 ): Warp | null {
   const deadEnds = new Set<CellKey>();
@@ -200,7 +218,10 @@ function findWarp(
   return { cellA: best[0], cellB: best[1] };
 }
 
-function spliceWarp(tree: Graph<CellKey>, warp: Warp): void {
+function spliceWarp(
+  tree: Graph<CellKey, MazeNodeData, TreeEdgeData>,
+  warp: Warp,
+): void {
   const path = bfsShortestPath(tree, warp.cellA, warp.cellB);
   const mid = Math.floor(path.length / 2);
   tree.removeEdge(path[mid - 1]!, path[mid]!);
@@ -208,7 +229,7 @@ function spliceWarp(tree: Graph<CellKey>, warp: Warp): void {
 }
 
 function placeStartGoal(
-  tree: Graph<CellKey>,
+  tree: Graph<CellKey, MazeNodeData, TreeEdgeData>,
   _mazeGraph: MazeGraph,
 ): [CellKey, CellKey] {
   const nodes = tree.nodes();

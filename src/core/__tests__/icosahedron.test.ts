@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Icosahedron } from '../polyhedra/icosahedron.ts';
 import { TriGrid } from '../polyhedra/octahedron.ts';
 import { oppositeFace } from '../polyhedron.ts';
+import { dot } from '../vec3.ts';
 
 describe('Icosahedron', () => {
   const ico = new Icosahedron();
@@ -34,6 +35,20 @@ describe('Icosahedron', () => {
     for (const n of [2, 4, 6, 8]) {
       const grid = new TriGrid(face, n);
       expect(grid.cells().length).toBe(n * n);
+    }
+  });
+
+  it('cellCenter3d is finite and on face plane for all faces', () => {
+    const faces = ico.faces();
+    for (const face of faces.slice(0, 5)) {
+      const grid = new TriGrid(face, 4);
+      const normal = face.normal;
+      const planeD = dot(face.vertices[0]!, normal);
+      for (const cell of grid.cells()) {
+        const pos = grid.cellCenter3d(cell);
+        expect(pos.every((v) => isFinite(v))).toBe(true);
+        expect(dot(pos, normal)).toBeCloseTo(planeD, 5);
+      }
     }
   });
 });

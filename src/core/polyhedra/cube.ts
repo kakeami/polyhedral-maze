@@ -2,8 +2,10 @@ import type { Face, Vec3, CellKey } from '../types.ts';
 import { cellKey, parseCell } from '../types.ts';
 import { dot, sub } from '../vec3.ts';
 import type { FaceGrid } from '../face-grid.ts';
+import { BOUNDARY_TOLERANCE } from '../constants.ts';
 import type { Polyhedron } from '../polyhedron.ts';
 import { sharedEdgeVertices, buildFaceAdjacency } from '../polyhedron.ts';
+import type { FaceEdgeData } from '../types.ts';
 import { Graph } from '../graph.ts';
 
 export class RectGrid implements FaceGrid {
@@ -53,7 +55,7 @@ export class RectGrid implements FaceGrid {
     const n = this.n;
     const s = this._toLocal(edgeStart);
     const e = this._toLocal(edgeEnd);
-    const tol = 0.1;
+    const tol = BOUNDARY_TOLERANCE;
 
     let cells: CellKey[];
 
@@ -201,7 +203,7 @@ export class Cube implements Polyhedron {
     return [...this._faces];
   }
 
-  faceAdjacency(): Graph<string> {
+  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
     return buildFaceAdjacency(this._faces, sharedEdgeVertices);
   }
 

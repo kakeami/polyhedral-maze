@@ -1,9 +1,11 @@
 import type { Vec3, CellKey, Face } from '../core/types.ts';
 import { parseCell } from '../core/types.ts';
 import { add, sub, scale, mean, allClose } from '../core/vec3.ts';
+import { VERTEX_EPSILON } from '../core/constants.ts';
 import type { MazeGraph } from '../core/maze-graph.ts';
 import type { Maze } from '../core/maze.ts';
 import { bfsShortestPath } from '../core/graph.ts';
+import { findAdjacentFaceId, hasTreeEdgeToFace } from './render-utils.ts';
 
 /**
  * Compute 3D vertices of a cell polygon based on the face geometry.
@@ -69,7 +71,7 @@ function sharedEdge(v1: Vec3[], v2: Vec3[]): [Vec3, Vec3] | null {
   const shared: Vec3[] = [];
   for (const a of v1) {
     for (const b of v2) {
-      if (allClose(a, b, 1e-6)) {
+      if (allClose(a, b, VERTEX_EPSILON)) {
         shared.push(a);
         break;
       }
@@ -144,32 +146,16 @@ export function computeRenderData(
       }
 
       // Grid vertices are evenly spaced along the edge
-      const du: Vec3 = [
-        (edgeEnd[0] - edgeStart[0]) / n,
-        (edgeEnd[1] - edgeStart[1]) / n,
-        (edgeEnd[2] - edgeStart[2]) / n,
-      ];
+      const du = scale(sub(edgeEnd, edgeStart), 1 / n);
 
       for (let j = 0; j < boundaryCells.length; j++) {
         const cell = boundaryCells[j]!;
-        const segStart: Vec3 = [
-          edgeStart[0] + j * du[0],
-          edgeStart[1] + j * du[1],
-          edgeStart[2] + j * du[2],
-        ];
-        const segEnd: Vec3 = [
-          edgeStart[0] + (j + 1) * du[0],
-          edgeStart[1] + (j + 1) * du[1],
-          edgeStart[2] + (j + 1) * du[2],
-        ];
+        const segStart = add(edgeStart, scale(du, j));
+        const segEnd = add(edgeStart, scale(du, j + 1));
 
         if (adjFaceId !== null && hasTreeEdgeToFace(cell, maze.tree, adjFaceId)) {
           // Gap at inter-face passage
-          portals.push([
-            (segStart[0] + segEnd[0]) / 2,
-            (segStart[1] + segEnd[1]) / 2,
-            (segStart[2] + segEnd[2]) / 2,
-          ]);
+          portals.push(scale(add(segStart, segEnd), 0.5));
         } else {
           outline.push(segStart, segEnd);
         }
@@ -227,38 +213,3 @@ export function computeRenderData(
   };
 }
 
-/**
- * Find the adjacent face that shares the given edge (two vertices) with the current face.
- */
-function findAdjacentFaceId(
-  faces: Face[],
-  currentFaceId: number,
-  edgeStart: Vec3,
-  edgeEnd: Vec3,
-): number | null {
-  for (const f of faces) {
-    if (f.id === currentFaceId) continue;
-    let hasStart = false;
-    let hasEnd = false;
-    for (const v of f.vertices) {
-      if (allClose(v, edgeStart, 1e-6)) hasStart = true;
-      if (allClose(v, edgeEnd, 1e-6)) hasEnd = true;
-    }
-    if (hasStart && hasEnd) return f.id;
-  }
-  return null;
-}
-
-/**
- * Check if a cell has a tree edge to a cell on the specified target face.
- */
-function hasTreeEdgeToFace(
-  cell: CellKey,
-  tree: { neighbors(node: CellKey): CellKey[] },
-  targetFaceId: number,
-): boolean {
-  for (const neighbor of tree.neighbors(cell)) {
-    if (parseCell(neighbor).faceId === targetFaceId) return true;
-  }
-  return false;
-}

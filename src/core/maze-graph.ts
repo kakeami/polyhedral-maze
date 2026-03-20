@@ -1,6 +1,6 @@
-import type { CellKey, Vec3, EdgeVertices } from './types.ts';
+import type { CellKey, Vec3, EdgeVertices, MazeNodeData, MazeEdgeData } from './types.ts';
 import { parseCell } from './types.ts';
-import { dot, sub, norm, mean } from './vec3.ts';
+import { dot, sub, norm, mean, scale } from './vec3.ts';
 import { Graph } from './graph.ts';
 import type { FaceGrid } from './face-grid.ts';
 import type { Polyhedron } from './polyhedron.ts';
@@ -11,9 +11,11 @@ export class MazeGraph {
   readonly n: number;
   readonly k: number;
 
-  graph = new Graph<CellKey>();
+  graph = new Graph<CellKey, MazeNodeData, MazeEdgeData>();
   interFaceEdges = new Set<string>(); // "u|v" keys for inter-face edges
   grids = new Map<number, FaceGrid>();
+
+  private _cachedCenter: Vec3 | null = null;
 
   constructor(polyhedron: Polyhedron, n = 6, k = 2) {
     this.polyhedron = polyhedron;
@@ -25,6 +27,7 @@ export class MazeGraph {
     this.graph.clear();
     this.interFaceEdges.clear();
     this.grids.clear();
+    this._cachedCenter = null;
 
     const faces = this.polyhedron.faces();
     const adj = this.polyhedron.faceAdjacency();
@@ -35,16 +38,16 @@ export class MazeGraph {
       this.grids.set(face.id, grid);
       for (const cell of grid.cells()) {
         const fid = parseCell(cell).faceId;
-        this.graph.addNode(cell, { face_id: fid });
+        this.graph.addNode(cell, { faceId: fid });
       }
       for (const [c1, c2] of grid.internalEdges()) {
-        this.graph.addEdge(c1, c2, { inter_face: false });
+        this.graph.addEdge(c1, c2, { interFace: false });
       }
     }
 
     // Layer 3: inter-face edges (at most k per shared edge)
     for (const [fiIdStr, fjIdStr, data] of adj.edgesWithData()) {
-      const edgeVerts = data['edge_vertices'] as EdgeVertices;
+      const edgeVerts = data.edgeVertices;
       const fiId = Number(fiIdStr);
       const fjId = Number(fjIdStr);
       const fiFace = faces.find((f) => f.id === fiId)!;
@@ -55,8 +58,8 @@ export class MazeGraph {
 
       for (const [c1, c2] of selected) {
         this.graph.addEdge(c1, c2, {
-          inter_face: true,
-          edge_vertices: edgeVerts,
+          interFace: true,
+          edgeVertices: edgeVerts,
         });
         const key = c1 < c2 ? `${c1}|${c2}` : `${c2}|${c1}`;
         this.interFaceEdges.add(key);
@@ -125,11 +128,7 @@ export class MazeGraph {
     // Project perpendicular to the face along normal
     const diff = sub(pos, center);
     const d = dot(diff, face.normal);
-    const projected: Vec3 = [
-      pos[0] - 2 * d * face.normal[0],
-      pos[1] - 2 * d * face.normal[1],
-      pos[2] - 2 * d * face.normal[2],
-    ];
+    const projected = sub(pos, scale(face.normal, 2 * d));
 
     const oppGrid = this.grids.get(oppFid)!;
     let bestCell: CellKey | null = null;
@@ -146,6 +145,8 @@ export class MazeGraph {
   }
 
   private _polyhedronCenter(): Vec3 {
+    if (this._cachedCenter) return this._cachedCenter;
+
     const seen = new Set<string>();
     const unique: Vec3[] = [];
     for (const face of this.polyhedron.faces()) {
@@ -157,6 +158,7 @@ export class MazeGraph {
         }
       }
     }
-    return mean(unique);
+    this._cachedCenter = mean(unique);
+    return this._cachedCenter;
   }
 }

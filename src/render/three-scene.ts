@@ -9,6 +9,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face, Vec3 } from '../core/types.ts';
 import type { MazeRenderData } from './texture-painter.ts';
+import { SCENE_CONFIG, MAZE_STYLE } from './scene-constants.ts';
 
 export interface SceneContext {
   renderer: THREE.WebGLRenderer;
@@ -23,49 +24,50 @@ export interface SceneContext {
 export function createScene(container: HTMLElement): SceneContext {
   const scene = new THREE.Scene();
 
+  const { camera: camCfg, sky: skyCfg, toneMapping, controls: ctrlCfg, lights } = SCENE_CONFIG;
+
   const camera = new THREE.PerspectiveCamera(
-    50,
+    camCfg.fov,
     container.clientWidth / container.clientHeight,
-    0.01,
-    100000,
+    camCfg.near,
+    camCfg.far,
   );
-  // Camera aimed toward the sun (azimuth 200°) from a low angle
-  camera.position.set(3, 0.5, 6);
+  camera.position.set(...camCfg.position);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, SCENE_CONFIG.pixelRatioClamp));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.4;
+  renderer.toneMappingExposure = toneMapping.exposure;
   container.appendChild(renderer.domElement);
 
   // Sky (twilight atmosphere)
   const sky = new Sky();
-  sky.scale.setScalar(450000);
+  sky.scale.setScalar(skyCfg.scale);
   scene.add(sky);
 
   const skyUniforms = sky.material.uniforms as Record<string, { value: unknown }>;
-  skyUniforms['turbidity']!.value = 2;
-  skyUniforms['rayleigh']!.value = 1.5;
-  skyUniforms['mieCoefficient']!.value = 0.005;
-  skyUniforms['mieDirectionalG']!.value = 0.8;
+  skyUniforms['turbidity']!.value = skyCfg.turbidity;
+  skyUniforms['rayleigh']!.value = skyCfg.rayleigh;
+  skyUniforms['mieCoefficient']!.value = skyCfg.mieCoefficient;
+  skyUniforms['mieDirectionalG']!.value = skyCfg.mieDirectionalG;
 
   const sun = new THREE.Vector3();
-  const phi = THREE.MathUtils.degToRad(90 - 3);   // low elevation → twilight
-  const theta = THREE.MathUtils.degToRad(200);
+  const phi = THREE.MathUtils.degToRad(90 - skyCfg.elevation);
+  const theta = THREE.MathUtils.degToRad(skyCfg.azimuth);
   sun.setFromSphericalCoords(1, phi, theta);
   (skyUniforms['sunPosition']!.value as THREE.Vector3).copy(sun);
 
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 0.3, 0);  // look slightly above center → upward tilt
+  controls.target.set(...ctrlCfg.target);
   controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
+  controls.dampingFactor = ctrlCfg.dampingFactor;
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.5;
+  controls.autoRotateSpeed = ctrlCfg.autoRotateSpeed;
 
   // Lighting — directional light aligned with the sun
-  scene.add(new THREE.AmbientLight(0xfff0e0, 0.8));
-  const dir = new THREE.DirectionalLight(0xffe8c0, 1.2);
+  scene.add(new THREE.AmbientLight(lights.ambientColor, lights.ambientIntensity));
+  const dir = new THREE.DirectionalLight(lights.directionalColor, lights.directionalIntensity);
   dir.position.copy(sun).multiplyScalar(10);
   scene.add(dir);
 
@@ -132,7 +134,7 @@ function buildMazeGroup(
   if (data.walls.length > 0) {
     const wallGeo = new LineSegmentsGeometry();
     wallGeo.setPositions(vecPairsToFlatArray(data.walls));
-    const wallMat = new LineMaterial({ color: 0x111111, linewidth: 2 });
+    const wallMat = new LineMaterial({ color: MAZE_STYLE.walls.color, linewidth: MAZE_STYLE.walls.linewidth });
     wallMat.resolution.copy(resolution);
     outLineMaterials.push(wallMat);
     group.add(new LineSegments2(wallGeo, wallMat));
@@ -142,7 +144,7 @@ function buildMazeGroup(
   if (data.outline.length > 0) {
     const outGeo = new LineSegmentsGeometry();
     outGeo.setPositions(vecPairsToFlatArray(data.outline));
-    const outMat = new LineMaterial({ color: 0x000000, linewidth: 3 });
+    const outMat = new LineMaterial({ color: MAZE_STYLE.outline.color, linewidth: MAZE_STYLE.outline.linewidth });
     outMat.resolution.copy(resolution);
     outLineMaterials.push(outMat);
     group.add(new LineSegments2(outGeo, outMat));
@@ -154,18 +156,18 @@ function buildMazeGroup(
     for (const v of data.solution) positions.push(v[0], v[1], v[2]);
     const lineGeo = new LineGeometry();
     lineGeo.setPositions(positions);
-    const lineMat = new LineMaterial({ color: 0xee3333, linewidth: 3 });
+    const lineMat = new LineMaterial({ color: MAZE_STYLE.solution.color, linewidth: MAZE_STYLE.solution.linewidth });
     lineMat.resolution.copy(resolution);
     outLineMaterials.push(lineMat);
     group.add(new Line2(lineGeo, lineMat));
   }
 
   // 5. Start / Goal / Warp markers
-  const markerSize = 0.03;
-  group.add(makeSphere(data.startPos, 0x22bb22, markerSize * 1.2));
-  group.add(makeSphere(data.goalPos, 0xdd2222, markerSize * 1.2));
-  if (data.warpA) group.add(makeSphere(data.warpA, 0xeecc00, markerSize));
-  if (data.warpB) group.add(makeSphere(data.warpB, 0xeecc00, markerSize));
+  const { markers } = MAZE_STYLE;
+  group.add(makeSphere(data.startPos, markers.startColor, markers.size * markers.sizeMultiplier));
+  group.add(makeSphere(data.goalPos, markers.goalColor, markers.size * markers.sizeMultiplier));
+  if (data.warpA) group.add(makeSphere(data.warpA, markers.warpColor, markers.size));
+  if (data.warpB) group.add(makeSphere(data.warpB, markers.warpColor, markers.size));
 
   return group;
 }
@@ -198,7 +200,7 @@ function buildFaceMeshes(faces: Face[]): THREE.Group {
     geo.setIndex(indices);
 
     const hue = face.id / total;
-    const color = new THREE.Color().setHSL(hue, 0.10, 0.95);
+    const color = new THREE.Color().setHSL(hue, MAZE_STYLE.face.saturation, MAZE_STYLE.face.lightness);
     const mat = new THREE.MeshStandardMaterial({
       color,
       side: THREE.DoubleSide,

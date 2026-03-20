@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Octahedron, TriGrid } from '../polyhedra/octahedron.ts';
+import { dot, sub } from '../vec3.ts';
 
 describe('Octahedron', () => {
   const oct = new Octahedron();
@@ -52,6 +53,31 @@ describe('TriGrid', () => {
     expect(grid.boundaryCells(v0, v2).length).toBe(n);
     // v1-v2 edge (a+b ≈ 1)
     expect(grid.boundaryCells(v1, v2).length).toBe(n);
+  });
+
+  it('cellCenter2d: a >= 0, b >= 0, a+b < 1 for all cells', () => {
+    for (const n of [2, 4, 6]) {
+      const grid = new TriGrid(face, n);
+      for (const cell of grid.cells()) {
+        const [a, b] = grid.cellCenter2d(cell);
+        expect(a).toBeGreaterThan(0);
+        expect(b).toBeGreaterThan(0);
+        expect(a + b).toBeLessThan(1);
+      }
+    }
+  });
+
+  it('cellCenter3d returns finite values on face plane', () => {
+    const grid = new TriGrid(face, 4);
+    const v0 = face.vertices[0]!;
+    const normal = face.normal;
+    const planeD = dot(v0, normal);
+    for (const cell of grid.cells()) {
+      const pos = grid.cellCenter3d(cell);
+      expect(pos.every((v) => isFinite(v))).toBe(true);
+      // Point should lie on the face plane: dot(pos, normal) ≈ planeD
+      expect(dot(pos, normal)).toBeCloseTo(planeD, 5);
+    }
   });
 
   it('isInterior works correctly', () => {

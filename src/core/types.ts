@@ -32,3 +32,20 @@ export interface Face {
 }
 
 export type EdgeVertices = [Vec3, Vec3];
+
+/** Node data for the maze graph. */
+export interface MazeNodeData {
+  faceId: number;
+}
+
+/** Edge data for the maze graph. */
+export interface MazeEdgeData {
+  interFace: boolean;
+  edgeVertices?: EdgeVertices;
+  warp?: boolean;
+}
+
+/** Edge data for the face adjacency graph. */
+export interface FaceEdgeData {
+  edgeVertices: EdgeVertices;
+}

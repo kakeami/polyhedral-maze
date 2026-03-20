@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Cube, RectGrid } from '../polyhedra/cube.ts';
+import { parseCell } from '../types.ts';
 
 describe('Cube', () => {
   const cube = new Cube();
@@ -55,6 +56,29 @@ describe('RectGrid', () => {
       const center = grid.cellCenter3d(cell);
       // y-coordinate should be 0.5 (top face)
       expect(center[1]).toBeCloseTo(0.5, 5);
+    }
+  });
+
+  it('cellCenter2d matches (col+0.5)/n, (row+0.5)/n', () => {
+    const grid = new RectGrid(face, 4);
+    for (const cell of grid.cells()) {
+      const { row, col } = parseCell(cell);
+      const [u, v] = grid.cellCenter2d(cell);
+      expect(u).toBeCloseTo((col + 0.5) / 4, 10);
+      expect(v).toBeCloseTo((row + 0.5) / 4, 10);
+    }
+  });
+
+  it('cellCenter2d values in (0, 1) for all cells', () => {
+    for (const n of [2, 4, 8]) {
+      const grid = new RectGrid(face, n);
+      for (const cell of grid.cells()) {
+        const [u, v] = grid.cellCenter2d(cell);
+        expect(u).toBeGreaterThan(0);
+        expect(u).toBeLessThan(1);
+        expect(v).toBeGreaterThan(0);
+        expect(v).toBeLessThan(1);
+      }
     }
   });
 

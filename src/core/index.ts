@@ -1,10 +1,13 @@
-export type { Vec3, CellKey, CellId, Face, EdgeVertices } from './types.ts';
+export type { Vec3, CellKey, CellId, Face, EdgeVertices, MazeNodeData, MazeEdgeData, FaceEdgeData } from './types.ts';
 export { cellKey, cellIdToKey, parseCell } from './types.ts';
 
 export type { Rng } from './prng.ts';
 export { createRng } from './prng.ts';
 
 export * as vec3 from './vec3.ts';
+export * as vec2 from './vec2.ts';
+export type { Vec2 } from './vec2.ts';
+export { BOUNDARY_TOLERANCE, VERTEX_EPSILON, OPPOSITE_FACE_EPSILON } from './constants.ts';
 
 export { Graph, UnionFind, bfsShortestPath, bfsSingleSourceLengths } from './graph.ts';
 
@@ -19,7 +22,8 @@ export type { MazeMetrics } from './metrics.ts';
 export { computeMetrics } from './metrics.ts';
 
 export { Cube, RectGrid } from './polyhedra/cube.ts';
-export { Octahedron, TriGrid } from './polyhedra/octahedron.ts';
+export { Octahedron } from './polyhedra/octahedron.ts';
+export { TriGrid } from './polyhedra/tri-grid.ts';
 export { Tetrahedron } from './polyhedra/tetrahedron.ts';
 export { Icosahedron } from './polyhedra/icosahedron.ts';
 export { Dodecahedron, PentGrid } from './polyhedra/dodecahedron.ts';

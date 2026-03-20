@@ -3,14 +3,17 @@
  * Renders face polygons, maze walls, boundary walls, solution path, and markers.
  */
 
-import type { NetLayout, Vec2 } from './net-layout.ts';
-import { add2, sub2 } from './net-layout.ts';
+import type { NetLayout } from './net-layout.ts';
+import type { Vec2 } from '../core/vec2.ts';
+import { add2, sub2, scale2, centroid2, midpoint2 } from '../core/vec2.ts';
 import type { MazeGraph } from '../core/maze-graph.ts';
 import type { Maze } from '../core/maze.ts';
-import type { CellKey, Face, Vec3 } from '../core/types.ts';
+import type { CellKey } from '../core/types.ts';
 import { parseCell } from '../core/types.ts';
-import { allClose } from '../core/vec3.ts';
 import { bfsShortestPath } from '../core/graph.ts';
+import { VERTEX_EPSILON } from '../core/constants.ts';
+import { findAdjacentFaceId, hasTreeEdgeToFace } from './render-utils.ts';
+import { SVG_STYLE } from './svg-constants.ts';
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -42,8 +45,8 @@ export function renderNetSVG(
   const h = layout.height;
   const flip = ([x, y]: Vec2): Vec2 => [x, h - y];
 
-  const tabWidth = layout.width * 0.025;
-  const margin = layout.width * 0.03 + tabWidth;
+  const tabWidth = layout.width * SVG_STYLE.tabWidthRatio;
+  const margin = layout.width * SVG_STYLE.marginRatio + tabWidth;
   const svg = document.createElementNS(NS, 'svg') as SVGSVGElement;
   svg.setAttribute('xmlns', NS);
   svg.setAttribute('viewBox',
@@ -62,7 +65,7 @@ export function renderNetSVG(
     const verts2d = netMap.get(face.id)!;
     const fv = face.vertices;
     const nv = fv.length;
-    const fc = flip(centroid(verts2d));
+    const fc = flip(centroid2(verts2d));
     for (let i = 0; i < nv; i++) {
       const adjFaceId = findAdjacentFaceId(faces, face.id, fv[i]!, fv[(i + 1) % nv]!);
       if (isFoldEdge(face.id, adjFaceId)) continue;
@@ -83,13 +86,13 @@ export function renderNetSVG(
 
   // 1.1. Net outline (light gray dashed — cut guide, outer edges only)
   //      Offset slightly outward so it doesn't overlap boundary walls.
-  const outlineOffset = layout.width * 0.003;
+  const outlineOffset = layout.width * SVG_STYLE.outlineOffsetRatio;
   const outlinePaths: string[] = [];
   for (const face of faces) {
     const verts2d = netMap.get(face.id)!;
     const fv = face.vertices;
     const nv = fv.length;
-    const fc = flip(centroid(verts2d));
+    const fc = flip(centroid2(verts2d));
     for (let i = 0; i < nv; i++) {
       const adjFaceId = findAdjacentFaceId(faces, face.id, fv[i]!, fv[(i + 1) % nv]!);
       if (isFoldEdge(face.id, adjFaceId)) continue;
@@ -103,21 +106,21 @@ export function renderNetSVG(
     svg.appendChild(svgEl('path', {
       d: outlinePaths.join(''),
       fill: 'none',
-      stroke: '#dddddd',
-      'stroke-width': String(layout.width * 0.002),
-      'stroke-dasharray': `${layout.width * 0.006},${layout.width * 0.004}`,
+      stroke: SVG_STYLE.outlineColor,
+      'stroke-width': String(layout.width * SVG_STYLE.outlineWidthRatio),
+      'stroke-dasharray': `${layout.width * SVG_STYLE.outlineDashRatios[0]},${layout.width * SVG_STYLE.outlineDashRatios[1]}`,
     }));
   }
 
   // 1.5. Cell markers (pastel fill, behind walls)
   const markerCells: { cell: CellKey; color: string }[] = [
-    { cell: maze.start, color: '#b2f0b2' },
-    { cell: maze.goal, color: '#f0b2b2' },
+    { cell: maze.start, color: SVG_STYLE.startColor },
+    { cell: maze.goal, color: SVG_STYLE.goalColor },
   ];
   if (maze.warp) {
     markerCells.push(
-      { cell: maze.warp.cellA, color: '#f0e8b2' },
-      { cell: maze.warp.cellB, color: '#f0e8b2' },
+      { cell: maze.warp.cellA, color: SVG_STYLE.warpColor },
+      { cell: maze.warp.cellB, color: SVG_STYLE.warpColor },
     );
   }
   for (const { cell, color } of markerCells) {
@@ -151,8 +154,8 @@ export function renderNetSVG(
   if (wallPaths.length > 0) {
     svg.appendChild(svgEl('path', {
       d: wallPaths.join(''),
-      stroke: '#222',
-      'stroke-width': String(layout.width * 0.0025),
+      stroke: SVG_STYLE.wallColor,
+      'stroke-width': String(layout.width * SVG_STYLE.wallWidthRatio),
       'stroke-linecap': 'round',
       fill: 'none',
     }));
@@ -197,8 +200,8 @@ export function renderNetSVG(
   if (boundaryPaths.length > 0) {
     svg.appendChild(svgEl('path', {
       d: boundaryPaths.join(''),
-      stroke: '#000',
-      'stroke-width': String(layout.width * 0.004),
+      stroke: SVG_STYLE.boundaryColor,
+      'stroke-width': String(layout.width * SVG_STYLE.boundaryWidthRatio),
       'stroke-linecap': 'round',
       fill: 'none',
     }));
@@ -229,25 +232,25 @@ export function renderNetSVG(
             // Jump across the net — end solid segment, record dashed link
             const jumpStart = current[current.length - 1]!;
             if (current.length >= 2) solidSegments.push(current);
-            const jumpEnd = flip(cellCenter2d(netMap.get(fid)!, cell, n));
+            const jumpEnd = flip(cellCenter2dNet(netMap.get(fid)!, cell, n));
             dashedSegments.push([jumpStart, jumpEnd]);
             current = [jumpEnd];
             continue;
           }
         }
       }
-      current.push(flip(cellCenter2d(netMap.get(fid)!, cell, n)));
+      current.push(flip(cellCenter2dNet(netMap.get(fid)!, cell, n)));
     }
     if (current.length >= 2) solidSegments.push(current);
 
-    const sw = String(layout.width * 0.003);
+    const sw = String(layout.width * SVG_STYLE.solutionWidthRatio);
     const baseAttrs = {
-      stroke: '#ee3333',
+      stroke: SVG_STYLE.solutionColor,
       'stroke-width': sw,
       'stroke-linecap': 'round',
       'stroke-linejoin': 'round',
       fill: 'none',
-      opacity: '0.8',
+      opacity: String(SVG_STYLE.solutionOpacity),
     };
     for (const seg of solidSegments) {
       const d = seg.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join('');
@@ -257,7 +260,7 @@ export function renderNetSVG(
       svg.appendChild(svgEl('path', {
         ...baseAttrs,
         d: `M${from[0]},${from[1]}L${to[0]},${to[1]}`,
-        'stroke-dasharray': `${layout.width * 0.001},${layout.width * 0.004}`,
+        'stroke-dasharray': `${layout.width * SVG_STYLE.solutionDashRatios[0]},${layout.width * SVG_STYLE.solutionDashRatios[1]}`,
       }));
     }
   }
@@ -276,11 +279,11 @@ export function renderNetSVG(
   for (const { cell, label } of labelCells) {
     const fid = parseCell(cell).faceId;
     const verts = cellVerts2d(netMap.get(fid)!, cell, n);
-    const c = flip(centroid(verts));
+    const c = flip(centroid2(verts));
     // Inradius: min distance from centroid to any edge → safe text size
     const flipped = verts.map(flip);
     const inradius = cellInradius(flipped, c);
-    const fontSize = inradius * 1.2;
+    const fontSize = inradius * SVG_STYLE.labelInradiusScale;
     const text = svgEl('text', {
       x: String(c[0]), y: String(c[1]),
       'font-size': String(fontSize),
@@ -288,7 +291,7 @@ export function renderNetSVG(
       'font-weight': 'bold',
       'text-anchor': 'middle',
       'dominant-baseline': 'central',
-      fill: '#555555',
+      fill: SVG_STYLE.labelColor,
     });
     text.textContent = label;
     svg.appendChild(text);
@@ -297,15 +300,15 @@ export function renderNetSVG(
   // 5. Face ID labels (optional)
   if (options.showFaceIds !== false) {
     for (const nf of layout.faces) {
-      const c = flip(centroid(nf.vertices2d));
-      const fontSize = layout.width * 0.015;
+      const c = flip(centroid2(nf.vertices2d));
+      const fontSize = layout.width * SVG_STYLE.faceIdSizeRatio;
       const text = svgEl('text', {
         x: String(c[0]), y: String(c[1]),
         'font-size': String(fontSize),
         'font-family': 'Arial, sans-serif',
         'text-anchor': 'middle',
         'dominant-baseline': 'central',
-        fill: '#bbb',
+        fill: SVG_STYLE.faceIdColor,
       });
       text.textContent = String(nf.faceId);
       svg.appendChild(text);
@@ -316,8 +319,6 @@ export function renderNetSVG(
 }
 
 // ─── 2D cell vertex computation (mirrors cellVertices3d) ──────────
-
-function scale2(v: Vec2, s: number): Vec2 { return [v[0] * s, v[1] * s]; }
 
 function cellVerts2d(faceVerts: Vec2[], cell: CellKey, n: number): Vec2[] {
   const { row, col } = parseCell(cell);
@@ -343,7 +344,7 @@ function cellVerts2d(faceVerts: Vec2[], cell: CellKey, n: number): Vec2[] {
   }
 
   if (nv === 5) {
-    const center = centroid(faceVerts);
+    const center = centroid2(faceVerts);
     const sector = Math.floor(row / n);
     const localRow = row - sector * n;
     const su = sub2(faceVerts[sector]!, center);
@@ -365,24 +366,12 @@ function triCellVerts(o: Vec2, u: Vec2, v: Vec2, r: number, c: number, n: number
   }
 }
 
-function cellCenter2d(faceVerts: Vec2[], cell: CellKey, n: number): Vec2 {
-  return centroid(cellVerts2d(faceVerts, cell, n));
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────
-
-function centroid(pts: Vec2[]): Vec2 {
-  let x = 0, y = 0;
-  for (const [px, py] of pts) { x += px; y += py; }
-  return [x / pts.length, y / pts.length];
-}
-
-function midpoint2(a: Vec2, b: Vec2): Vec2 {
-  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+function cellCenter2dNet(faceVerts: Vec2[], cell: CellKey, n: number): Vec2 {
+  return centroid2(cellVerts2d(faceVerts, cell, n));
 }
 
 function sharedEdge2d(v1: Vec2[], v2: Vec2[]): [Vec2, Vec2] | null {
-  const eps = 1e-6;
+  const eps = VERTEX_EPSILON;
   const shared: Vec2[] = [];
   for (const a of v1) {
     for (const b of v2) {
@@ -393,32 +382,6 @@ function sharedEdge2d(v1: Vec2[], v2: Vec2[]): [Vec2, Vec2] | null {
     }
   }
   return shared.length >= 2 ? [shared[0]!, shared[1]!] : null;
-}
-
-function findAdjacentFaceId(
-  faces: Face[], currentFaceId: number, edgeStart: Vec3, edgeEnd: Vec3,
-): number | null {
-  for (const f of faces) {
-    if (f.id === currentFaceId) continue;
-    let hasStart = false, hasEnd = false;
-    for (const v of f.vertices) {
-      if (allClose(v, edgeStart, 1e-6)) hasStart = true;
-      if (allClose(v, edgeEnd, 1e-6)) hasEnd = true;
-    }
-    if (hasStart && hasEnd) return f.id;
-  }
-  return null;
-}
-
-function hasTreeEdgeToFace(
-  cell: CellKey,
-  tree: { neighbors(node: CellKey): CellKey[] },
-  targetFaceId: number,
-): boolean {
-  for (const neighbor of tree.neighbors(cell)) {
-    if (parseCell(neighbor).faceId === targetFaceId) return true;
-  }
-  return false;
 }
 
 function drawGlueTab(
@@ -441,7 +404,7 @@ function drawGlueTab(
   const b2: Vec2 = [b[0] + onx * tw - ex * inset, b[1] + ony * tw - ey * inset];
 
   const pts = `${a[0]},${a[1]} ${b[0]},${b[1]} ${b2[0]},${b2[1]} ${a2[0]},${a2[1]}`;
-  svg.appendChild(svgEl('polygon', { points: pts, fill: '#e0e0e0', stroke: 'none' }));
+  svg.appendChild(svgEl('polygon', { points: pts, fill: SVG_STYLE.glueTabColor, stroke: 'none' }));
 }
 
 /** Min distance from a point to any edge of a polygon — the inscribed radius. */

@@ -1,23 +1,31 @@
 /**
- * Simple undirected graph with string node keys.
+ * Simple undirected graph with string node keys and typed data.
  * Replaces networkx.Graph for the maze domain.
  */
-export class Graph<N extends string = string> {
-  private _adj = new Map<N, Map<N, Record<string, unknown>>>();
-  private _nodeData = new Map<N, Record<string, unknown>>();
+export class Graph<
+  N extends string = string,
+  NData = Record<string, unknown>,
+  EData = Record<string, unknown>,
+> {
+  private _adj = new Map<N, Map<N, EData>>();
+  private _nodeData = new Map<N, NData>();
 
-  addNode(node: N, data: Record<string, unknown> = {}): void {
+  addNode(node: N, data?: NData): void {
     if (!this._adj.has(node)) {
       this._adj.set(node, new Map());
     }
-    this._nodeData.set(node, { ...this._nodeData.get(node), ...data });
+    if (data) {
+      const existing = this._nodeData.get(node);
+      this._nodeData.set(node, existing ? { ...existing, ...data } : data);
+    }
   }
 
-  addEdge(u: N, v: N, data: Record<string, unknown> = {}): void {
+  addEdge(u: N, v: N, data?: EData): void {
     this.addNode(u);
     this.addNode(v);
-    this._adj.get(u)!.set(v, data);
-    this._adj.get(v)!.set(u, data);
+    const d = data ?? ({} as EData);
+    this._adj.get(u)!.set(v, d);
+    this._adj.get(v)!.set(u, d);
   }
 
   removeEdge(u: N, v: N): void {
@@ -53,8 +61,8 @@ export class Graph<N extends string = string> {
     return result;
   }
 
-  edgesWithData(): [N, N, Record<string, unknown>][] {
-    const result: [N, N, Record<string, unknown>][] = [];
+  edgesWithData(): [N, N, EData][] {
+    const result: [N, N, EData][] = [];
     const seen = new Set<string>();
     for (const [u, adj] of this._adj) {
       for (const [v, data] of adj) {
@@ -68,11 +76,11 @@ export class Graph<N extends string = string> {
     return result;
   }
 
-  nodeData(node: N): Record<string, unknown> | undefined {
+  nodeData(node: N): NData | undefined {
     return this._nodeData.get(node);
   }
 
-  edgeData(u: N, v: N): Record<string, unknown> | undefined {
+  edgeData(u: N, v: N): EData | undefined {
     return this._adj.get(u)?.get(v);
   }
 
@@ -154,7 +162,7 @@ export class UnionFind<T> {
  * Returns the path as an array of nodes, or empty array if unreachable.
  */
 export function bfsShortestPath<N extends string>(
-  graph: Graph<N>,
+  graph: Pick<Graph<N>, 'neighbors'>,
   source: N,
   target: N,
 ): N[] {
@@ -190,7 +198,7 @@ export function bfsShortestPath<N extends string>(
  * BFS from source, returns distance to all reachable nodes.
  */
 export function bfsSingleSourceLengths<N extends string>(
-  graph: Graph<N>,
+  graph: Pick<Graph<N>, 'neighbors'>,
   source: N,
 ): Map<N, number> {
   const dist = new Map<N, number>();

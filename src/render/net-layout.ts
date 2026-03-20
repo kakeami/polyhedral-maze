@@ -7,7 +7,10 @@ import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face, Vec3 } from '../core/types.ts';
 import { sub, dot, cross, norm } from '../core/vec3.ts';
 
-export type Vec2 = [number, number];
+import type { Vec2 } from '../core/vec2.ts';
+import { sub2, len2 } from '../core/vec2.ts';
+
+export type { Vec2 } from '../core/vec2.ts';
 
 export interface NetFace {
   faceId: number;
@@ -21,12 +24,6 @@ export interface NetLayout {
   /** "min:max" face-ID pairs connected by fold edges in the BFS tree. */
   foldPairs: Set<string>;
 }
-
-// ─── 2D vector helpers ────────────────────────────────────────────
-
-function add2(a: Vec2, b: Vec2): Vec2 { return [a[0] + b[0], a[1] + b[1]]; }
-function sub2(a: Vec2, b: Vec2): Vec2 { return [a[0] - b[0], a[1] - b[1]]; }
-function len2(v: Vec2): number { return Math.sqrt(v[0] * v[0] + v[1] * v[1]); }
 
 // ─── Main entry ───────────────────────────────────────────────────
 
@@ -191,4 +188,3 @@ function trilaterate(a: Vec2, da: number, b: Vec2, db: number, awayFrom: Vec2): 
   return crossP1 * crossRef < 0 ? p1 : p2;
 }
 
-export { add2, sub2 };
