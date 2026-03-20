@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 310" font-family="Georgia, serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#666"/>
+    </marker>
+    <style>
+      .title { font-size: 14px; font-weight: bold; fill: #2c5282; }
+      .subtitle { font-size: 11px; fill: #555; }
+      .label { font-size: 10px; fill: #333; }
+      .label-sm { font-size: 9px; fill: #666; }
+      .nf { fill: #e8f0fe; stroke: #4285f4; stroke-width: 1.5; }
+      .nc { fill: #fff; stroke: #333; stroke-width: 0.8; }
+      .nb { fill: #fff3e0; stroke: #e65100; stroke-width: 1; }
+      .ea { stroke: #4285f4; stroke-width: 1.5; }
+      .ei { stroke: #666; stroke-width: 0.8; }
+      .ex { stroke: #e65100; stroke-width: 1.8; stroke-dasharray: 5 3; }
+      .pb { fill: none; stroke: #ddd; stroke-width: 1; rx: 8; }
+      .af { stroke: #999; stroke-width: 1.5; fill: none; }
+    </style>
+  </defs>
+
+  <!-- Panels -->
+  <rect x="5" y="5" width="265" height="300" class="pb"/>
+  <rect x="310" y="5" width="250" height="300" class="pb"/>
+  <rect x="600" y="5" width="295" height="300" class="pb"/>
+
+  <!-- Flow arrows -->
+  <path d="M273,155 L307,155" class="af" marker-end="url(#arrow)"/>
+  <path d="M563,155 L597,155" class="af" marker-end="url(#arrow)"/>
+
+  <!-- ===== LAYER 1 ===== -->
+  <text x="137" y="28" text-anchor="middle" class="title">Layer 1: G_face</text>
+  <text x="137" y="44" text-anchor="middle" class="subtitle">(Face Adjacency / Macro)</text>
+
+  <!-- Cube dual = octahedron graph: 6 nodes arranged as top/bottom + 4 ring -->
+  <g transform="translate(137, 170)">
+    <!-- Edges: each face adj to 4 others. Top adj to F,B,L,R. Bot adj to F,B,L,R. Ring: F-L, L-B, B-R, R-F -->
+    <!-- Top to ring -->
+    <line x1="0" y1="-70" x2="-70" y2="0" class="ea"/>
+    <line x1="0" y1="-70" x2="70" y2="0" class="ea"/>
+    <line x1="0" y1="-70" x2="0" y2="-20" class="ea"/>
+    <line x1="0" y1="-70" x2="0" y2="-20" class="ea"/>
+    <!-- Need 4 ring nodes. Let me use: Front(0,-20), Right(70,0), Back(0,20), Left(-70,0) -->
+    <!-- Top to all ring -->
+    <line x1="0" y1="-70" x2="0" y2="-20" class="ea"/>
+    <line x1="0" y1="-70" x2="70" y2="0" class="ea"/>
+    <line x1="0" y1="-70" x2="0" y2="20" class="ea"/>
+    <line x1="0" y1="-70" x2="-70" y2="0" class="ea"/>
+    <!-- Bottom to all ring -->
+    <line x1="0" y1="70" x2="0" y2="-20" class="ea"/>
+    <line x1="0" y1="70" x2="70" y2="0" class="ea"/>
+    <line x1="0" y1="70" x2="0" y2="20" class="ea"/>
+    <line x1="0" y1="70" x2="-70" y2="0" class="ea"/>
+    <!-- Ring edges: F-R, R-B, B-L, L-F -->
+    <line x1="0" y1="-20" x2="70" y2="0" class="ea"/>
+    <line x1="70" y1="0" x2="0" y2="20" class="ea"/>
+    <line x1="0" y1="20" x2="-70" y2="0" class="ea"/>
+    <line x1="-70" y1="0" x2="0" y2="-20" class="ea"/>
+
+    <!-- Nodes -->
+    <circle cx="0" cy="-70" r="15" class="nf"/>
+    <text x="0" y="-66" text-anchor="middle" class="label">f₁</text>
+    <circle cx="0" cy="70" r="15" class="nf"/>
+    <text x="0" y="74" text-anchor="middle" class="label">f₂</text>
+    <circle cx="0" cy="-20" r="15" class="nf"/>
+    <text x="0" y="-16" text-anchor="middle" class="label">f₃</text>
+    <circle cx="70" cy="0" r="15" class="nf"/>
+    <text x="70" y="4" text-anchor="middle" class="label">f₄</text>
+    <circle cx="0" cy="20" r="15" class="nf"/>
+    <text x="0" y="24" text-anchor="middle" class="label">f₅</text>
+    <circle cx="-70" cy="0" r="15" class="nf"/>
+    <text x="-70" y="4" text-anchor="middle" class="label">f₆</text>
+  </g>
+
+  <text x="137" y="278" text-anchor="middle" class="label-sm">Nodes = faces, Edges = shared boundaries</text>
+  <text x="137" y="292" text-anchor="middle" class="label-sm">Cube: |F| = 6, |A| = 12</text>
+
+  <!-- ===== LAYER 2 ===== -->
+  <text x="435" y="28" text-anchor="middle" class="title">Layer 2: G_f</text>
+  <text x="435" y="44" text-anchor="middle" class="subtitle">(Per-Face Grid / Micro)</text>
+
+  <!-- RectGrid n=4 -->
+  <g transform="translate(355, 62)">
+    <text x="80" y="0" text-anchor="middle" class="label">RectGrid (n = 4)</text>
+    <!-- 4×4 grid -->
+    <rect x="20" y="10" width="30" height="30" class="nc"/>
+    <rect x="50" y="10" width="30" height="30" class="nc"/>
+    <rect x="80" y="10" width="30" height="30" class="nc"/>
+    <rect x="110" y="10" width="30" height="30" class="nc"/>
+    <rect x="20" y="40" width="30" height="30" class="nc"/>
+    <rect x="50" y="40" width="30" height="30" class="nc"/>
+    <rect x="80" y="40" width="30" height="30" class="nc"/>
+    <rect x="110" y="40" width="30" height="30" class="nc"/>
+    <rect x="20" y="70" width="30" height="30" class="nc"/>
+    <rect x="50" y="70" width="30" height="30" class="nc"/>
+    <rect x="80" y="70" width="30" height="30" class="nc"/>
+    <rect x="110" y="70" width="30" height="30" class="nc"/>
+    <rect x="20" y="100" width="30" height="30" class="nc"/>
+    <rect x="50" y="100" width="30" height="30" class="nc"/>
+    <rect x="80" y="100" width="30" height="30" class="nc"/>
+    <rect x="110" y="100" width="30" height="30" class="nc"/>
+    <text x="80" y="150" text-anchor="middle" class="label-sm">n² = 16 cells/face</text>
+  </g>
+
+  <!-- TriGrid n=3 -->
+  <g transform="translate(365, 225)">
+    <text x="55" y="0" text-anchor="middle" class="label">TriGrid (n = 3)</text>
+    <!-- Row 0: 1 up-triangle -->
+    <polygon points="55,8 70,34 40,34" class="nc"/>
+    <!-- Row 1: 2 up + 1 down -->
+    <polygon points="40,34 55,60 25,60" class="nc"/>
+    <polygon points="55,34 40,60 70,60" class="nc"/>
+    <polygon points="70,34 85,60 55,60" class="nc"/>
+    <!-- Row 2: 3 up + 2 down -->
+    <polygon points="25,60 40,86 10,86" class="nc"/>
+    <polygon points="40,60 25,86 55,86" class="nc"/>
+    <polygon points="55,60 70,86 40,86" class="nc"/>
+    <polygon points="70,60 55,86 85,86" class="nc"/>
+    <polygon points="85,60 100,86 70,86" class="nc"/>
+  </g>
+
+  <!-- PentGrid label -->
+  <g transform="translate(475, 225)">
+    <text x="30" y="0" text-anchor="middle" class="label">PentGrid</text>
+    <!-- Simplified pentagon with 5 sectors -->
+    <polygon points="30,15 55,33 47,60 13,60 5,33" fill="none" stroke="#333" stroke-width="0.8"/>
+    <line x1="30" y1="40" x2="30" y2="15" stroke="#333" stroke-width="0.5" stroke-dasharray="2 2"/>
+    <line x1="30" y1="40" x2="55" y2="33" stroke="#333" stroke-width="0.5" stroke-dasharray="2 2"/>
+    <line x1="30" y1="40" x2="47" y2="60" stroke="#333" stroke-width="0.5" stroke-dasharray="2 2"/>
+    <line x1="30" y1="40" x2="13" y2="60" stroke="#333" stroke-width="0.5" stroke-dasharray="2 2"/>
+    <line x1="30" y1="40" x2="5" y2="33" stroke="#333" stroke-width="0.5" stroke-dasharray="2 2"/>
+    <text x="30" y="76" text-anchor="middle" class="label-sm">5 sectors</text>
+  </g>
+
+  <!-- ===== LAYER 3 ===== -->
+  <text x="747" y="28" text-anchor="middle" class="title">Layer 3: G_maze</text>
+  <text x="747" y="44" text-anchor="middle" class="subtitle">(Combined Maze Graph)</text>
+
+  <!-- Two adjacent 3×3 faces with inter-face edges -->
+  <g transform="translate(625, 62)">
+    <text x="55" y="0" text-anchor="middle" class="label" fill="#4285f4">Face f₁</text>
+    <text x="185" y="0" text-anchor="middle" class="label" fill="#4285f4">Face f₂</text>
+
+    <!-- f1: 3×3 -->
+    <rect x="10" y="10" width="28" height="28" class="nc"/>
+    <rect x="38" y="10" width="28" height="28" class="nc"/>
+    <rect x="66" y="10" width="28" height="28" class="nb"/>
+    <rect x="10" y="38" width="28" height="28" class="nc"/>
+    <rect x="38" y="38" width="28" height="28" class="nc"/>
+    <rect x="66" y="38" width="28" height="28" class="nb"/>
+    <rect x="10" y="66" width="28" height="28" class="nc"/>
+    <rect x="38" y="66" width="28" height="28" class="nc"/>
+    <rect x="66" y="66" width="28" height="28" class="nb"/>
+
+    <!-- f2: 3×3 -->
+    <rect x="140" y="10" width="28" height="28" class="nb"/>
+    <rect x="168" y="10" width="28" height="28" class="nc"/>
+    <rect x="196" y="10" width="28" height="28" class="nc"/>
+    <rect x="140" y="38" width="28" height="28" class="nb"/>
+    <rect x="168" y="38" width="28" height="28" class="nc"/>
+    <rect x="196" y="38" width="28" height="28" class="nc"/>
+    <rect x="140" y="66" width="28" height="28" class="nb"/>
+    <rect x="168" y="66" width="28" height="28" class="nc"/>
+    <rect x="196" y="66" width="28" height="28" class="nc"/>
+
+    <!-- Inter-face edges (k=2) -->
+    <line x1="94" y1="24" x2="140" y2="24" class="ex"/>
+    <line x1="94" y1="80" x2="140" y2="80" class="ex"/>
+
+    <!-- k label -->
+    <text x="117" y="56" text-anchor="middle" style="font-size: 12px; fill: #e65100; font-weight: bold">k = 2</text>
+
+    <!-- Legend -->
+    <g transform="translate(5, 110)">
+      <rect x="0" y="0" width="10" height="10" class="nc"/>
+      <text x="14" y="9" class="label-sm">Interior cell</text>
+      <rect x="0" y="16" width="10" height="10" class="nb"/>
+      <text x="14" y="25" class="label-sm">Boundary cell</text>
+      <line x1="110" y1="5" x2="135" y2="5" class="ex"/>
+      <text x="140" y="9" class="label-sm">Inter-face (k selected)</text>
+      <line x1="110" y1="21" x2="135" y2="21" class="ei" style="stroke-width:1.5"/>
+      <text x="140" y="25" class="label-sm">Intra-face</text>
+    </g>
+  </g>
+
+  <!-- Summary -->
+  <text x="747" y="222" text-anchor="middle" style="font-size: 11px; fill: #333; font-weight: bold">
+    Spanning tree T of G_maze
+  </text>
+  <text x="747" y="240" text-anchor="middle" class="label-sm">= Perfect maze (unique solution)</text>
+  <text x="747" y="258" text-anchor="middle" class="label-sm">Tree edges = passages</text>
+  <text x="747" y="272" text-anchor="middle" class="label-sm">Non-tree edges = walls</text>
+</svg>

@@ -260,6 +260,11 @@
     We decompose the maze-generation problem on a Platonic solid $P$ into three layers. Each layer addresses a distinct aspect of the problem, and together they yield a single graph on which standard spanning-tree algorithms can operate.
   </p>
 
+  <figure>
+    <img src="figures/three-layer-model.svg" alt="Three-layer graph model" style="width:100%; max-width:900px;" />
+    <figcaption>Figure 1. The three-layer graph model. <strong>Layer 1</strong>: Face adjacency graph G<sub>face</sub> (dual graph). <strong>Layer 2</strong>: Per-face grids G<sub>f</sub>. <strong>Layer 3</strong>: Combined maze graph G<sub>maze</sub> with inter-face edges constrained by k.</figcaption>
+  </figure>
+
   <h3>3.1 Layer 1: Face Adjacency Graph (Macro)</h3>
 
   <div class="definition">
@@ -359,6 +364,17 @@
     <tr><td>PentGrid</td><td>Pentagon</td><td>$5n^2$</td><td>Dodecahedron</td><td>$12 \times 180 = 2160$</td></tr>
   </table>
 
+  <figure>
+    <div style="display:flex; gap:4px; flex-wrap:wrap; justify-content:center;">
+      <img src="figures/maze-tetrahedron.png" alt="Tetrahedron maze" style="width:19%;" />
+      <img src="figures/maze-cube.png" alt="Cube maze" style="width:19%;" />
+      <img src="figures/maze-octahedron.png" alt="Octahedron maze" style="width:19%;" />
+      <img src="figures/maze-dodecahedron.png" alt="Dodecahedron maze" style="width:19%;" />
+      <img src="figures/maze-icosahedron.png" alt="Icosahedron maze" style="width:19%;" />
+    </div>
+    <figcaption>Figure 2. Generated mazes on all five Platonic solids (n=6, k=3, DFS backtracker, seed 42). Red lines indicate the solution path.</figcaption>
+  </figure>
+
   <h3>3.3 Layer 3: Combined Maze Graph</h3>
 
   <div class="definition">
@@ -399,6 +415,16 @@
     <li>If $k = 1$: the middle pair $\lfloor n/2 \rfloor$ is selected.</li>
     <li>Otherwise: pairs at indices $\bigl\lfloor i \cdot (n-1) / (k-1) \bigr\rceil$ for $i = 0, 1, \ldots, k-1$.</li>
   </ul>
+
+  <figure>
+    <div style="display:flex; gap:4px; justify-content:center;">
+      <div style="text-align:center; width:24%;"><img src="figures/k-effect-1.png" alt="k=1" style="width:100%;" /><div style="font-size:0.8rem;">k = 1</div></div>
+      <div style="text-align:center; width:24%;"><img src="figures/k-effect-2.png" alt="k=2" style="width:100%;" /><div style="font-size:0.8rem;">k = 2</div></div>
+      <div style="text-align:center; width:24%;"><img src="figures/k-effect-3.png" alt="k=3" style="width:100%;" /><div style="font-size:0.8rem;">k = 3</div></div>
+      <div style="text-align:center; width:24%;"><img src="figures/k-effect-4.png" alt="k=4" style="width:100%;" /><div style="font-size:0.8rem;">k = 4</div></div>
+    </div>
+    <figcaption>Figure 3. Effect of the inter-face passage constraint k on the icosahedron (n=6, DFS, seed 42). More passages (larger k) lead to more frequent face crossings.</figcaption>
+  </figure>
 
   <h4>3.3.3 Maze as Spanning Tree</h4>
 
@@ -443,6 +469,15 @@
   <p>
     <em>Properties:</em> Unbiased distribution over all spanning trees. Expected time $O(|V|)$ but with high variance; worst case $O(|V|^3)$.
   </p>
+
+  <figure>
+    <div style="display:flex; gap:6px; justify-content:center;">
+      <div style="text-align:center; width:32%;"><img src="figures/algo-kruskal.png" alt="Kruskal" style="width:100%;" /><div style="font-size:0.8rem;">Kruskal</div></div>
+      <div style="text-align:center; width:32%;"><img src="figures/algo-dfs.png" alt="DFS" style="width:100%;" /><div style="font-size:0.8rem;">DFS Backtracker</div></div>
+      <div style="text-align:center; width:32%;"><img src="figures/algo-wilson.png" alt="Wilson" style="width:100%;" /><div style="font-size:0.8rem;">Wilson</div></div>
+    </div>
+    <figcaption>Figure 4. Algorithm comparison on the cube (n=6, k=3, seed 42). Kruskal produces many short dead ends, DFS creates long corridors, Wilson produces an unbiased tree.</figcaption>
+  </figure>
 
   <h3>4.2 Start and Goal Placement</h3>
   <p>
@@ -515,6 +550,14 @@
   <p>
     The midpoint choice for edge removal balances the sizes of the two subtrees, minimizing disruption to the overall maze structure.
   </p>
+
+  <figure>
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <div style="text-align:center; width:48%;"><img src="figures/warp-off.png" alt="Without warp" style="width:100%;" /><div style="font-size:0.8rem;">Without warp</div></div>
+      <div style="text-align:center; width:48%;"><img src="figures/warp-on.png" alt="With warp" style="width:100%;" /><div style="font-size:0.8rem;">With warp tunnel</div></div>
+    </div>
+    <figcaption>Figure 5. Warp tunnel on the icosahedron (n=6, k=3, DFS, seed 42). The warp connects opposite faces, altering the solution path while preserving the spanning-tree property.</figcaption>
+  </figure>
 
   <!-- ================================================================== -->
   <h2>5. Unfolding Duality</h2>
@@ -608,6 +651,58 @@
     The face crossings and face coverage metrics are unique to polyhedral surface mazes. High face crossings indicate that the solver must repeatedly re-orient themselves as they move between faces&mdash;a cognitive challenge absent in planar mazes. High face coverage ensures the puzzle makes use of the entire polyhedron rather than being confined to a subset of faces.
   </p>
 
+  <h3>6.1 Experimental Results</h3>
+  <p>
+    We evaluate the three algorithms across all five Platonic solids with $n=6$ and $k=3$, averaging each metric over 10 random seeds (0–9).
+  </p>
+
+  <table>
+    <tr>
+      <th>Solid</th><th>Algorithm</th><th>Cells</th><th>Sol. Len.</th><th>Sol. Ratio</th><th>Dead Ends</th><th>DE Dens.</th><th>Face Cr.</th><th>Face Cov.</th>
+    </tr>
+    <tr><td>Tetrahedron</td><td>Kruskal</td><td>144</td><td>50.6</td><td>0.351</td><td>36.6</td><td>0.254</td><td>4.6</td><td>3.8</td></tr>
+    <tr><td></td><td>DFS</td><td>144</td><td>92.6</td><td>0.643</td><td>20.6</td><td>0.143</td><td>7.1</td><td>4.0</td></tr>
+    <tr><td></td><td>Wilson</td><td>144</td><td>53.3</td><td>0.370</td><td>36.4</td><td>0.253</td><td>5.2</td><td>4.0</td></tr>
+    <tr><td>Cube</td><td>Kruskal</td><td>216</td><td>57.5</td><td>0.266</td><td>65.0</td><td>0.301</td><td>6.5</td><td>5.6</td></tr>
+    <tr><td></td><td>DFS</td><td>216</td><td>132.7</td><td>0.614</td><td>28.5</td><td>0.132</td><td>10.9</td><td>5.9</td></tr>
+    <tr><td></td><td>Wilson</td><td>216</td><td>63.2</td><td>0.293</td><td>65.0</td><td>0.301</td><td>7.0</td><td>5.6</td></tr>
+    <tr><td>Octahedron</td><td>Kruskal</td><td>288</td><td>78.4</td><td>0.272</td><td>72.1</td><td>0.250</td><td>8.8</td><td>7.5</td></tr>
+    <tr><td></td><td>DFS</td><td>288</td><td>168.1</td><td>0.584</td><td>39.3</td><td>0.136</td><td>17.2</td><td>8.0</td></tr>
+    <tr><td></td><td>Wilson</td><td>288</td><td>81.9</td><td>0.284</td><td>73.8</td><td>0.256</td><td>9.3</td><td>7.5</td></tr>
+    <tr><td>Dodecahedron</td><td>Kruskal</td><td>2160</td><td>273.6</td><td>0.127</td><td>552.2</td><td>0.256</td><td>10.8</td><td>9.4</td></tr>
+    <tr><td></td><td>DFS</td><td>2160</td><td>1116.1</td><td>0.517</td><td>235.8</td><td>0.109</td><td>39.0</td><td>12.0</td></tr>
+    <tr><td></td><td>Wilson</td><td>2160</td><td>290.1</td><td>0.134</td><td>541.2</td><td>0.251</td><td>13.1</td><td>10.1</td></tr>
+    <tr><td>Icosahedron</td><td>Kruskal</td><td>720</td><td>134.9</td><td>0.187</td><td>184.4</td><td>0.256</td><td>17.2</td><td>14.6</td></tr>
+    <tr><td></td><td>DFS</td><td>720</td><td>382.9</td><td>0.532</td><td>97.0</td><td>0.135</td><td>41.1</td><td>19.6</td></tr>
+    <tr><td></td><td>Wilson</td><td>720</td><td>136.4</td><td>0.189</td><td>180.0</td><td>0.250</td><td>17.3</td><td>14.2</td></tr>
+  </table>
+
+  <p>
+    Across all polyhedra, DFS consistently produces the longest solution paths (solution ratio ≈ 0.5–0.6) and the fewest dead ends (density ≈ 0.11–0.14). Kruskal and Wilson yield similar metrics, with dead-end densities near 0.25—consistent with the known ~25% dead-end ratio for uniform spanning trees [1]. Face crossings and coverage both increase with face count, with DFS achieving the highest values.
+  </p>
+
+  <p>The following table shows the effect of $k$ on the icosahedron ($n=6$):</p>
+
+  <table>
+    <tr><th>Algorithm</th><th>$k$</th><th>Sol. Length</th><th>Sol. Ratio</th><th>Face Crossings</th><th>Face Cov.</th></tr>
+    <tr><td>Kruskal</td><td>1</td><td>133.6</td><td>0.186</td><td>12.6</td><td>13.3</td></tr>
+    <tr><td></td><td>2</td><td>141.5</td><td>0.197</td><td>16.3</td><td>15.0</td></tr>
+    <tr><td></td><td>3</td><td>134.9</td><td>0.187</td><td>17.2</td><td>14.6</td></tr>
+    <tr><td></td><td>4</td><td>129.7</td><td>0.180</td><td>18.0</td><td>14.4</td></tr>
+    <tr><td>DFS</td><td>1</td><td>293.3</td><td>0.407</td><td>17.9</td><td>17.8</td></tr>
+    <tr><td></td><td>2</td><td>348.0</td><td>0.483</td><td>30.2</td><td>19.5</td></tr>
+    <tr><td></td><td>3</td><td>382.9</td><td>0.532</td><td>41.1</td><td>19.6</td></tr>
+    <tr><td></td><td>4</td><td>419.7</td><td>0.583</td><td>51.1</td><td>19.8</td></tr>
+    <tr><td>Wilson</td><td>1</td><td>150.5</td><td>0.209</td><td>13.5</td><td>14.4</td></tr>
+    <tr><td></td><td>2</td><td>157.4</td><td>0.219</td><td>16.3</td><td>14.9</td></tr>
+    <tr><td></td><td>3</td><td>136.4</td><td>0.189</td><td>17.3</td><td>14.2</td></tr>
+    <tr><td></td><td>4</td><td>151.9</td><td>0.211</td><td>20.7</td><td>16.3</td></tr>
+  </table>
+
+  <p>
+    For DFS, increasing $k$ from 1 to 4 nearly triples face crossings (17.9 → 51.1) while also increasing solution length (293 → 420), demonstrating that larger $k$ increases both spatial reorientation frequency and path length.
+  </p>
+
   <!-- ================================================================== -->
   <h2>7. Implementation</h2>
   <!-- ================================================================== -->
@@ -667,7 +762,7 @@
   <div class="references">
     <ol>
       <li>J. Buck, <em>Mazes for Programmers: Code Your Own Twisty Little Passages</em>, Pragmatic Bookshelf, 2015.</li>
-      <li>E. Berthier, "How to Generate Perfect Mazes?," Technical Report, Universit&eacute; C&ocirc;te d'Azur, 2021. Available: <a href="https://uca.hal.science/hal-03174952/document">hal-03174952</a>.</li>
+      <li>E. Berthier, "How to Generate Perfect Mazes?," <em>Information Sciences</em>, vol. 572, pp. 444&ndash;459, 2021. DOI: <a href="https://doi.org/10.1016/j.ins.2021.04.073">10.1016/j.ins.2021.04.073</a>.</li>
       <li>A. Vijayaraghavan and A. Krishnamurthy, "Procedural Design of Rolling Ball Maze," UC Berkeley CS285 Course Project, 2006. Available: <a href="https://people.eecs.berkeley.edu/~sequin/CS285/PROJ_06/Adarsh--Athulan/AA_report/report.html">UC Berkeley report</a>.</li>
       <li>randomprojectlab, "carvey_cube_maze," GitHub repository, 2019. Available: <a href="https://github.com/mit-mit-randomprojectlab/carvey_cube_maze">github.com/mit-mit-randomprojectlab/carvey_cube_maze</a>.</li>
       <li>W. D. Pullen, "Think Labyrinth: Encyclopaedia of Encyclopedias," Astrolog. Available: <a href="https://www.astrolog.org/labyrnth/algrithm.htm">astrolog.org</a>.</li>

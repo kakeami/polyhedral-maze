@@ -11,7 +11,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@playwright/test": "^1.58.2",
     "jspdf": "^2.5.2",
+    "playwright": "^1.58.2",
     "qrcode": "^1.5.4",
     "svg2pdf.js": "^2.2.4",
     "three": "^0.172.0"
