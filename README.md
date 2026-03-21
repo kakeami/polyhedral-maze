@@ -46,4 +46,7 @@ Example: `?shape=icosahedron&n=8&algo=wilson&seed=7&warp=true`
 
 ## License
 
-MIT
+This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Non-commercial use (personal, educational, academic, research) is freely permitted.
+
+For commercial licensing inquiries, please contact [@kakeami](https://github.com/kakeami).

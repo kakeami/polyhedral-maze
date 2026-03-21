@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Polyhedral Maze"
+authors:
+  - alias: kakeami
+repository-code: "https://github.com/kakeami/polyhedral-maze"
+url: "https://kakeami.github.io/polyhedral-maze/"
+license: "LicenseRef-PolyForm-Noncommercial-1.0.0"
+version: "0.1.0"
+date-released: "2026-03-21"
+keywords:
+  - maze
+  - polyhedra
+  - platonic-solids
+  - three-js
+  - interactive

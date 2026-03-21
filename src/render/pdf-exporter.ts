@@ -61,7 +61,11 @@ export async function exportPDF(
   // Footer
   doc.setFontSize(6);
   doc.setTextColor(150);
-  doc.text(mazeUrl, pageW / 2, pageH - 4, { align: 'center' });
+  doc.text(mazeUrl, pageW / 2, pageH - 7, { align: 'center' });
+  doc.text(
+    '\u00A9 kakeami | PolyForm Noncommercial 1.0.0 — Non-commercial use only',
+    pageW / 2, pageH - 3, { align: 'center' },
+  );
   doc.setTextColor(0);
 
   // ─── Page 2: Answer ──────────────────────────────────────────
