@@ -36,13 +36,13 @@ export function cellVertices3d(face: Face, cell: CellKey, n: number): Vec3[] {
     return triCellVerts(o, u, v, row, col, n);
   }
 
-  if (nv === 5) {
-    // PentGrid
+  if (nv === 5 || nv === 6 || nv === 8 || nv === 10) {
+    // PentGrid / HexGrid / OctGrid / DecGrid: radial sector subdivision
     const center = mean(face.vertices);
     const sector = Math.floor(row / n);
     const localRow = row - sector * n;
     const su = sub(face.vertices[sector]!, center);
-    const sv = sub(face.vertices[(sector + 1) % 5]!, center);
+    const sv = sub(face.vertices[(sector + 1) % nv]!, center);
     return triCellVerts(center, su, sv, localRow, col, n);
   }
 

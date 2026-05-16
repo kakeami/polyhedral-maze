@@ -1,9 +1,9 @@
-import type { Face, Vec3, FaceEdgeData } from '../types.ts';
-import type { FaceGrid } from '../face-grid.ts';
-import type { Polyhedron } from '../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency } from '../polyhedron.ts';
-import { Graph } from '../graph.ts';
-import { TriGrid } from './tri-grid.ts';
+import type { Face, Vec3, FaceEdgeData } from '../../types.ts';
+import type { FaceGrid } from '../../face-grid.ts';
+import type { Polyhedron } from '../../polyhedron.ts';
+import { sharedEdgeVertices, buildFaceAdjacency } from '../../polyhedron.ts';
+import { Graph } from '../../graph.ts';
+import { TriGrid } from '../grids/tri-grid.ts';
 
 function makeTetrahedronFaces(): Face[] {
   const v0: Vec3 = [1, 1, 1];

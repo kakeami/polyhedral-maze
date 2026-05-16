@@ -69,6 +69,45 @@ html, body {
   margin-top: 4px;
 }
 
+.category-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid #ddd;
+}
+
+.category-tab {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: #777;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.category-tab:hover {
+  color: #333;
+}
+
+.category-tab.active {
+  color: #222;
+  border-bottom-color: #2e8bd9;
+  font-weight: 600;
+}
+
+.shape-info {
+  margin-top: -8px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #888;
+}
+
 .checkboxes {
   display: flex;
   flex-wrap: wrap;

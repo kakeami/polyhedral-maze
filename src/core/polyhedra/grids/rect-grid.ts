@@ -1,12 +1,8 @@
-import type { Face, Vec3, CellKey } from '../types.ts';
-import { cellKey, parseCell } from '../types.ts';
-import { dot, sub } from '../vec3.ts';
-import type { FaceGrid } from '../face-grid.ts';
-import { BOUNDARY_TOLERANCE } from '../constants.ts';
-import type { Polyhedron } from '../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency } from '../polyhedron.ts';
-import type { FaceEdgeData } from '../types.ts';
-import { Graph } from '../graph.ts';
+import type { Face, Vec3, CellKey } from '../../types.ts';
+import { cellKey, parseCell } from '../../types.ts';
+import { dot, sub } from '../../vec3.ts';
+import type { FaceGrid } from '../../face-grid.ts';
+import { BOUNDARY_TOLERANCE } from '../../constants.ts';
 
 export class RectGrid implements FaceGrid {
   readonly faceId: number;
@@ -60,16 +56,12 @@ export class RectGrid implements FaceGrid {
     let cells: CellKey[];
 
     if (Math.abs(s[1]) < tol && Math.abs(e[1]) < tol) {
-      // row=0 boundary (v ≈ 0)
       cells = Array.from({ length: n }, (_, c) => cellKey(fid, 0, c));
     } else if (Math.abs(s[1] - 1) < tol && Math.abs(e[1] - 1) < tol) {
-      // row=n-1 boundary (v ≈ 1)
       cells = Array.from({ length: n }, (_, c) => cellKey(fid, n - 1, c));
     } else if (Math.abs(s[0]) < tol && Math.abs(e[0]) < tol) {
-      // col=0 boundary (u ≈ 0)
       cells = Array.from({ length: n }, (_, r) => cellKey(fid, r, 0));
     } else if (Math.abs(s[0] - 1) < tol && Math.abs(e[0] - 1) < tol) {
-      // col=n-1 boundary (u ≈ 1)
       cells = Array.from({ length: n }, (_, r) => cellKey(fid, r, n - 1));
     } else {
       throw new Error(
@@ -127,87 +119,5 @@ export class RectGrid implements FaceGrid {
     const cdx = c1[0] - c0[0];
     const cdy = c1[1] - c0[1];
     return dx * cdx + dy * cdy < 0;
-  }
-}
-
-function makeCubeFaces(): Face[] {
-  const h = 0.5;
-  return [
-    {
-      id: 0,
-      vertices: [
-        [-h, h, h],
-        [h, h, h],
-        [h, h, -h],
-        [-h, h, -h],
-      ],
-      normal: [0, 1, 0],
-    },
-    {
-      id: 1,
-      vertices: [
-        [-h, -h, -h],
-        [h, -h, -h],
-        [h, -h, h],
-        [-h, -h, h],
-      ],
-      normal: [0, -1, 0],
-    },
-    {
-      id: 2,
-      vertices: [
-        [-h, h, h],
-        [-h, -h, h],
-        [h, -h, h],
-        [h, h, h],
-      ],
-      normal: [0, 0, 1],
-    },
-    {
-      id: 3,
-      vertices: [
-        [h, h, -h],
-        [h, -h, -h],
-        [-h, -h, -h],
-        [-h, h, -h],
-      ],
-      normal: [0, 0, -1],
-    },
-    {
-      id: 4,
-      vertices: [
-        [h, h, h],
-        [h, -h, h],
-        [h, -h, -h],
-        [h, h, -h],
-      ],
-      normal: [1, 0, 0],
-    },
-    {
-      id: 5,
-      vertices: [
-        [-h, h, -h],
-        [-h, -h, -h],
-        [-h, -h, h],
-        [-h, h, h],
-      ],
-      normal: [-1, 0, 0],
-    },
-  ];
-}
-
-export class Cube implements Polyhedron {
-  private _faces = makeCubeFaces();
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return new RectGrid(face, n);
   }
 }

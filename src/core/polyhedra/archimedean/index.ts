@@ -1,0 +1,11 @@
+export { Cuboctahedron } from './cuboctahedron.ts';
+export { TruncatedTetrahedron } from './truncated-tetrahedron.ts';
+export { TruncatedOctahedron } from './truncated-octahedron.ts';
+export { TruncatedIcosahedron } from './truncated-icosahedron.ts';
+export { Icosidodecahedron } from './icosidodecahedron.ts';
+export { Rhombicuboctahedron } from './rhombicuboctahedron.ts';
+export { Rhombicosidodecahedron } from './rhombicosidodecahedron.ts';
+export { TruncatedCube } from './truncated-cube.ts';
+export { TruncatedCuboctahedron } from './truncated-cuboctahedron.ts';
+export { TruncatedDodecahedron } from './truncated-dodecahedron.ts';
+export { TruncatedIcosidodecahedron } from './truncated-icosidodecahedron.ts';

@@ -1,27 +1,14 @@
-import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Algorithm } from '../core/maze.ts';
 import { MazeGraph } from '../core/maze-graph.ts';
 import { generate } from '../core/maze.ts';
 import { computeMetrics } from '../core/metrics.ts';
 import { createRng } from '../core/prng.ts';
-import { Tetrahedron } from '../core/polyhedra/tetrahedron.ts';
-import { Cube } from '../core/polyhedra/cube.ts';
-import { Octahedron } from '../core/polyhedra/octahedron.ts';
-import { Icosahedron } from '../core/polyhedra/icosahedron.ts';
-import { Dodecahedron } from '../core/polyhedra/dodecahedron.ts';
+import { getShape, SHAPES } from '../core/polyhedra/registry.ts';
 import { createScene } from '../render/three-scene.ts';
 import { computeRenderData } from '../render/texture-painter.ts';
 import { exportPDF } from '../render/pdf-exporter.ts';
 import { createControls } from './controls.ts';
 import { decodeParams, encodeParams } from './param-codec.ts';
-
-const shapeFactories: Record<string, () => Polyhedron> = {
-  tetrahedron: () => new Tetrahedron(),
-  cube: () => new Cube(),
-  octahedron: () => new Octahedron(),
-  icosahedron: () => new Icosahedron(),
-  dodecahedron: () => new Dodecahedron(),
-};
 
 export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   const params = decodeParams(window.location.search);
@@ -29,14 +16,14 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   const controls = createControls(controlsEl, params);
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  // Keep latest maze state for PDF export
   let lastMg: MazeGraph | null = null;
   let lastMaze: ReturnType<typeof generate> | null = null;
   let lastMetrics: ReturnType<typeof computeMetrics> | null = null;
 
   function rebuild() {
     const p = controls.getParams();
-    const polyhedron = (shapeFactories[p.shape] ?? shapeFactories['cube'])!();
+    const shape = getShape(p.shape) ?? SHAPES[0]!;
+    const polyhedron = shape.factory();
     const mg = new MazeGraph(polyhedron, p.n, p.k);
     mg.build();
     const maze = generate(mg, {
@@ -54,7 +41,6 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.updateMaze(polyhedron, renderData);
     controls.setMetrics(metrics);
 
-    // Update URL
     history.replaceState(null, '', encodeParams(p) || window.location.pathname);
   }
 
@@ -87,6 +73,5 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
 
   window.addEventListener('resize', () => scene.resize());
 
-  // Initial build
   rebuild();
 }

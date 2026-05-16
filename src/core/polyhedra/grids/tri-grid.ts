@@ -1,8 +1,8 @@
-import type { Face, Vec3, CellKey } from '../types.ts';
-import { cellKey, parseCell } from '../types.ts';
-import { sub, lstsq2 } from '../vec3.ts';
-import type { FaceGrid } from '../face-grid.ts';
-import { BOUNDARY_TOLERANCE } from '../constants.ts';
+import type { Face, Vec3, CellKey } from '../../types.ts';
+import { cellKey, parseCell } from '../../types.ts';
+import { sub, lstsq2 } from '../../vec3.ts';
+import type { FaceGrid } from '../../face-grid.ts';
+import { BOUNDARY_TOLERANCE } from '../../constants.ts';
 
 export class TriGrid implements FaceGrid {
   readonly faceId: number;
@@ -36,11 +36,9 @@ export class TriGrid implements FaceGrid {
     const n = this.n;
 
     for (let r = 0; r < n; r++) {
-      // Within-row: consecutive cells share an edge
       for (let c = 0; c < 2 * r; c++) {
         edges.push([cellKey(fid, r, c), cellKey(fid, r, c + 1)]);
       }
-      // Between-row: upward triangle (r, 2k) → downward triangle (r+1, 2k+1)
       if (r < n - 1) {
         for (let k = 0; k <= r; k++) {
           edges.push([cellKey(fid, r, 2 * k), cellKey(fid, r + 1, 2 * k + 1)]);
@@ -60,18 +58,15 @@ export class TriGrid implements FaceGrid {
     let cells: CellKey[];
 
     if (Math.abs(s[1]) < tol && Math.abs(e[1]) < tol) {
-      // b ≈ 0 → edge v0–v1 (left edge)
       cells = Array.from({ length: n }, (_, r) => cellKey(fid, r, 0));
       if (s[0] > e[0]) cells.reverse();
     } else if (Math.abs(s[0]) < tol && Math.abs(e[0]) < tol) {
-      // a ≈ 0 → edge v0–v2 (right edge)
       cells = Array.from({ length: n }, (_, r) => cellKey(fid, r, 2 * r));
       if (s[1] > e[1]) cells.reverse();
     } else if (
       Math.abs(s[0] + s[1] - 1) < tol &&
       Math.abs(e[0] + e[1] - 1) < tol
     ) {
-      // a+b ≈ 1 → edge v1–v2 (bottom edge)
       cells = Array.from({ length: n }, (_, k) =>
         cellKey(fid, n - 1, 2 * k),
       );
@@ -90,11 +85,9 @@ export class TriGrid implements FaceGrid {
     const k = Math.floor(c / 2);
     let a: number, b: number;
     if (c % 2 === 0) {
-      // upward triangle
       a = (3 * (r - k) + 1) / (3 * this.n);
       b = (3 * k + 1) / (3 * this.n);
     } else {
-      // downward triangle
       a = (3 * (r - k) - 1) / (3 * this.n);
       b = (3 * k + 2) / (3 * this.n);
     }

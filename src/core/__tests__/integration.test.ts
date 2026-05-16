@@ -6,11 +6,11 @@ import { computeMetrics } from '../metrics.ts';
 import { createRng } from '../prng.ts';
 import { bfsShortestPath } from '../graph.ts';
 import { parseCell } from '../types.ts';
-import { Cube } from '../polyhedra/cube.ts';
-import { Octahedron } from '../polyhedra/octahedron.ts';
-import { Tetrahedron } from '../polyhedra/tetrahedron.ts';
-import { Icosahedron } from '../polyhedra/icosahedron.ts';
-import { Dodecahedron } from '../polyhedra/dodecahedron.ts';
+import { Cube } from '../polyhedra/platonic/cube.ts';
+import { Octahedron } from '../polyhedra/platonic/octahedron.ts';
+import { Tetrahedron } from '../polyhedra/platonic/tetrahedron.ts';
+import { Icosahedron } from '../polyhedra/platonic/icosahedron.ts';
+import { Dodecahedron } from '../polyhedra/platonic/dodecahedron.ts';
 
 const shapes = [
   { name: 'tetrahedron', factory: () => new Tetrahedron(), hasOpposite: false },

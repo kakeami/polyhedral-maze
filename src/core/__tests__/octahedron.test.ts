@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Octahedron, TriGrid } from '../polyhedra/octahedron.ts';
+import { Octahedron } from '../polyhedra/platonic/octahedron.ts';
+import { TriGrid } from '../polyhedra/grids/tri-grid.ts';
 import { dot, sub } from '../vec3.ts';
 
 describe('Octahedron', () => {

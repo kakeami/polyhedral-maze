@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Tetrahedron } from '../polyhedra/tetrahedron.ts';
-import { TriGrid } from '../polyhedra/octahedron.ts';
+import { Tetrahedron } from '../polyhedra/platonic/tetrahedron.ts';
+import { TriGrid } from '../polyhedra/grids/tri-grid.ts';
 import { oppositeFace } from '../polyhedron.ts';
 import { dot } from '../vec3.ts';
 

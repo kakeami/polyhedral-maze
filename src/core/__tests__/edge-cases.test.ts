@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { MazeGraph } from '../maze-graph.ts';
 import { generate } from '../maze.ts';
 import { createRng } from '../prng.ts';
-import { Cube, RectGrid } from '../polyhedra/cube.ts';
-import { Octahedron, TriGrid } from '../polyhedra/octahedron.ts';
-import { Dodecahedron, PentGrid } from '../polyhedra/dodecahedron.ts';
+import { Cube } from '../polyhedra/platonic/cube.ts';
+import { Octahedron } from '../polyhedra/platonic/octahedron.ts';
+import { Dodecahedron } from '../polyhedra/platonic/dodecahedron.ts';
+import { RectGrid } from '../polyhedra/grids/rect-grid.ts';
+import { TriGrid } from '../polyhedra/grids/tri-grid.ts';
+import { PentGrid } from '../polyhedra/grids/pent-grid.ts';
 
 describe('n=1 grids', () => {
   it('RectGrid n=1: 1 cell, 0 internal edges', () => {

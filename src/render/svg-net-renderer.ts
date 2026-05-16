@@ -343,12 +343,12 @@ function cellVerts2d(faceVerts: Vec2[], cell: CellKey, n: number): Vec2[] {
     return triCellVerts(o, u, v, row, col, n);
   }
 
-  if (nv === 5) {
+  if (nv === 5 || nv === 6 || nv === 8 || nv === 10) {
     const center = centroid2(faceVerts);
     const sector = Math.floor(row / n);
     const localRow = row - sector * n;
     const su = sub2(faceVerts[sector]!, center);
-    const sv = sub2(faceVerts[(sector + 1) % 5]!, center);
+    const sv = sub2(faceVerts[(sector + 1) % nv]!, center);
     return triCellVerts(center, su, sv, localRow, col, n);
   }
 

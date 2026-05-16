@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Cube, RectGrid } from '../polyhedra/cube.ts';
+import { Cube } from '../polyhedra/platonic/cube.ts';
+import { RectGrid } from '../polyhedra/grids/rect-grid.ts';
 import { parseCell } from '../types.ts';
 
 describe('Cube', () => {

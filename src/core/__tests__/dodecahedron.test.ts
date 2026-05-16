@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Dodecahedron, PentGrid } from '../polyhedra/dodecahedron.ts';
+import { Dodecahedron } from '../polyhedra/platonic/dodecahedron.ts';
+import { PentGrid } from '../polyhedra/grids/pent-grid.ts';
 import { oppositeFace } from '../polyhedron.ts';
 
 describe('Dodecahedron', () => {

@@ -21,9 +21,33 @@ export { generate } from './maze.ts';
 export type { MazeMetrics } from './metrics.ts';
 export { computeMetrics } from './metrics.ts';
 
-export { Cube, RectGrid } from './polyhedra/cube.ts';
-export { Octahedron } from './polyhedra/octahedron.ts';
-export { TriGrid } from './polyhedra/tri-grid.ts';
-export { Tetrahedron } from './polyhedra/tetrahedron.ts';
-export { Icosahedron } from './polyhedra/icosahedron.ts';
-export { Dodecahedron, PentGrid } from './polyhedra/dodecahedron.ts';
+export {
+  Tetrahedron,
+  Cube,
+  Octahedron,
+  Icosahedron,
+  Dodecahedron,
+  Cuboctahedron,
+  TruncatedTetrahedron,
+  TruncatedOctahedron,
+  TruncatedIcosahedron,
+  Icosidodecahedron,
+  Rhombicuboctahedron,
+  Rhombicosidodecahedron,
+  TruncatedCube,
+  TruncatedCuboctahedron,
+  TruncatedDodecahedron,
+  TruncatedIcosidodecahedron,
+  TriGrid,
+  RectGrid,
+  PentGrid,
+  HexGrid,
+  OctGrid,
+  DecGrid,
+  SHAPES,
+  CATEGORY_LABELS,
+  getShape,
+  shapesByCategory,
+  availableCategories,
+} from './polyhedra/index.ts';
+export type { ShapeDescriptor, ShapeCategory } from './polyhedra/index.ts';

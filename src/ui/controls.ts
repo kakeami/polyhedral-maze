@@ -1,5 +1,13 @@
 import type { MazeParams } from './param-codec.ts';
 import type { MazeMetrics } from '../core/metrics.ts';
+import {
+  SHAPES,
+  CATEGORY_LABELS,
+  getShape,
+  shapesByCategory,
+  availableCategories,
+} from '../core/polyhedra/registry.ts';
+import type { ShapeCategory } from '../core/polyhedra/registry.ts';
 
 export interface ControlsContext {
   container: HTMLElement;
@@ -12,11 +20,15 @@ export interface ControlsContext {
 }
 
 export function createControls(container: HTMLElement, initial: MazeParams): ControlsContext {
-  container.innerHTML = buildHTML(initial);
+  const initialShape = getShape(initial.shape) ?? SHAPES[0]!;
+  const initialCategory = initialShape.category;
+
+  container.innerHTML = buildHTML(initial, initialCategory);
 
   const el = <T extends HTMLElement>(id: string) => container.querySelector<T>(`#${id}`)!;
 
   const shapeSelect = el<HTMLSelectElement>('ctrl-shape');
+  const shapeInfo = el<HTMLDivElement>('ctrl-shape-info');
   const nSlider = el<HTMLInputElement>('ctrl-n');
   const nValue = el<HTMLSpanElement>('ctrl-n-val');
   const kSlider = el<HTMLInputElement>('ctrl-k');
@@ -27,6 +39,8 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const solutionCheck = el<HTMLInputElement>('ctrl-solution');
   const metricsDiv = el<HTMLDivElement>('ctrl-metrics');
 
+  let activeCategory: ShapeCategory = initialCategory;
+
   const callbacks: (() => void)[] = [];
   const actions = new Map<string, (() => void)[]>();
 
@@ -34,14 +48,44 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     callbacks.forEach(cb => cb());
   }
 
-  // Sync slider display values
+  function renderShapeOptions(category: ShapeCategory, selectedId?: string) {
+    const shapes = shapesByCategory(category);
+    const fallback = selectedId && shapes.some(s => s.id === selectedId)
+      ? selectedId
+      : shapes[0]!.id;
+    shapeSelect.innerHTML = shapes
+      .map(s => `<option value="${s.id}">${s.name}</option>`)
+      .join('');
+    shapeSelect.value = fallback;
+    updateShapeInfo();
+  }
+
+  function updateShapeInfo() {
+    const s = getShape(shapeSelect.value);
+    shapeInfo.textContent = s ? `${s.faceComposition} · ${s.faceCount} faces` : '';
+  }
+
+  // Tab click handlers (if tab bar exists)
+  container.querySelectorAll<HTMLButtonElement>('.category-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = btn.dataset.category as ShapeCategory;
+      if (cat === activeCategory) return;
+      activeCategory = cat;
+      container.querySelectorAll<HTMLButtonElement>('.category-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.category === cat);
+      });
+      renderShapeOptions(cat);
+      fire();
+    });
+  });
+
   nSlider.addEventListener('input', () => { nValue.textContent = nSlider.value; fire(); });
   kSlider.addEventListener('input', () => { kValue.textContent = kSlider.value; fire(); });
-  for (const input of [shapeSelect, algoSelect, seedInput, warpCheck, solutionCheck]) {
+  shapeSelect.addEventListener('change', () => { updateShapeInfo(); fire(); });
+  for (const input of [algoSelect, seedInput, warpCheck, solutionCheck]) {
     input.addEventListener('change', fire);
   }
 
-  // Action buttons
   el('btn-random').addEventListener('click', () => {
     seedInput.value = String(Math.floor(Math.random() * 999999));
     fire();
@@ -72,7 +116,17 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   }
 
   function setParams(p: MazeParams) {
-    shapeSelect.value = p.shape;
+    const shape = getShape(p.shape) ?? SHAPES[0]!;
+    if (shape.category !== activeCategory) {
+      activeCategory = shape.category;
+      container.querySelectorAll<HTMLButtonElement>('.category-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.category === activeCategory);
+      });
+      renderShapeOptions(activeCategory, shape.id);
+    } else {
+      shapeSelect.value = shape.id;
+      updateShapeInfo();
+    }
     nSlider.value = String(p.n);
     nValue.textContent = String(p.n);
     kSlider.value = String(p.k);
@@ -108,19 +162,36 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   };
 }
 
-function buildHTML(p: MazeParams): string {
+function buildHTML(p: MazeParams, activeCategory: ShapeCategory): string {
+  const categories = availableCategories();
+  const showTabs = categories.length >= 2;
+  const tabsHTML = showTabs
+    ? `<div class="category-tabs">
+        ${categories
+          .map(c => `<button class="category-tab${c === activeCategory ? ' active' : ''}" data-category="${c}">${CATEGORY_LABELS[c]}</button>`)
+          .join('')}
+      </div>`
+    : '';
+
+  const shapesInCategory = shapesByCategory(activeCategory);
+  const shapeOptionsHTML = shapesInCategory
+    .map(s => `<option value="${s.id}"${s.id === p.shape ? ' selected' : ''}>${s.name}</option>`)
+    .join('');
+
+  const currentShape = getShape(p.shape) ?? shapesInCategory[0]!;
+  const shapeInfoText = `${currentShape.faceComposition} · ${currentShape.faceCount} faces`;
+
   return `
     <h2>Polyhedral Maze</h2>
 
+    ${tabsHTML}
+
     <label>Shape
       <select id="ctrl-shape">
-        <option value="tetrahedron"${p.shape === 'tetrahedron' ? ' selected' : ''}>Tetrahedron</option>
-        <option value="cube"${p.shape === 'cube' ? ' selected' : ''}>Cube</option>
-        <option value="octahedron"${p.shape === 'octahedron' ? ' selected' : ''}>Octahedron</option>
-        <option value="icosahedron"${p.shape === 'icosahedron' ? ' selected' : ''}>Icosahedron</option>
-        <option value="dodecahedron"${p.shape === 'dodecahedron' ? ' selected' : ''}>Dodecahedron</option>
+        ${shapeOptionsHTML}
       </select>
     </label>
+    <div class="shape-info" id="ctrl-shape-info">${shapeInfoText}</div>
 
     <label>Algorithm
       <select id="ctrl-algo">
@@ -166,10 +237,6 @@ function buildHTML(p: MazeParams): string {
       <a class="github-link" href="https://github.com/kakeami/polyhedral-maze" target="_blank" rel="noopener noreferrer">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
-      </a>
-      <a class="github-link" href="report/index.html" target="_blank" rel="noopener noreferrer">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm1 2v2h6V3H5zm0 4v1h6V7H5zm0 3v1h4v-1H5z"/></svg>
-        Technical Report
       </a>
     </div>
   `;

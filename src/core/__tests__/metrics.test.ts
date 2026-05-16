@@ -4,11 +4,11 @@ import { generate } from '../maze.ts';
 import type { Algorithm } from '../maze.ts';
 import { computeMetrics } from '../metrics.ts';
 import { createRng } from '../prng.ts';
-import { Cube } from '../polyhedra/cube.ts';
-import { Octahedron } from '../polyhedra/octahedron.ts';
-import { Tetrahedron } from '../polyhedra/tetrahedron.ts';
-import { Icosahedron } from '../polyhedra/icosahedron.ts';
-import { Dodecahedron } from '../polyhedra/dodecahedron.ts';
+import { Cube } from '../polyhedra/platonic/cube.ts';
+import { Octahedron } from '../polyhedra/platonic/octahedron.ts';
+import { Tetrahedron } from '../polyhedra/platonic/tetrahedron.ts';
+import { Icosahedron } from '../polyhedra/platonic/icosahedron.ts';
+import { Dodecahedron } from '../polyhedra/platonic/dodecahedron.ts';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
