@@ -1,0 +1,13 @@
+export { TriakisTetrahedron } from './triakis-tetrahedron.ts';
+export { TriakisOctahedron } from './triakis-octahedron.ts';
+export { TetrakisHexahedron } from './tetrakis-hexahedron.ts';
+export { TriakisIcosahedron } from './triakis-icosahedron.ts';
+export { PentakisDodecahedron } from './pentakis-dodecahedron.ts';
+export { RhombicDodecahedron } from './rhombic-dodecahedron.ts';
+export { RhombicTriacontahedron } from './rhombic-triacontahedron.ts';
+export { DeltoidalIcositetrahedron } from './deltoidal-icositetrahedron.ts';
+export { DeltoidalHexecontahedron } from './deltoidal-hexecontahedron.ts';
+export { DisdyakisDodecahedron } from './disdyakis-dodecahedron.ts';
+export { DisdyakisTriacontahedron } from './disdyakis-triacontahedron.ts';
+export { PentagonalIcositetrahedron } from './pentagonal-icositetrahedron.ts';
+export { PentagonalHexecontahedron } from './pentagonal-hexecontahedron.ts';

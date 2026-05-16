@@ -1,12 +1,13 @@
 import type { Face, Vec3, CellKey } from '../../types.ts';
 import { cellKey, parseCell } from '../../types.ts';
-import { dot, sub } from '../../vec3.ts';
-import type { FaceGrid } from '../../face-grid.ts';
+import { sub, lstsq2 } from '../../vec3.ts';
+import type { FaceGrid, GridKind } from '../../face-grid.ts';
 import { BOUNDARY_TOLERANCE } from '../../constants.ts';
 
 export class RectGrid implements FaceGrid {
   readonly faceId: number;
   readonly n: number;
+  readonly kind: GridKind = 'rect';
   private _origin: Vec3;
   private _u: Vec3;
   private _v: Vec3;
@@ -98,12 +99,9 @@ export class RectGrid implements FaceGrid {
   }
 
   private _toLocal(point: Vec3): [number, number] {
-    const p = sub(point, this._origin);
-    const uLenSq = dot(this._u, this._u);
-    const vLenSq = dot(this._v, this._v);
-    const uCoord = dot(p, this._u) / uLenSq;
-    const vCoord = dot(p, this._v) / vLenSq;
-    return [uCoord, vCoord];
+    // lstsq2 generalises to non-orthogonal u, v (needed for rhombic Catalan
+    // faces). Reduces to per-axis projection when u ⊥ v.
+    return lstsq2(this._u, this._v, sub(point, this._origin));
   }
 
   private _shouldReverse(

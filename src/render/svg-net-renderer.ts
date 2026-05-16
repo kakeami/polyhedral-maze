@@ -10,6 +10,7 @@ import type { MazeGraph } from '../core/maze-graph.ts';
 import type { Maze } from '../core/maze.ts';
 import type { CellKey } from '../core/types.ts';
 import { parseCell } from '../core/types.ts';
+import type { GridKind } from '../core/face-grid.ts';
 import { bfsShortestPath } from '../core/graph.ts';
 import { VERTEX_EPSILON } from '../core/constants.ts';
 import { findAdjacentFaceId, hasTreeEdgeToFace } from './render-utils.ts';
@@ -125,7 +126,7 @@ export function renderNetSVG(
   }
   for (const { cell, color } of markerCells) {
     const fid = parseCell(cell).faceId;
-    const verts = cellVerts2d(netMap.get(fid)!, cell, n).map(flip);
+    const verts = cellVerts2d(netMap.get(fid)!, cell, n, mazeGraph.grids.get(fid)!.kind).map(flip);
     const pts = verts.map(v => `${v[0]},${v[1]}`).join(' ');
     svg.appendChild(svgEl('polygon', {
       points: pts,
@@ -142,8 +143,8 @@ export function renderNetSVG(
     for (const [c1, c2] of grid.internalEdges()) {
       const key = c1 < c2 ? `${c1}|${c2}` : `${c2}|${c1}`;
       if (treeSet.has(key)) continue;
-      const cv1 = cellVerts2d(verts2d, c1, n);
-      const cv2 = cellVerts2d(verts2d, c2, n);
+      const cv1 = cellVerts2d(verts2d, c1, n, grid.kind);
+      const cv2 = cellVerts2d(verts2d, c2, n, grid.kind);
       const edge = sharedEdge2d(cv1, cv2);
       if (edge) {
         const [p, q] = [flip(edge[0]), flip(edge[1])];
@@ -224,22 +225,22 @@ export function renderNetSVG(
           const a = Math.min(prevFid, fid), b = Math.max(prevFid, fid);
           const isFold = layout.foldPairs.has(`${a}:${b}`);
           if (isFold) {
-            const prevVerts = cellVerts2d(netMap.get(prevFid)!, prevCell, n);
-            const currVerts = cellVerts2d(netMap.get(fid)!, cell, n);
+            const prevVerts = cellVerts2d(netMap.get(prevFid)!, prevCell, n, mazeGraph.grids.get(prevFid)!.kind);
+            const currVerts = cellVerts2d(netMap.get(fid)!, cell, n, mazeGraph.grids.get(fid)!.kind);
             const edge = sharedEdge2d(prevVerts, currVerts);
             if (edge) current.push(flip(midpoint2(edge[0], edge[1])));
           } else {
             // Jump across the net — end solid segment, record dashed link
             const jumpStart = current[current.length - 1]!;
             if (current.length >= 2) solidSegments.push(current);
-            const jumpEnd = flip(cellCenter2dNet(netMap.get(fid)!, cell, n));
+            const jumpEnd = flip(cellCenter2dNet(netMap.get(fid)!, cell, n, mazeGraph.grids.get(fid)!.kind));
             dashedSegments.push([jumpStart, jumpEnd]);
             current = [jumpEnd];
             continue;
           }
         }
       }
-      current.push(flip(cellCenter2dNet(netMap.get(fid)!, cell, n)));
+      current.push(flip(cellCenter2dNet(netMap.get(fid)!, cell, n, mazeGraph.grids.get(fid)!.kind)));
     }
     if (current.length >= 2) solidSegments.push(current);
 
@@ -278,7 +279,7 @@ export function renderNetSVG(
   }
   for (const { cell, label } of labelCells) {
     const fid = parseCell(cell).faceId;
-    const verts = cellVerts2d(netMap.get(fid)!, cell, n);
+    const verts = cellVerts2d(netMap.get(fid)!, cell, n, mazeGraph.grids.get(fid)!.kind);
     const c = flip(centroid2(verts));
     // Inradius: min distance from centroid to any edge → safe text size
     const flipped = verts.map(flip);
@@ -320,11 +321,16 @@ export function renderNetSVG(
 
 // ─── 2D cell vertex computation (mirrors cellVertices3d) ──────────
 
-function cellVerts2d(faceVerts: Vec2[], cell: CellKey, n: number): Vec2[] {
-  const { row, col } = parseCell(cell);
-  const nv = faceVerts.length;
+const RADIAL_SECTORS_2D: Partial<Record<GridKind, number>> = {
+  kite: 4, pent: 5, hex: 6, oct: 8, dec: 10,
+};
 
-  if (nv === 4) {
+function cellVerts2d(
+  faceVerts: Vec2[], cell: CellKey, n: number, kind: GridKind,
+): Vec2[] {
+  const { row, col } = parseCell(cell);
+
+  if (kind === 'rect') {
     const o = faceVerts[0]!;
     const u = sub2(faceVerts[1]!, o);
     const v = sub2(faceVerts[3]!, o);
@@ -336,23 +342,24 @@ function cellVerts2d(faceVerts: Vec2[], cell: CellKey, n: number): Vec2[] {
     ];
   }
 
-  if (nv === 3) {
+  if (kind === 'tri') {
     const o = faceVerts[0]!;
     const u = sub2(faceVerts[1]!, o);
     const v = sub2(faceVerts[2]!, o);
     return triCellVerts(o, u, v, row, col, n);
   }
 
-  if (nv === 5 || nv === 6 || nv === 8 || nv === 10) {
+  const sectors = RADIAL_SECTORS_2D[kind];
+  if (sectors !== undefined) {
     const center = centroid2(faceVerts);
     const sector = Math.floor(row / n);
     const localRow = row - sector * n;
     const su = sub2(faceVerts[sector]!, center);
-    const sv = sub2(faceVerts[(sector + 1) % nv]!, center);
+    const sv = sub2(faceVerts[(sector + 1) % sectors]!, center);
     return triCellVerts(center, su, sv, localRow, col, n);
   }
 
-  throw new Error(`Unsupported vertex count: ${nv}`);
+  throw new Error(`Unsupported grid kind: ${kind}`);
 }
 
 function triCellVerts(o: Vec2, u: Vec2, v: Vec2, r: number, c: number, n: number): Vec2[] {
@@ -366,8 +373,10 @@ function triCellVerts(o: Vec2, u: Vec2, v: Vec2, r: number, c: number, n: number
   }
 }
 
-function cellCenter2dNet(faceVerts: Vec2[], cell: CellKey, n: number): Vec2 {
-  return centroid2(cellVerts2d(faceVerts, cell, n));
+function cellCenter2dNet(
+  faceVerts: Vec2[], cell: CellKey, n: number, kind: GridKind,
+): Vec2 {
+  return centroid2(cellVerts2d(faceVerts, cell, n, kind));
 }
 
 function sharedEdge2d(v1: Vec2[], v2: Vec2[]): [Vec2, Vec2] | null {

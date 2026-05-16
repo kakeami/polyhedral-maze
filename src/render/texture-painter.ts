@@ -4,18 +4,24 @@ import { add, sub, scale, mean, allClose } from '../core/vec3.ts';
 import { VERTEX_EPSILON } from '../core/constants.ts';
 import type { MazeGraph } from '../core/maze-graph.ts';
 import type { Maze } from '../core/maze.ts';
+import type { GridKind } from '../core/face-grid.ts';
 import { bfsShortestPath } from '../core/graph.ts';
 import { findAdjacentFaceId, hasTreeEdgeToFace } from './render-utils.ts';
 
-/**
- * Compute 3D vertices of a cell polygon based on the face geometry.
- */
-export function cellVertices3d(face: Face, cell: CellKey, n: number): Vec3[] {
-  const { row, col } = parseCell(cell);
-  const nv = face.vertices.length;
+const RADIAL_SECTORS: Partial<Record<GridKind, number>> = {
+  kite: 4, pent: 5, hex: 6, oct: 8, dec: 10,
+};
 
-  if (nv === 4) {
-    // RectGrid
+/**
+ * Compute 3D vertices of a cell polygon based on the face geometry and the
+ * grid's subdivision pattern.
+ */
+export function cellVertices3d(
+  face: Face, cell: CellKey, n: number, kind: GridKind,
+): Vec3[] {
+  const { row, col } = parseCell(cell);
+
+  if (kind === 'rect') {
     const o = face.vertices[0]!;
     const u = sub(face.vertices[1]!, o);
     const v = sub(face.vertices[3]!, o);
@@ -28,25 +34,24 @@ export function cellVertices3d(face: Face, cell: CellKey, n: number): Vec3[] {
     ];
   }
 
-  if (nv === 3) {
-    // TriGrid
+  if (kind === 'tri') {
     const o = face.vertices[0]!;
     const u = sub(face.vertices[1]!, o);
     const v = sub(face.vertices[2]!, o);
     return triCellVerts(o, u, v, row, col, n);
   }
 
-  if (nv === 5 || nv === 6 || nv === 8 || nv === 10) {
-    // PentGrid / HexGrid / OctGrid / DecGrid: radial sector subdivision
+  const sectors = RADIAL_SECTORS[kind];
+  if (sectors !== undefined) {
     const center = mean(face.vertices);
     const sector = Math.floor(row / n);
     const localRow = row - sector * n;
     const su = sub(face.vertices[sector]!, center);
-    const sv = sub(face.vertices[(sector + 1) % nv]!, center);
+    const sv = sub(face.vertices[(sector + 1) % sectors]!, center);
     return triCellVerts(center, su, sv, localRow, col, n);
   }
 
-  throw new Error(`Unsupported face vertex count: ${nv}`);
+  throw new Error(`Unsupported grid kind: ${kind}`);
 }
 
 function triCellVerts(
@@ -117,8 +122,8 @@ export function computeRenderData(
     for (const [c1, c2] of grid.internalEdges()) {
       const key = c1 < c2 ? `${c1}|${c2}` : `${c2}|${c1}`;
       if (!treeEdgeSet.has(key)) {
-        const verts1 = cellVertices3d(face, c1, n);
-        const verts2 = cellVertices3d(face, c2, n);
+        const verts1 = cellVertices3d(face, c1, n, grid.kind);
+        const verts2 = cellVertices3d(face, c2, n, grid.kind);
         const edge = sharedEdge(verts1, verts2);
         if (edge) {
           walls.push(edge[0], edge[1]);
@@ -188,8 +193,8 @@ export function computeRenderData(
         if (fid !== prevFid) {
           const prevFace = faceById.get(prevFid)!;
           const currFace = faceById.get(fid)!;
-          const v1 = cellVertices3d(prevFace, prevCell, n);
-          const v2 = cellVertices3d(currFace, cell, n);
+          const v1 = cellVertices3d(prevFace, prevCell, n, mazeGraph.grids.get(prevFid)!.kind);
+          const v2 = cellVertices3d(currFace, cell, n, mazeGraph.grids.get(fid)!.kind);
           const edge = sharedEdge(v1, v2);
           if (edge) {
             solution.push(scale(add(edge[0], edge[1]), 0.5));

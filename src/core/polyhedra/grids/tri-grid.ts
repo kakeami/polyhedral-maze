@@ -1,12 +1,13 @@
 import type { Face, Vec3, CellKey } from '../../types.ts';
 import { cellKey, parseCell } from '../../types.ts';
 import { sub, lstsq2 } from '../../vec3.ts';
-import type { FaceGrid } from '../../face-grid.ts';
+import type { FaceGrid, GridKind } from '../../face-grid.ts';
 import { BOUNDARY_TOLERANCE } from '../../constants.ts';
 
 export class TriGrid implements FaceGrid {
   readonly faceId: number;
   readonly n: number;
+  readonly kind: GridKind = 'tri';
   private _origin: Vec3;
   private _u: Vec3;
   private _v: Vec3;

@@ -1,8 +1,12 @@
 import type { CellKey, Vec3 } from './types.ts';
 
+/** Discriminator used by renderers to select a cell-subdivision pattern. */
+export type GridKind = 'tri' | 'rect' | 'kite' | 'pent' | 'hex' | 'oct' | 'dec';
+
 export interface FaceGrid {
   readonly faceId: number;
   readonly n: number;
+  readonly kind: GridKind;
   cells(): CellKey[];
   internalEdges(): [CellKey, CellKey][];
   boundaryCells(edgeStart: Vec3, edgeEnd: Vec3): CellKey[];

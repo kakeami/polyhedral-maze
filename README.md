@@ -2,16 +2,17 @@
 
 Interactive 3D maze generator on the surfaces of convex polyhedra.
 
-Generate perfect mazes (unique-solution spanning trees) on all 5 Platonic and
-all 13 Archimedean solids — 18 shapes in total — and explore them in an
-interactive 3D viewer.
+Generate perfect mazes (unique-solution spanning trees) on all 5 Platonic, all
+13 Archimedean, and all 13 Catalan solids — 31 shapes in total — and explore
+them in an interactive 3D viewer.
 
 ## Features
 
-- **18 polyhedra** across two categories:
+- **31 polyhedra** across three categories:
   - **Platonic (5)**: tetrahedron, cube, octahedron, dodecahedron, icosahedron
   - **Archimedean (13)**: cuboctahedron, icosidodecahedron, rhombicuboctahedron, rhombicosidodecahedron, truncated tetrahedron / cube / octahedron / cuboctahedron / dodecahedron / icosahedron / icosidodecahedron, snub cube, snub dodecahedron
-- **6 face-type grids** (rectangular, triangular, pentagonal, hexagonal, octagonal, decagonal) that compose freely on mixed-face solids
+  - **Catalan (13)**: triakis tetrahedron / octahedron / icosahedron, tetrakis hexahedron, pentakis dodecahedron, rhombic dodecahedron, rhombic triacontahedron, deltoidal icositetrahedron / hexecontahedron, disdyakis dodecahedron / triacontahedron, pentagonal icositetrahedron / hexecontahedron
+- **7 face-type grids** (rectangular, triangular, kite, pentagonal, hexagonal, octagonal, decagonal) that compose freely on mixed-face solids
 - **3 maze algorithms**: Kruskal, DFS backtracker, Wilson (loop-erased random walk)
 - **Warp tunnels**: shortcut through the polyhedron connecting opposite faces
 - **Interactive 3D viewer**: rotate, zoom, auto-rotate, and inspect the maze on the surface
@@ -38,7 +39,7 @@ All parameters are encoded in the URL query string:
 
 | Parameter | Values | Default |
 |-----------|--------|---------|
-| `shape` | one of the 18 shape IDs below | `icosahedron` |
+| `shape` | one of the 31 shape IDs below | `icosahedron` |
 | `n` | 2–12 (grid resolution per face edge) | `9` |
 | `k` | 1–4 (inter-face passages per shared edge) | `3` |
 | `algo` | `kruskal`, `dfs`, `wilson` | `dfs` |
@@ -52,6 +53,7 @@ All parameters are encoded in the URL query string:
 |----------|-----|
 | Platonic | `tetrahedron`, `cube`, `octahedron`, `dodecahedron`, `icosahedron` |
 | Archimedean | `cuboctahedron`, `icosidodecahedron`, `rhombicuboctahedron`, `rhombicosidodecahedron`, `truncated-tetrahedron`, `truncated-cube`, `truncated-octahedron`, `truncated-cuboctahedron`, `truncated-dodecahedron`, `truncated-icosahedron`, `truncated-icosidodecahedron`, `snub-cube`, `snub-dodecahedron` |
+| Catalan | `triakis-tetrahedron`, `triakis-octahedron`, `tetrakis-hexahedron`, `triakis-icosahedron`, `pentakis-dodecahedron`, `rhombic-dodecahedron`, `rhombic-triacontahedron`, `deltoidal-icositetrahedron`, `deltoidal-hexecontahedron`, `disdyakis-dodecahedron`, `disdyakis-triacontahedron`, `pentagonal-icositetrahedron`, `pentagonal-hexecontahedron` |
 
 Example: `?shape=snub-dodecahedron&n=3&algo=wilson&seed=7&warp=1`
 

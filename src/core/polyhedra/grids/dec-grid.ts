@@ -1,7 +1,7 @@
 import type { Face, Vec3, CellKey } from '../../types.ts';
 import { cellKey, parseCell } from '../../types.ts';
 import { sub, cross, normalize, dot, mean, lstsq2 } from '../../vec3.ts';
-import type { FaceGrid } from '../../face-grid.ts';
+import type { FaceGrid, GridKind } from '../../face-grid.ts';
 import { BOUNDARY_TOLERANCE } from '../../constants.ts';
 
 /**
@@ -17,6 +17,7 @@ import { BOUNDARY_TOLERANCE } from '../../constants.ts';
 export class DecGrid implements FaceGrid {
   readonly faceId: number;
   readonly n: number;
+  readonly kind: GridKind = 'dec';
   private _center: Vec3;
   readonly vertices: Vec3[];
   private _sectorU: Vec3[];

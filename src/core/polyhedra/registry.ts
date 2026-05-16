@@ -17,6 +17,19 @@ import { TruncatedDodecahedron } from './archimedean/truncated-dodecahedron.ts';
 import { TruncatedIcosidodecahedron } from './archimedean/truncated-icosidodecahedron.ts';
 import { SnubCube } from './archimedean/snub-cube.ts';
 import { SnubDodecahedron } from './archimedean/snub-dodecahedron.ts';
+import { TriakisTetrahedron } from './catalan/triakis-tetrahedron.ts';
+import { TriakisOctahedron } from './catalan/triakis-octahedron.ts';
+import { TetrakisHexahedron } from './catalan/tetrakis-hexahedron.ts';
+import { TriakisIcosahedron } from './catalan/triakis-icosahedron.ts';
+import { PentakisDodecahedron } from './catalan/pentakis-dodecahedron.ts';
+import { RhombicDodecahedron } from './catalan/rhombic-dodecahedron.ts';
+import { RhombicTriacontahedron } from './catalan/rhombic-triacontahedron.ts';
+import { DeltoidalIcositetrahedron } from './catalan/deltoidal-icositetrahedron.ts';
+import { DeltoidalHexecontahedron } from './catalan/deltoidal-hexecontahedron.ts';
+import { DisdyakisDodecahedron } from './catalan/disdyakis-dodecahedron.ts';
+import { DisdyakisTriacontahedron } from './catalan/disdyakis-triacontahedron.ts';
+import { PentagonalIcositetrahedron } from './catalan/pentagonal-icositetrahedron.ts';
+import { PentagonalHexecontahedron } from './catalan/pentagonal-hexecontahedron.ts';
 
 export type ShapeCategory =
   | 'platonic'
@@ -186,6 +199,110 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '△×80 + ⬠×12',
     faceCount: 92,
     factory: () => new SnubDodecahedron(),
+  },
+  {
+    id: 'triakis-tetrahedron',
+    name: 'Triakis Tetrahedron',
+    category: 'catalan',
+    faceComposition: '△×12',
+    faceCount: 12,
+    factory: () => new TriakisTetrahedron(),
+  },
+  {
+    id: 'triakis-octahedron',
+    name: 'Triakis Octahedron',
+    category: 'catalan',
+    faceComposition: '△×24',
+    faceCount: 24,
+    factory: () => new TriakisOctahedron(),
+  },
+  {
+    id: 'tetrakis-hexahedron',
+    name: 'Tetrakis Hexahedron',
+    category: 'catalan',
+    faceComposition: '△×24',
+    faceCount: 24,
+    factory: () => new TetrakisHexahedron(),
+  },
+  {
+    id: 'triakis-icosahedron',
+    name: 'Triakis Icosahedron',
+    category: 'catalan',
+    faceComposition: '△×60',
+    faceCount: 60,
+    factory: () => new TriakisIcosahedron(),
+  },
+  {
+    id: 'pentakis-dodecahedron',
+    name: 'Pentakis Dodecahedron',
+    category: 'catalan',
+    faceComposition: '△×60',
+    faceCount: 60,
+    factory: () => new PentakisDodecahedron(),
+  },
+  {
+    id: 'rhombic-dodecahedron',
+    name: 'Rhombic Dodecahedron',
+    category: 'catalan',
+    faceComposition: '◇×12',
+    faceCount: 12,
+    factory: () => new RhombicDodecahedron(),
+  },
+  {
+    id: 'rhombic-triacontahedron',
+    name: 'Rhombic Triacontahedron',
+    category: 'catalan',
+    faceComposition: '◇×30',
+    faceCount: 30,
+    factory: () => new RhombicTriacontahedron(),
+  },
+  {
+    id: 'deltoidal-icositetrahedron',
+    name: 'Deltoidal Icositetrahedron',
+    category: 'catalan',
+    faceComposition: 'kite×24',
+    faceCount: 24,
+    factory: () => new DeltoidalIcositetrahedron(),
+  },
+  {
+    id: 'deltoidal-hexecontahedron',
+    name: 'Deltoidal Hexecontahedron',
+    category: 'catalan',
+    faceComposition: 'kite×60',
+    faceCount: 60,
+    factory: () => new DeltoidalHexecontahedron(),
+  },
+  {
+    id: 'disdyakis-dodecahedron',
+    name: 'Disdyakis Dodecahedron',
+    category: 'catalan',
+    faceComposition: '△×48',
+    faceCount: 48,
+    factory: () => new DisdyakisDodecahedron(),
+  },
+  {
+    id: 'disdyakis-triacontahedron',
+    name: 'Disdyakis Triacontahedron',
+    category: 'catalan',
+    faceComposition: '△×120',
+    faceCount: 120,
+    factory: () => new DisdyakisTriacontahedron(),
+  },
+  {
+    id: 'pentagonal-icositetrahedron',
+    name: 'Pentagonal Icositetrahedron',
+    category: 'catalan',
+    faceComposition: '⬠×24',
+    faceCount: 24,
+    factory: () => new PentagonalIcositetrahedron(),
+  },
+  {
+    id: 'pentagonal-hexecontahedron',
+    name: 'Pentagonal Hexecontahedron',
+    category: 'catalan',
+    faceComposition: '⬠×60',
+    faceCount: 60,
+    factory: () => new PentagonalHexecontahedron(),
   },
 ];
 

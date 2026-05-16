@@ -5,16 +5,19 @@ import type { FaceGrid, GridKind } from '../../face-grid.ts';
 import { BOUNDARY_TOLERANCE } from '../../constants.ts';
 
 /**
- * OctGrid: 8-sector triangular grid for octagonal faces.
+ * KiteGrid: 4-sector triangular grid for quadrilateral faces that are not
+ * parallelograms (e.g. the kite faces of Deltoidal Catalan solids).
  *
- * Each octagon is divided into 8 sectors from the face center to consecutive
- * vertex pairs. Each sector uses a TriGrid-like layout with n rows and n²
- * cells. Total: 8n² cells per face.
+ * Subdivides the face into 4 sectors from the face center to each pair of
+ * consecutive vertices. Each sector uses a TriGrid-style layout with n rows
+ * and n² cells. Total: 4n² cells per face.
+ *
+ * Same cell encoding as Pent/Hex/Oct/DecGrid (row = sector * n + localRow).
  */
-export class OctGrid implements FaceGrid {
+export class KiteGrid implements FaceGrid {
   readonly faceId: number;
   readonly n: number;
-  readonly kind: GridKind = 'oct';
+  readonly kind: GridKind = 'kite';
   private _center: Vec3;
   readonly vertices: Vec3[];
   private _sectorU: Vec3[];
@@ -30,9 +33,9 @@ export class OctGrid implements FaceGrid {
 
     this._sectorU = [];
     this._sectorV = [];
-    for (let s = 0; s < 8; s++) {
+    for (let s = 0; s < 4; s++) {
       this._sectorU.push(sub(face.vertices[s]!, this._center));
-      this._sectorV.push(sub(face.vertices[(s + 1) % 8]!, this._center));
+      this._sectorV.push(sub(face.vertices[(s + 1) % 4]!, this._center));
     }
 
     const e1 = normalize(this._sectorU[0]!);
@@ -43,7 +46,7 @@ export class OctGrid implements FaceGrid {
 
   cells(): CellKey[] {
     const result: CellKey[] = [];
-    for (let s = 0; s < 8; s++) {
+    for (let s = 0; s < 4; s++) {
       const base = s * this.n;
       for (let r = 0; r < this.n; r++) {
         for (let c = 0; c < 2 * r + 1; c++) {
@@ -59,7 +62,7 @@ export class OctGrid implements FaceGrid {
     const fid = this.faceId;
     const n = this.n;
 
-    for (let s = 0; s < 8; s++) {
+    for (let s = 0; s < 4; s++) {
       const base = s * n;
       for (let r = 0; r < n; r++) {
         for (let c = 0; c < 2 * r; c++) {
@@ -76,8 +79,8 @@ export class OctGrid implements FaceGrid {
       }
     }
 
-    for (let s = 0; s < 8; s++) {
-      const nextS = (s + 1) % 8;
+    for (let s = 0; s < 4; s++) {
+      const nextS = (s + 1) % 4;
       for (let r = 0; r < n; r++) {
         edges.push([
           cellKey(fid, s * n + r, 2 * r),
@@ -94,7 +97,7 @@ export class OctGrid implements FaceGrid {
     const n = this.n;
     const tol = BOUNDARY_TOLERANCE;
 
-    for (let s = 0; s < 8; s++) {
+    for (let s = 0; s < 4; s++) {
       const u = this._sectorU[s]!;
       const v = this._sectorV[s]!;
 
