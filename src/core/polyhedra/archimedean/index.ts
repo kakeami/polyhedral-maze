@@ -9,3 +9,5 @@ export { TruncatedCube } from './truncated-cube.ts';
 export { TruncatedCuboctahedron } from './truncated-cuboctahedron.ts';
 export { TruncatedDodecahedron } from './truncated-dodecahedron.ts';
 export { TruncatedIcosidodecahedron } from './truncated-icosidodecahedron.ts';
+export { SnubCube } from './snub-cube.ts';
+export { SnubDodecahedron } from './snub-dodecahedron.ts';

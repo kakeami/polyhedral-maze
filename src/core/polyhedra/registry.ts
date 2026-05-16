@@ -15,6 +15,8 @@ import { TruncatedCube } from './archimedean/truncated-cube.ts';
 import { TruncatedCuboctahedron } from './archimedean/truncated-cuboctahedron.ts';
 import { TruncatedDodecahedron } from './archimedean/truncated-dodecahedron.ts';
 import { TruncatedIcosidodecahedron } from './archimedean/truncated-icosidodecahedron.ts';
+import { SnubCube } from './archimedean/snub-cube.ts';
+import { SnubDodecahedron } from './archimedean/snub-dodecahedron.ts';
 
 export type ShapeCategory =
   | 'platonic'
@@ -168,6 +170,22 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '□×30 + ⬡×20 + 10gon×12',
     faceCount: 62,
     factory: () => new TruncatedIcosidodecahedron(),
+  },
+  {
+    id: 'snub-cube',
+    name: 'Snub Cube',
+    category: 'archimedean',
+    faceComposition: '△×32 + □×6',
+    faceCount: 38,
+    factory: () => new SnubCube(),
+  },
+  {
+    id: 'snub-dodecahedron',
+    name: 'Snub Dodecahedron',
+    category: 'archimedean',
+    faceComposition: '△×80 + ⬠×12',
+    faceCount: 92,
+    factory: () => new SnubDodecahedron(),
   },
 ];
 

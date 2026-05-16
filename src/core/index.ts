@@ -38,6 +38,8 @@ export {
   TruncatedCuboctahedron,
   TruncatedDodecahedron,
   TruncatedIcosidodecahedron,
+  SnubCube,
+  SnubDodecahedron,
   TriGrid,
   RectGrid,
   PentGrid,
