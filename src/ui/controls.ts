@@ -7,7 +7,7 @@ import {
   shapesByCategory,
   availableCategories,
 } from '../core/polyhedra/registry.ts';
-import type { ShapeCategory } from '../core/polyhedra/registry.ts';
+import type { ShapeCategory, ShapeDescriptor } from '../core/polyhedra/registry.ts';
 
 export interface ControlsContext {
   container: HTMLElement;
@@ -19,14 +19,18 @@ export interface ControlsContext {
   onAction(action: string, cb: () => void): void;
 }
 
+const ALL_CATEGORIES = '__all__';
+type CategoryScope = ShapeCategory | typeof ALL_CATEGORIES;
+
 export function createControls(container: HTMLElement, initial: MazeParams): ControlsContext {
   const initialShape = getShape(initial.shape) ?? SHAPES[0]!;
-  const initialCategory = initialShape.category;
+  const initialCategory: CategoryScope = initialShape.category;
 
   container.innerHTML = buildHTML(initial, initialCategory);
 
   const el = <T extends HTMLElement>(id: string) => container.querySelector<T>(`#${id}`)!;
 
+  const categorySelect = el<HTMLSelectElement>('ctrl-category');
   const shapeSelect = el<HTMLSelectElement>('ctrl-shape');
   const shapeInfo = el<HTMLDivElement>('ctrl-shape-info');
   const nSlider = el<HTMLInputElement>('ctrl-n');
@@ -39,8 +43,6 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const solutionCheck = el<HTMLInputElement>('ctrl-solution');
   const metricsDiv = el<HTMLDivElement>('ctrl-metrics');
 
-  let activeCategory: ShapeCategory = initialCategory;
-
   const callbacks: (() => void)[] = [];
   const actions = new Map<string, (() => void)[]>();
 
@@ -48,40 +50,62 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     callbacks.forEach(cb => cb());
   }
 
-  function renderShapeOptions(category: ShapeCategory, selectedId?: string) {
-    const shapes = shapesByCategory(category);
-    const fallback = selectedId && shapes.some(s => s.id === selectedId)
-      ? selectedId
+  function shapesInScope(): ShapeDescriptor[] {
+    const cat = categorySelect.value as CategoryScope;
+    return cat === ALL_CATEGORIES ? [...SHAPES] : shapesByCategory(cat as ShapeCategory);
+  }
+
+  function renderShapeOptions(preselectId?: string) {
+    const cat = categorySelect.value as CategoryScope;
+    const showCategoryGroups = cat === ALL_CATEGORIES;
+    const shapes = shapesInScope();
+
+    let html = '';
+    if (showCategoryGroups) {
+      const byCat = new Map<ShapeCategory, ShapeDescriptor[]>();
+      for (const s of shapes) {
+        if (!byCat.has(s.category)) byCat.set(s.category, []);
+        byCat.get(s.category)!.push(s);
+      }
+      for (const c of availableCategories()) {
+        const group = byCat.get(c);
+        if (!group || group.length === 0) continue;
+        html += `<optgroup label="${CATEGORY_LABELS[c]}">`;
+        for (const s of group) {
+          html += `<option value="${s.id}">${s.name}</option>`;
+        }
+        html += `</optgroup>`;
+      }
+    } else {
+      html = shapes.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    }
+    shapeSelect.innerHTML = html;
+
+    const target = preselectId && shapes.some(s => s.id === preselectId)
+      ? preselectId
       : shapes[0]!.id;
-    shapeSelect.innerHTML = shapes
-      .map(s => `<option value="${s.id}">${s.name}</option>`)
-      .join('');
-    shapeSelect.value = fallback;
+    shapeSelect.value = target;
     updateShapeInfo();
   }
 
   function updateShapeInfo() {
     const s = getShape(shapeSelect.value);
-    shapeInfo.textContent = s ? `${s.faceComposition} · ${s.faceCount} faces` : '';
+    if (!s) {
+      shapeInfo.textContent = '';
+      return;
+    }
+    const catLabel = CATEGORY_LABELS[s.category];
+    shapeInfo.textContent = `${catLabel} · ${s.faceComposition} · ${s.faceCount} faces`;
   }
 
-  // Tab click handlers (if tab bar exists)
-  container.querySelectorAll<HTMLButtonElement>('.category-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const cat = btn.dataset.category as ShapeCategory;
-      if (cat === activeCategory) return;
-      activeCategory = cat;
-      container.querySelectorAll<HTMLButtonElement>('.category-tab').forEach(b => {
-        b.classList.toggle('active', b.dataset.category === cat);
-      });
-      renderShapeOptions(cat);
-      fire();
-    });
+  categorySelect.addEventListener('change', () => {
+    renderShapeOptions();
+    fire();
   });
+  shapeSelect.addEventListener('change', () => { updateShapeInfo(); fire(); });
 
   nSlider.addEventListener('input', () => { nValue.textContent = nSlider.value; fire(); });
   kSlider.addEventListener('input', () => { kValue.textContent = kSlider.value; fire(); });
-  shapeSelect.addEventListener('change', () => { updateShapeInfo(); fire(); });
   for (const input of [algoSelect, seedInput, warpCheck, solutionCheck]) {
     input.addEventListener('change', fire);
   }
@@ -117,16 +141,10 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
 
   function setParams(p: MazeParams) {
     const shape = getShape(p.shape) ?? SHAPES[0]!;
-    if (shape.category !== activeCategory) {
-      activeCategory = shape.category;
-      container.querySelectorAll<HTMLButtonElement>('.category-tab').forEach(b => {
-        b.classList.toggle('active', b.dataset.category === activeCategory);
-      });
-      renderShapeOptions(activeCategory, shape.id);
-    } else {
-      shapeSelect.value = shape.id;
-      updateShapeInfo();
+    if (categorySelect.value !== shape.category) {
+      categorySelect.value = shape.category;
     }
+    renderShapeOptions(shape.id);
     nSlider.value = String(p.n);
     nValue.textContent = String(p.n);
     kSlider.value = String(p.k);
@@ -148,6 +166,8 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     `;
   }
 
+  renderShapeOptions(initialShape.id);
+
   return {
     container,
     getParams,
@@ -162,36 +182,28 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   };
 }
 
-function buildHTML(p: MazeParams, activeCategory: ShapeCategory): string {
+function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
   const categories = availableCategories();
-  const showTabs = categories.length >= 2;
-  const tabsHTML = showTabs
-    ? `<div class="category-tabs">
-        ${categories
-          .map(c => `<button class="category-tab${c === activeCategory ? ' active' : ''}" data-category="${c}">${CATEGORY_LABELS[c]}</button>`)
-          .join('')}
-      </div>`
-    : '';
-
-  const shapesInCategory = shapesByCategory(activeCategory);
-  const shapeOptionsHTML = shapesInCategory
-    .map(s => `<option value="${s.id}"${s.id === p.shape ? ' selected' : ''}>${s.name}</option>`)
-    .join('');
-
-  const currentShape = getShape(p.shape) ?? shapesInCategory[0]!;
-  const shapeInfoText = `${currentShape.faceComposition} · ${currentShape.faceCount} faces`;
+  const categoryOptions = [
+    ...categories.map(c =>
+      `<option value="${c}"${c === activeCategory ? ' selected' : ''}>${CATEGORY_LABELS[c]}</option>`,
+    ),
+    `<option value="${ALL_CATEGORIES}"${activeCategory === ALL_CATEGORIES ? ' selected' : ''}>All categories</option>`,
+  ].join('');
 
   return `
     <h2>Polyhedral Maze</h2>
 
-    ${tabsHTML}
-
-    <label>Shape
-      <select id="ctrl-shape">
-        ${shapeOptionsHTML}
+    <label>Category
+      <select id="ctrl-category">
+        ${categoryOptions}
       </select>
     </label>
-    <div class="shape-info" id="ctrl-shape-info">${shapeInfoText}</div>
+
+    <label>Shape
+      <select id="ctrl-shape"></select>
+    </label>
+    <div class="shape-info" id="ctrl-shape-info"></div>
 
     <label>Algorithm
       <select id="ctrl-algo">

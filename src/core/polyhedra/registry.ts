@@ -30,6 +30,11 @@ import { DisdyakisDodecahedron } from './catalan/disdyakis-dodecahedron.ts';
 import { DisdyakisTriacontahedron } from './catalan/disdyakis-triacontahedron.ts';
 import { PentagonalIcositetrahedron } from './catalan/pentagonal-icositetrahedron.ts';
 import { PentagonalHexecontahedron } from './catalan/pentagonal-hexecontahedron.ts';
+import { TriangularBipyramid } from './deltahedra/triangular-bipyramid.ts';
+import { PentagonalBipyramid } from './deltahedra/pentagonal-bipyramid.ts';
+import { SnubDisphenoid } from './deltahedra/snub-disphenoid.ts';
+import { TriaugmentedTriangularPrism } from './deltahedra/triaugmented-triangular-prism.ts';
+import { GyroelongatedSquareBipyramid } from './deltahedra/gyroelongated-square-bipyramid.ts';
 
 export type ShapeCategory =
   | 'platonic'
@@ -303,6 +308,46 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '⬠×60',
     faceCount: 60,
     factory: () => new PentagonalHexecontahedron(),
+  },
+  {
+    id: 'triangular-bipyramid',
+    name: 'Triangular Bipyramid',
+    category: 'deltahedra',
+    faceComposition: '△×6',
+    faceCount: 6,
+    factory: () => new TriangularBipyramid(),
+  },
+  {
+    id: 'pentagonal-bipyramid',
+    name: 'Pentagonal Bipyramid',
+    category: 'deltahedra',
+    faceComposition: '△×10',
+    faceCount: 10,
+    factory: () => new PentagonalBipyramid(),
+  },
+  {
+    id: 'snub-disphenoid',
+    name: 'Snub Disphenoid',
+    category: 'deltahedra',
+    faceComposition: '△×12',
+    faceCount: 12,
+    factory: () => new SnubDisphenoid(),
+  },
+  {
+    id: 'triaugmented-triangular-prism',
+    name: 'Triaugmented Triangular Prism',
+    category: 'deltahedra',
+    faceComposition: '△×14',
+    faceCount: 14,
+    factory: () => new TriaugmentedTriangularPrism(),
+  },
+  {
+    id: 'gyroelongated-square-bipyramid',
+    name: 'Gyroelongated Square Bipyramid',
+    category: 'deltahedra',
+    faceComposition: '△×16',
+    faceCount: 16,
+    factory: () => new GyroelongatedSquareBipyramid(),
   },
 ];
 
