@@ -73,7 +73,11 @@ export type ShapeCategory =
   | 'deltahedra'
   | 'prismatic'
   | 'dipyramidal'
-  | 'johnson';
+  | 'johnson-cupola'
+  | 'johnson-bicupola'
+  | 'johnson-pyramid'
+  | 'johnson-elongated-cupola'
+  | 'johnson-sporadic';
 
 export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
   platonic: 'Platonic',
@@ -82,7 +86,11 @@ export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
   deltahedra: 'Deltahedra',
   prismatic: 'Prismatic',
   dipyramidal: 'Dipyramidal',
-  johnson: 'Johnson',
+  'johnson-cupola': 'Johnson: Cupolae & Rotunda',
+  'johnson-bicupola': 'Johnson: Bicupolae & Birotunda',
+  'johnson-pyramid': 'Johnson: Pyramids & Elongated',
+  'johnson-elongated-cupola': 'Johnson: Elongated Cupolae',
+  'johnson-sporadic': 'Johnson: Sporadic',
 };
 
 export interface ShapeDescriptor {
@@ -530,7 +538,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j3',
     name: 'Triangular Cupola',
-    category: 'johnson',
+    category: 'johnson-cupola',
     faceComposition: '△×4 + □×3 + ⬡×1',
     faceCount: 8,
     factory: () => new TriangularCupola(),
@@ -538,7 +546,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j4',
     name: 'Square Cupola',
-    category: 'johnson',
+    category: 'johnson-cupola',
     faceComposition: '△×4 + □×5 + 8gon×1',
     faceCount: 10,
     factory: () => new SquareCupola(),
@@ -546,7 +554,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j5',
     name: 'Pentagonal Cupola',
-    category: 'johnson',
+    category: 'johnson-cupola',
     faceComposition: '△×5 + □×5 + ⬠×1 + 10gon×1',
     faceCount: 12,
     factory: () => new PentagonalCupola(),
@@ -554,7 +562,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j6',
     name: 'Pentagonal Rotunda',
-    category: 'johnson',
+    category: 'johnson-cupola',
     faceComposition: '△×10 + ⬠×6 + 10gon×1',
     faceCount: 17,
     factory: () => new PentagonalRotunda(),
@@ -562,7 +570,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j27',
     name: 'Triangular Orthobicupola',
-    category: 'johnson',
+    category: 'johnson-bicupola',
     faceComposition: '△×8 + □×6',
     faceCount: 14,
     factory: () => new TriangularOrthobicupola(),
@@ -570,7 +578,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j28',
     name: 'Square Orthobicupola',
-    category: 'johnson',
+    category: 'johnson-bicupola',
     faceComposition: '△×8 + □×10',
     faceCount: 18,
     factory: () => new SquareOrthobicupola(),
@@ -578,7 +586,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j29',
     name: 'Square Gyrobicupola',
-    category: 'johnson',
+    category: 'johnson-bicupola',
     faceComposition: '△×8 + □×10',
     faceCount: 18,
     factory: () => new SquareGyrobicupola(),
@@ -586,7 +594,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j30',
     name: 'Pentagonal Orthobicupola',
-    category: 'johnson',
+    category: 'johnson-bicupola',
     faceComposition: '△×10 + □×10 + ⬠×2',
     faceCount: 22,
     factory: () => new PentagonalOrthobicupola(),
@@ -594,7 +602,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j31',
     name: 'Pentagonal Gyrobicupola',
-    category: 'johnson',
+    category: 'johnson-bicupola',
     faceComposition: '△×10 + □×10 + ⬠×2',
     faceCount: 22,
     factory: () => new PentagonalGyrobicupola(),
@@ -602,7 +610,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j32',
     name: 'Pentagonal Orthocupolarotunda',
-    category: 'johnson',
+    category: 'johnson-bicupola',
     faceComposition: '△×15 + □×5 + ⬠×7',
     faceCount: 27,
     factory: () => new PentagonalOrthocupolarotunda(),
@@ -610,7 +618,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j33',
     name: 'Pentagonal Gyrocupolarotunda',
-    category: 'johnson',
+    category: 'johnson-bicupola',
     faceComposition: '△×15 + □×5 + ⬠×7',
     faceCount: 27,
     factory: () => new PentagonalGyrocupolarotunda(),
@@ -618,7 +626,7 @@ export const SHAPES: readonly ShapeDescriptor[] = [
   {
     id: 'j34',
     name: 'Pentagonal Orthobirotunda',
-    category: 'johnson',
+    category: 'johnson-bicupola',
     faceComposition: '△×20 + ⬠×12',
     faceCount: 32,
     factory: () => new PentagonalOrthobirotunda(),
