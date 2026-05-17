@@ -50,13 +50,12 @@ describe('RectGrid', () => {
     expect(boundary.length).toBe(n);
   });
 
-  it('cellCenter3d lies on the face', () => {
+  it('cellCenter3d lies on the face plane', () => {
     const grid = new RectGrid(face, 4);
-    const cells = grid.cells();
-    for (const cell of cells) {
+    const faceY = face.vertices[0]![1];
+    for (const cell of grid.cells()) {
       const center = grid.cellCenter3d(cell);
-      // y-coordinate should be 0.5 (top face)
-      expect(center[1]).toBeCloseTo(0.5, 5);
+      expect(center[1]).toBeCloseTo(faceY, 5);
     }
   });
 

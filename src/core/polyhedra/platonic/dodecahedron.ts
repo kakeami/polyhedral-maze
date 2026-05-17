@@ -2,7 +2,7 @@ import type { Face, Vec3 } from '../../types.ts';
 import { sub, cross, normalize, dot, mean, scale } from '../../vec3.ts';
 import type { FaceGrid } from '../../face-grid.ts';
 import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency } from '../../polyhedron.ts';
+import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
 import type { FaceEdgeData } from '../../types.ts';
 import { Graph } from '../../graph.ts';
 import { PentGrid } from '../grids/pent-grid.ts';
@@ -66,7 +66,7 @@ function makeDodecahedronFaces(): Face[] {
 }
 
 export class Dodecahedron implements Polyhedron {
-  private _faces = makeDodecahedronFaces();
+  private _faces = normalizeFaces(makeDodecahedronFaces(), 1);
 
   faces(): Face[] {
     return [...this._faces];

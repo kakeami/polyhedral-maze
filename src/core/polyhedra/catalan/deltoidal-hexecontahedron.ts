@@ -1,7 +1,7 @@
 import type { Face, FaceEdgeData } from '../../types.ts';
 import type { FaceGrid } from '../../face-grid.ts';
 import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency } from '../../polyhedron.ts';
+import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
 import { Graph } from '../../graph.ts';
 import { KiteGrid } from '../grids/kite-grid.ts';
 import { Rhombicosidodecahedron } from '../archimedean/rhombicosidodecahedron.ts';
@@ -12,7 +12,7 @@ import { dualize } from './_dualize.ts';
  * 60 kite faces, 62 vertices.
  */
 export class DeltoidalHexecontahedron implements Polyhedron {
-  private _faces: Face[] = dualize(new Rhombicosidodecahedron().faces());
+  private _faces: Face[] = normalizeFaces(dualize(new Rhombicosidodecahedron().faces()), 1);
 
   faces(): Face[] {
     return [...this._faces];

@@ -1,7 +1,7 @@
 import type { Face, Vec3 } from '../../types.ts';
 import type { FaceGrid } from '../../face-grid.ts';
 import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency } from '../../polyhedron.ts';
+import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
 import type { FaceEdgeData } from '../../types.ts';
 import { Graph } from '../../graph.ts';
 import { TriGrid } from '../grids/tri-grid.ts';
@@ -29,7 +29,7 @@ function makeOctahedronFaces(): Face[] {
 }
 
 export class Octahedron implements Polyhedron {
-  private _faces = makeOctahedronFaces();
+  private _faces = normalizeFaces(makeOctahedronFaces(), 1);
 
   faces(): Face[] {
     return [...this._faces];

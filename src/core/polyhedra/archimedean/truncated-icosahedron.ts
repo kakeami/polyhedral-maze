@@ -1,7 +1,7 @@
 import type { Face, Vec3, FaceEdgeData } from '../../types.ts';
 import type { FaceGrid } from '../../face-grid.ts';
 import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency } from '../../polyhedron.ts';
+import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
 import { Graph } from '../../graph.ts';
 import { PentGrid } from '../grids/pent-grid.ts';
 import { HexGrid } from '../grids/hex-grid.ts';
@@ -41,7 +41,7 @@ function makeFaces(): Face[] {
 }
 
 export class TruncatedIcosahedron implements Polyhedron {
-  private _faces = makeFaces();
+  private _faces = normalizeFaces(makeFaces(), 1);
 
   faces(): Face[] {
     return [...this._faces];

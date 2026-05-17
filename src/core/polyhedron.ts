@@ -1,7 +1,7 @@
 import type { Face, Vec3, EdgeVertices, FaceEdgeData } from './types.ts';
 import type { FaceGrid } from './face-grid.ts';
 import { Graph } from './graph.ts';
-import { allClose } from './vec3.ts';
+import { allClose, norm } from './vec3.ts';
 import { OPPOSITE_FACE_EPSILON } from './constants.ts';
 
 export interface Polyhedron {
@@ -48,6 +48,30 @@ export function oppositeFace(
     }
   }
   return null;
+}
+
+/**
+ * Uniformly scale faces so that the maximum vertex distance from the origin
+ * (the circumradius) equals `targetR`. Face normals are preserved.
+ *
+ * Used to give every polyhedron a consistent visual size in the renderer
+ * regardless of the canonical-coordinate convention chosen for its vertices.
+ */
+export function normalizeFaces(faces: Face[], targetR = 1): Face[] {
+  let maxR = 0;
+  for (const f of faces) {
+    for (const v of f.vertices) {
+      const r = norm(v);
+      if (r > maxR) maxR = r;
+    }
+  }
+  if (maxR === 0) return faces;
+  const s = targetR / maxR;
+  return faces.map((f) => ({
+    id: f.id,
+    vertices: f.vertices.map((v) => [v[0] * s, v[1] * s, v[2] * s] as Vec3),
+    normal: f.normal,
+  }));
 }
 
 export function buildFaceAdjacency(

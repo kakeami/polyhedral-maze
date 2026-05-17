@@ -1,7 +1,7 @@
 import type { Face } from '../../types.ts';
 import type { FaceGrid } from '../../face-grid.ts';
 import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency } from '../../polyhedron.ts';
+import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
 import type { FaceEdgeData } from '../../types.ts';
 import { Graph } from '../../graph.ts';
 import { RectGrid } from '../grids/rect-grid.ts';
@@ -73,7 +73,7 @@ function makeCubeFaces(): Face[] {
 }
 
 export class Cube implements Polyhedron {
-  private _faces = makeCubeFaces();
+  private _faces = normalizeFaces(makeCubeFaces(), 1);
 
   faces(): Face[] {
     return [...this._faces];
