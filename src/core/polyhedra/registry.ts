@@ -53,6 +53,25 @@ import { PentagonalTrapezohedron } from './dipyramidal/pentagonal-trapezohedron.
 import { HexagonalTrapezohedron } from './dipyramidal/hexagonal-trapezohedron.ts';
 import { OctagonalTrapezohedron } from './dipyramidal/octagonal-trapezohedron.ts';
 import { DecagonalTrapezohedron } from './dipyramidal/decagonal-trapezohedron.ts';
+import { SquarePyramid } from './johnson/j01-square-pyramid.ts';
+import { PentagonalPyramid } from './johnson/j02-pentagonal-pyramid.ts';
+import { ElongatedTriangularPyramid } from './johnson/j07-elongated-triangular-pyramid.ts';
+import { ElongatedSquarePyramid } from './johnson/j08-elongated-square-pyramid.ts';
+import { ElongatedPentagonalPyramid } from './johnson/j09-elongated-pentagonal-pyramid.ts';
+import { GyroelongatedSquarePyramid } from './johnson/j10-gyroelongated-square-pyramid.ts';
+import { GyroelongatedPentagonalPyramid } from './johnson/j11-gyroelongated-pentagonal-pyramid.ts';
+import { ElongatedTriangularBipyramid } from './johnson/j14-elongated-triangular-bipyramid.ts';
+import { ElongatedSquareBipyramid } from './johnson/j15-elongated-square-bipyramid.ts';
+import { ElongatedPentagonalBipyramid } from './johnson/j16-elongated-pentagonal-bipyramid.ts';
+import { ElongatedTriangularCupola } from './johnson/j18-elongated-triangular-cupola.ts';
+import { ElongatedSquareCupola } from './johnson/j19-elongated-square-cupola.ts';
+import { ElongatedPentagonalCupola } from './johnson/j20-elongated-pentagonal-cupola.ts';
+import { ElongatedPentagonalRotunda } from './johnson/j21-elongated-pentagonal-rotunda.ts';
+import { GyroelongatedTriangularCupola } from './johnson/j22-gyroelongated-triangular-cupola.ts';
+import { GyroelongatedSquareCupola } from './johnson/j23-gyroelongated-square-cupola.ts';
+import { GyroelongatedPentagonalCupola } from './johnson/j24-gyroelongated-pentagonal-cupola.ts';
+import { GyroelongatedPentagonalRotunda } from './johnson/j25-gyroelongated-pentagonal-rotunda.ts';
+import { Gyrobifastigium } from './johnson/j26-gyrobifastigium.ts';
 import { TriangularCupola } from './johnson/j03-triangular-cupola.ts';
 import { SquareCupola } from './johnson/j04-square-cupola.ts';
 import { PentagonalCupola } from './johnson/j05-pentagonal-cupola.ts';
@@ -536,6 +555,86 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     factory: () => new DecagonalTrapezohedron(),
   },
   {
+    id: 'j1',
+    name: 'Square Pyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×4 + □×1',
+    faceCount: 5,
+    factory: () => new SquarePyramid(),
+  },
+  {
+    id: 'j2',
+    name: 'Pentagonal Pyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×5 + ⬠×1',
+    faceCount: 6,
+    factory: () => new PentagonalPyramid(),
+  },
+  {
+    id: 'j7',
+    name: 'Elongated Triangular Pyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×4 + □×3',
+    faceCount: 7,
+    factory: () => new ElongatedTriangularPyramid(),
+  },
+  {
+    id: 'j8',
+    name: 'Elongated Square Pyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×4 + □×5',
+    faceCount: 9,
+    factory: () => new ElongatedSquarePyramid(),
+  },
+  {
+    id: 'j9',
+    name: 'Elongated Pentagonal Pyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×5 + □×5 + ⬠×1',
+    faceCount: 11,
+    factory: () => new ElongatedPentagonalPyramid(),
+  },
+  {
+    id: 'j10',
+    name: 'Gyroelongated Square Pyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×12 + □×1',
+    faceCount: 13,
+    factory: () => new GyroelongatedSquarePyramid(),
+  },
+  {
+    id: 'j11',
+    name: 'Gyroelongated Pentagonal Pyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×15 + ⬠×1',
+    faceCount: 16,
+    factory: () => new GyroelongatedPentagonalPyramid(),
+  },
+  {
+    id: 'j14',
+    name: 'Elongated Triangular Bipyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×6 + □×3',
+    faceCount: 9,
+    factory: () => new ElongatedTriangularBipyramid(),
+  },
+  {
+    id: 'j15',
+    name: 'Elongated Square Bipyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×8 + □×4',
+    faceCount: 12,
+    factory: () => new ElongatedSquareBipyramid(),
+  },
+  {
+    id: 'j16',
+    name: 'Elongated Pentagonal Bipyramid',
+    category: 'johnson-pyramid',
+    faceComposition: '△×10 + □×5',
+    faceCount: 15,
+    factory: () => new ElongatedPentagonalBipyramid(),
+  },
+  {
     id: 'j3',
     name: 'Triangular Cupola',
     category: 'johnson-cupola',
@@ -566,6 +665,78 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '△×10 + ⬠×6 + 10gon×1',
     faceCount: 17,
     factory: () => new PentagonalRotunda(),
+  },
+  {
+    id: 'j18',
+    name: 'Elongated Triangular Cupola',
+    category: 'johnson-elongated-cupola',
+    faceComposition: '△×4 + □×9 + ⬡×1',
+    faceCount: 14,
+    factory: () => new ElongatedTriangularCupola(),
+  },
+  {
+    id: 'j19',
+    name: 'Elongated Square Cupola',
+    category: 'johnson-elongated-cupola',
+    faceComposition: '△×4 + □×13 + 8gon×1',
+    faceCount: 18,
+    factory: () => new ElongatedSquareCupola(),
+  },
+  {
+    id: 'j20',
+    name: 'Elongated Pentagonal Cupola',
+    category: 'johnson-elongated-cupola',
+    faceComposition: '△×5 + □×15 + ⬠×1 + 10gon×1',
+    faceCount: 22,
+    factory: () => new ElongatedPentagonalCupola(),
+  },
+  {
+    id: 'j21',
+    name: 'Elongated Pentagonal Rotunda',
+    category: 'johnson-elongated-cupola',
+    faceComposition: '△×10 + □×10 + ⬠×6 + 10gon×1',
+    faceCount: 27,
+    factory: () => new ElongatedPentagonalRotunda(),
+  },
+  {
+    id: 'j22',
+    name: 'Gyroelongated Triangular Cupola',
+    category: 'johnson-elongated-cupola',
+    faceComposition: '△×16 + □×3 + ⬡×1',
+    faceCount: 20,
+    factory: () => new GyroelongatedTriangularCupola(),
+  },
+  {
+    id: 'j23',
+    name: 'Gyroelongated Square Cupola',
+    category: 'johnson-elongated-cupola',
+    faceComposition: '△×20 + □×5 + 8gon×1',
+    faceCount: 26,
+    factory: () => new GyroelongatedSquareCupola(),
+  },
+  {
+    id: 'j24',
+    name: 'Gyroelongated Pentagonal Cupola',
+    category: 'johnson-elongated-cupola',
+    faceComposition: '△×25 + □×5 + ⬠×1 + 10gon×1',
+    faceCount: 32,
+    factory: () => new GyroelongatedPentagonalCupola(),
+  },
+  {
+    id: 'j25',
+    name: 'Gyroelongated Pentagonal Rotunda',
+    category: 'johnson-elongated-cupola',
+    faceComposition: '△×30 + ⬠×6 + 10gon×1',
+    faceCount: 37,
+    factory: () => new GyroelongatedPentagonalRotunda(),
+  },
+  {
+    id: 'j26',
+    name: 'Gyrobifastigium',
+    category: 'johnson-sporadic',
+    faceComposition: '△×4 + □×4',
+    faceCount: 8,
+    factory: () => new Gyrobifastigium(),
   },
   {
     id: 'j27',
