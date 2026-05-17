@@ -31,6 +31,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const el = <T extends HTMLElement>(id: string) => container.querySelector<T>(`#${id}`)!;
 
   const categorySelect = el<HTMLSelectElement>('ctrl-category');
+  const shapeFilter = el<HTMLInputElement>('ctrl-shape-filter');
   const shapeSelect = el<HTMLSelectElement>('ctrl-shape');
   const shapeInfo = el<HTMLDivElement>('ctrl-shape-info');
   const nSlider = el<HTMLInputElement>('ctrl-n');
@@ -52,13 +53,23 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
 
   function shapesInScope(): ShapeDescriptor[] {
     const cat = categorySelect.value as CategoryScope;
-    return cat === ALL_CATEGORIES ? [...SHAPES] : shapesByCategory(cat as ShapeCategory);
+    const baseList = cat === ALL_CATEGORIES ? [...SHAPES] : shapesByCategory(cat as ShapeCategory);
+    const q = shapeFilter.value.trim().toLowerCase();
+    if (!q) return baseList;
+    return baseList.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q),
+    );
   }
 
   function renderShapeOptions(preselectId?: string) {
     const cat = categorySelect.value as CategoryScope;
     const showCategoryGroups = cat === ALL_CATEGORIES;
     const shapes = shapesInScope();
+    if (shapes.length === 0) {
+      shapeSelect.innerHTML = '<option value="" disabled selected>No matches</option>';
+      shapeInfo.textContent = 'No shapes match filter';
+      return;
+    }
 
     let html = '';
     if (showCategoryGroups) {
@@ -101,6 +112,11 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   categorySelect.addEventListener('change', () => {
     renderShapeOptions();
     fire();
+  });
+  shapeFilter.addEventListener('input', () => {
+    const prev = shapeSelect.value;
+    renderShapeOptions(prev);
+    if (shapeSelect.value && shapeSelect.value !== prev) fire();
   });
   shapeSelect.addEventListener('change', () => { updateShapeInfo(); fire(); });
 
@@ -201,6 +217,7 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
     </label>
 
     <label>Shape
+      <input id="ctrl-shape-filter" type="search" placeholder="Filter shapes…" autocomplete="off" />
       <select id="ctrl-shape"></select>
     </label>
     <div class="shape-info" id="ctrl-shape-info"></div>

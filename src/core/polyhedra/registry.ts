@@ -84,6 +84,20 @@ import { PentagonalGyrobicupola } from './johnson/j31-pentagonal-gyrobicupola.ts
 import { PentagonalOrthocupolarotunda } from './johnson/j32-pentagonal-orthocupolarotunda.ts';
 import { PentagonalGyrocupolarotunda } from './johnson/j33-pentagonal-gyrocupolarotunda.ts';
 import { PentagonalOrthobirotunda } from './johnson/j34-pentagonal-orthobirotunda.ts';
+import { ElongatedTriangularOrthobicupola } from './johnson/j35-elongated-triangular-orthobicupola.ts';
+import { ElongatedTriangularGyrobicupola } from './johnson/j36-elongated-triangular-gyrobicupola.ts';
+import { ElongatedSquareGyrobicupola } from './johnson/j37-elongated-square-gyrobicupola.ts';
+import { ElongatedPentagonalOrthobicupola } from './johnson/j38-elongated-pentagonal-orthobicupola.ts';
+import { ElongatedPentagonalGyrobicupola } from './johnson/j39-elongated-pentagonal-gyrobicupola.ts';
+import { ElongatedPentagonalOrthocupolarotunda } from './johnson/j40-elongated-pentagonal-orthocupolarotunda.ts';
+import { ElongatedPentagonalGyrocupolarotunda } from './johnson/j41-elongated-pentagonal-gyrocupolarotunda.ts';
+import { ElongatedPentagonalOrthobirotunda } from './johnson/j42-elongated-pentagonal-orthobirotunda.ts';
+import { ElongatedPentagonalGyrobirotunda } from './johnson/j43-elongated-pentagonal-gyrobirotunda.ts';
+import { GyroelongatedTriangularBicupola } from './johnson/j44-gyroelongated-triangular-bicupola.ts';
+import { GyroelongatedSquareBicupola } from './johnson/j45-gyroelongated-square-bicupola.ts';
+import { GyroelongatedPentagonalBicupola } from './johnson/j46-gyroelongated-pentagonal-bicupola.ts';
+import { GyroelongatedPentagonalCupolarotunda } from './johnson/j47-gyroelongated-pentagonal-cupolarotunda.ts';
+import { GyroelongatedPentagonalBirotunda } from './johnson/j48-gyroelongated-pentagonal-birotunda.ts';
 import { AugmentedTriangularPrism } from './johnson/j49-augmented-triangular-prism.ts';
 import { BiaugmentedTriangularPrism } from './johnson/j50-biaugmented-triangular-prism.ts';
 import { AugmentedPentagonalPrism } from './johnson/j52-augmented-pentagonal-prism.ts';
@@ -96,6 +110,21 @@ import { AugmentedDodecahedron } from './johnson/j58-augmented-dodecahedron.ts';
 import { ParabiaugmentedDodecahedron } from './johnson/j59-parabiaugmented-dodecahedron.ts';
 import { MetabiaugmentedDodecahedron } from './johnson/j60-metabiaugmented-dodecahedron.ts';
 import { TriaugmentedDodecahedron } from './johnson/j61-triaugmented-dodecahedron.ts';
+import { MetabidiminishedIcosahedron } from './johnson/j62-metabidiminished-icosahedron.ts';
+import { TridiminishedIcosahedron } from './johnson/j63-tridiminished-icosahedron.ts';
+import { AugmentedTridiminishedIcosahedron } from './johnson/j64-augmented-tridiminished-icosahedron.ts';
+import { GyrateRhombicosidodecahedron } from './johnson/j72-gyrate-rhombicosidodecahedron.ts';
+import { ParabigyrateRhombicosidodecahedron } from './johnson/j73-parabigyrate-rhombicosidodecahedron.ts';
+import { MetabigyrateRhombicosidodecahedron } from './johnson/j74-metabigyrate-rhombicosidodecahedron.ts';
+import { TrigyrateRhombicosidodecahedron } from './johnson/j75-trigyrate-rhombicosidodecahedron.ts';
+import { DiminishedRhombicosidodecahedron } from './johnson/j76-diminished-rhombicosidodecahedron.ts';
+import { ParagyrateDiminishedRhombicosidodecahedron } from './johnson/j77-paragyrate-diminished-rhombicosidodecahedron.ts';
+import { MetagyrateDiminishedRhombicosidodecahedron } from './johnson/j78-metagyrate-diminished-rhombicosidodecahedron.ts';
+import { BigyrateDiminishedRhombicosidodecahedron } from './johnson/j79-bigyrate-diminished-rhombicosidodecahedron.ts';
+import { ParabidiminishedRhombicosidodecahedron } from './johnson/j80-parabidiminished-rhombicosidodecahedron.ts';
+import { MetabidiminishedRhombicosidodecahedron } from './johnson/j81-metabidiminished-rhombicosidodecahedron.ts';
+import { GyrateBidiminishedRhombicosidodecahedron } from './johnson/j82-gyrate-bidiminished-rhombicosidodecahedron.ts';
+import { TridiminishedRhombicosidodecahedron } from './johnson/j83-tridiminished-rhombicosidodecahedron.ts';
 import { AugmentedTruncatedTetrahedron } from './johnson/j65-augmented-truncated-tetrahedron.ts';
 import { AugmentedTruncatedCube } from './johnson/j66-augmented-truncated-cube.ts';
 import { BiaugmentedTruncatedCube } from './johnson/j67-biaugmented-truncated-cube.ts';
@@ -115,9 +144,12 @@ export type ShapeCategory =
   | 'johnson-bicupola'
   | 'johnson-pyramid'
   | 'johnson-elongated-cupola'
+  | 'johnson-elongated-bicupola'
   | 'johnson-augmented-prism'
   | 'johnson-augmented-dodeca'
   | 'johnson-augmented-truncated'
+  | 'johnson-diminished-icosa'
+  | 'johnson-rhombic-mods'
   | 'johnson-sporadic';
 
 export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
@@ -131,9 +163,12 @@ export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
   'johnson-bicupola': 'Johnson: Bicupolae & Birotunda',
   'johnson-pyramid': 'Johnson: Pyramids & Elongated',
   'johnson-elongated-cupola': 'Johnson: Elongated Cupolae',
+  'johnson-elongated-bicupola': 'Johnson: Elongated Bicupolae',
   'johnson-augmented-prism': 'Johnson: Augmented Prisms',
   'johnson-augmented-dodeca': 'Johnson: Augmented Dodecahedra',
   'johnson-augmented-truncated': 'Johnson: Augmented Truncated',
+  'johnson-diminished-icosa': 'Johnson: Diminished Icosahedra',
+  'johnson-rhombic-mods': 'Johnson: Rhombicosi. Mods',
   'johnson-sporadic': 'Johnson: Sporadic',
 };
 
@@ -828,6 +863,118 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     factory: () => new PentagonalOrthobirotunda(),
   },
   {
+    id: 'j35',
+    name: 'Elongated Triangular Orthobicupola',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×8 + □×12',
+    faceCount: 20,
+    factory: () => new ElongatedTriangularOrthobicupola(),
+  },
+  {
+    id: 'j36',
+    name: 'Elongated Triangular Gyrobicupola',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×8 + □×12',
+    faceCount: 20,
+    factory: () => new ElongatedTriangularGyrobicupola(),
+  },
+  {
+    id: 'j37',
+    name: 'Elongated Square Gyrobicupola',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×8 + □×18',
+    faceCount: 26,
+    factory: () => new ElongatedSquareGyrobicupola(),
+  },
+  {
+    id: 'j38',
+    name: 'Elongated Pentagonal Orthobicupola',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×10 + □×20 + ⬠×2',
+    faceCount: 32,
+    factory: () => new ElongatedPentagonalOrthobicupola(),
+  },
+  {
+    id: 'j39',
+    name: 'Elongated Pentagonal Gyrobicupola',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×10 + □×20 + ⬠×2',
+    faceCount: 32,
+    factory: () => new ElongatedPentagonalGyrobicupola(),
+  },
+  {
+    id: 'j40',
+    name: 'Elongated Pentagonal Orthocupolarotunda',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×15 + □×15 + ⬠×7',
+    faceCount: 37,
+    factory: () => new ElongatedPentagonalOrthocupolarotunda(),
+  },
+  {
+    id: 'j41',
+    name: 'Elongated Pentagonal Gyrocupolarotunda',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×15 + □×15 + ⬠×7',
+    faceCount: 37,
+    factory: () => new ElongatedPentagonalGyrocupolarotunda(),
+  },
+  {
+    id: 'j42',
+    name: 'Elongated Pentagonal Orthobirotunda',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×20 + □×10 + ⬠×12',
+    faceCount: 42,
+    factory: () => new ElongatedPentagonalOrthobirotunda(),
+  },
+  {
+    id: 'j43',
+    name: 'Elongated Pentagonal Gyrobirotunda',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×20 + □×10 + ⬠×12',
+    faceCount: 42,
+    factory: () => new ElongatedPentagonalGyrobirotunda(),
+  },
+  {
+    id: 'j44',
+    name: 'Gyroelongated Triangular Bicupola',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×20 + □×6',
+    faceCount: 26,
+    factory: () => new GyroelongatedTriangularBicupola(),
+  },
+  {
+    id: 'j45',
+    name: 'Gyroelongated Square Bicupola',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×24 + □×10',
+    faceCount: 34,
+    factory: () => new GyroelongatedSquareBicupola(),
+  },
+  {
+    id: 'j46',
+    name: 'Gyroelongated Pentagonal Bicupola',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×30 + □×10 + ⬠×2',
+    faceCount: 42,
+    factory: () => new GyroelongatedPentagonalBicupola(),
+  },
+  {
+    id: 'j47',
+    name: 'Gyroelongated Pentagonal Cupolarotunda',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×35 + □×5 + ⬠×7',
+    faceCount: 47,
+    factory: () => new GyroelongatedPentagonalCupolarotunda(),
+  },
+  {
+    id: 'j48',
+    name: 'Gyroelongated Pentagonal Birotunda',
+    category: 'johnson-elongated-bicupola',
+    faceComposition: '△×40 + ⬠×12',
+    faceCount: 52,
+    factory: () => new GyroelongatedPentagonalBirotunda(),
+  },
+  {
     id: 'j49',
     name: 'Augmented Triangular Prism',
     category: 'johnson-augmented-prism',
@@ -924,6 +1071,30 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     factory: () => new TriaugmentedDodecahedron(),
   },
   {
+    id: 'j62',
+    name: 'Metabidiminished Icosahedron',
+    category: 'johnson-diminished-icosa',
+    faceComposition: '△×10 + ⬠×2',
+    faceCount: 12,
+    factory: () => new MetabidiminishedIcosahedron(),
+  },
+  {
+    id: 'j63',
+    name: 'Tridiminished Icosahedron',
+    category: 'johnson-diminished-icosa',
+    faceComposition: '△×5 + ⬠×3',
+    faceCount: 8,
+    factory: () => new TridiminishedIcosahedron(),
+  },
+  {
+    id: 'j64',
+    name: 'Augmented Tridiminished Icosahedron',
+    category: 'johnson-diminished-icosa',
+    faceComposition: '△×7 + ⬠×3',
+    faceCount: 10,
+    factory: () => new AugmentedTridiminishedIcosahedron(),
+  },
+  {
     id: 'j65',
     name: 'Augmented Truncated Tetrahedron',
     category: 'johnson-augmented-truncated',
@@ -978,6 +1149,102 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '△×35 + □×15 + ⬠×3 + 10gon×9',
     faceCount: 62,
     factory: () => new TriaugmentedTruncatedDodecahedron(),
+  },
+  {
+    id: 'j72',
+    name: 'Gyrate Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×20 + □×30 + ⬠×12',
+    faceCount: 62,
+    factory: () => new GyrateRhombicosidodecahedron(),
+  },
+  {
+    id: 'j73',
+    name: 'Parabigyrate Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×20 + □×30 + ⬠×12',
+    faceCount: 62,
+    factory: () => new ParabigyrateRhombicosidodecahedron(),
+  },
+  {
+    id: 'j74',
+    name: 'Metabigyrate Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×20 + □×30 + ⬠×12',
+    faceCount: 62,
+    factory: () => new MetabigyrateRhombicosidodecahedron(),
+  },
+  {
+    id: 'j75',
+    name: 'Trigyrate Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×20 + □×30 + ⬠×12',
+    faceCount: 62,
+    factory: () => new TrigyrateRhombicosidodecahedron(),
+  },
+  {
+    id: 'j76',
+    name: 'Diminished Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×15 + □×25 + ⬠×11 + 10gon×1',
+    faceCount: 52,
+    factory: () => new DiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j77',
+    name: 'Paragyrate Diminished Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×15 + □×25 + ⬠×11 + 10gon×1',
+    faceCount: 52,
+    factory: () => new ParagyrateDiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j78',
+    name: 'Metagyrate Diminished Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×15 + □×25 + ⬠×11 + 10gon×1',
+    faceCount: 52,
+    factory: () => new MetagyrateDiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j79',
+    name: 'Bigyrate Diminished Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×15 + □×25 + ⬠×11 + 10gon×1',
+    faceCount: 52,
+    factory: () => new BigyrateDiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j80',
+    name: 'Parabidiminished Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×10 + □×20 + ⬠×10 + 10gon×2',
+    faceCount: 42,
+    factory: () => new ParabidiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j81',
+    name: 'Metabidiminished Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×10 + □×20 + ⬠×10 + 10gon×2',
+    faceCount: 42,
+    factory: () => new MetabidiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j82',
+    name: 'Gyrate Bidiminished Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×10 + □×20 + ⬠×10 + 10gon×2',
+    faceCount: 42,
+    factory: () => new GyrateBidiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j83',
+    name: 'Tridiminished Rhombicosidodecahedron',
+    category: 'johnson-rhombic-mods',
+    faceComposition: '△×5 + □×15 + ⬠×9 + 10gon×3',
+    faceCount: 32,
+    factory: () => new TridiminishedRhombicosidodecahedron(),
   },
 ];
 
