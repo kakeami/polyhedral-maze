@@ -84,6 +84,25 @@ import { PentagonalGyrobicupola } from './johnson/j31-pentagonal-gyrobicupola.ts
 import { PentagonalOrthocupolarotunda } from './johnson/j32-pentagonal-orthocupolarotunda.ts';
 import { PentagonalGyrocupolarotunda } from './johnson/j33-pentagonal-gyrocupolarotunda.ts';
 import { PentagonalOrthobirotunda } from './johnson/j34-pentagonal-orthobirotunda.ts';
+import { AugmentedTriangularPrism } from './johnson/j49-augmented-triangular-prism.ts';
+import { BiaugmentedTriangularPrism } from './johnson/j50-biaugmented-triangular-prism.ts';
+import { AugmentedPentagonalPrism } from './johnson/j52-augmented-pentagonal-prism.ts';
+import { BiaugmentedPentagonalPrism } from './johnson/j53-biaugmented-pentagonal-prism.ts';
+import { AugmentedHexagonalPrism } from './johnson/j54-augmented-hexagonal-prism.ts';
+import { ParabiaugmentedHexagonalPrism } from './johnson/j55-parabiaugmented-hexagonal-prism.ts';
+import { MetabiaugmentedHexagonalPrism } from './johnson/j56-metabiaugmented-hexagonal-prism.ts';
+import { TriaugmentedHexagonalPrism } from './johnson/j57-triaugmented-hexagonal-prism.ts';
+import { AugmentedDodecahedron } from './johnson/j58-augmented-dodecahedron.ts';
+import { ParabiaugmentedDodecahedron } from './johnson/j59-parabiaugmented-dodecahedron.ts';
+import { MetabiaugmentedDodecahedron } from './johnson/j60-metabiaugmented-dodecahedron.ts';
+import { TriaugmentedDodecahedron } from './johnson/j61-triaugmented-dodecahedron.ts';
+import { AugmentedTruncatedTetrahedron } from './johnson/j65-augmented-truncated-tetrahedron.ts';
+import { AugmentedTruncatedCube } from './johnson/j66-augmented-truncated-cube.ts';
+import { BiaugmentedTruncatedCube } from './johnson/j67-biaugmented-truncated-cube.ts';
+import { AugmentedTruncatedDodecahedron } from './johnson/j68-augmented-truncated-dodecahedron.ts';
+import { ParabiaugmentedTruncatedDodecahedron } from './johnson/j69-parabiaugmented-truncated-dodecahedron.ts';
+import { MetabiaugmentedTruncatedDodecahedron } from './johnson/j70-metabiaugmented-truncated-dodecahedron.ts';
+import { TriaugmentedTruncatedDodecahedron } from './johnson/j71-triaugmented-truncated-dodecahedron.ts';
 
 export type ShapeCategory =
   | 'platonic'
@@ -96,6 +115,9 @@ export type ShapeCategory =
   | 'johnson-bicupola'
   | 'johnson-pyramid'
   | 'johnson-elongated-cupola'
+  | 'johnson-augmented-prism'
+  | 'johnson-augmented-dodeca'
+  | 'johnson-augmented-truncated'
   | 'johnson-sporadic';
 
 export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
@@ -109,6 +131,9 @@ export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
   'johnson-bicupola': 'Johnson: Bicupolae & Birotunda',
   'johnson-pyramid': 'Johnson: Pyramids & Elongated',
   'johnson-elongated-cupola': 'Johnson: Elongated Cupolae',
+  'johnson-augmented-prism': 'Johnson: Augmented Prisms',
+  'johnson-augmented-dodeca': 'Johnson: Augmented Dodecahedra',
+  'johnson-augmented-truncated': 'Johnson: Augmented Truncated',
   'johnson-sporadic': 'Johnson: Sporadic',
 };
 
@@ -801,6 +826,158 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '△×20 + ⬠×12',
     faceCount: 32,
     factory: () => new PentagonalOrthobirotunda(),
+  },
+  {
+    id: 'j49',
+    name: 'Augmented Triangular Prism',
+    category: 'johnson-augmented-prism',
+    faceComposition: '△×6 + □×2',
+    faceCount: 8,
+    factory: () => new AugmentedTriangularPrism(),
+  },
+  {
+    id: 'j50',
+    name: 'Biaugmented Triangular Prism',
+    category: 'johnson-augmented-prism',
+    faceComposition: '△×10 + □×1',
+    faceCount: 11,
+    factory: () => new BiaugmentedTriangularPrism(),
+  },
+  {
+    id: 'j52',
+    name: 'Augmented Pentagonal Prism',
+    category: 'johnson-augmented-prism',
+    faceComposition: '△×4 + □×4 + ⬠×2',
+    faceCount: 10,
+    factory: () => new AugmentedPentagonalPrism(),
+  },
+  {
+    id: 'j53',
+    name: 'Biaugmented Pentagonal Prism',
+    category: 'johnson-augmented-prism',
+    faceComposition: '△×8 + □×3 + ⬠×2',
+    faceCount: 13,
+    factory: () => new BiaugmentedPentagonalPrism(),
+  },
+  {
+    id: 'j54',
+    name: 'Augmented Hexagonal Prism',
+    category: 'johnson-augmented-prism',
+    faceComposition: '△×4 + □×5 + ⬡×2',
+    faceCount: 11,
+    factory: () => new AugmentedHexagonalPrism(),
+  },
+  {
+    id: 'j55',
+    name: 'Parabiaugmented Hexagonal Prism',
+    category: 'johnson-augmented-prism',
+    faceComposition: '△×8 + □×4 + ⬡×2',
+    faceCount: 14,
+    factory: () => new ParabiaugmentedHexagonalPrism(),
+  },
+  {
+    id: 'j56',
+    name: 'Metabiaugmented Hexagonal Prism',
+    category: 'johnson-augmented-prism',
+    faceComposition: '△×8 + □×4 + ⬡×2',
+    faceCount: 14,
+    factory: () => new MetabiaugmentedHexagonalPrism(),
+  },
+  {
+    id: 'j57',
+    name: 'Triaugmented Hexagonal Prism',
+    category: 'johnson-augmented-prism',
+    faceComposition: '△×12 + □×3 + ⬡×2',
+    faceCount: 17,
+    factory: () => new TriaugmentedHexagonalPrism(),
+  },
+  {
+    id: 'j58',
+    name: 'Augmented Dodecahedron',
+    category: 'johnson-augmented-dodeca',
+    faceComposition: '△×5 + ⬠×11',
+    faceCount: 16,
+    factory: () => new AugmentedDodecahedron(),
+  },
+  {
+    id: 'j59',
+    name: 'Parabiaugmented Dodecahedron',
+    category: 'johnson-augmented-dodeca',
+    faceComposition: '△×10 + ⬠×10',
+    faceCount: 20,
+    factory: () => new ParabiaugmentedDodecahedron(),
+  },
+  {
+    id: 'j60',
+    name: 'Metabiaugmented Dodecahedron',
+    category: 'johnson-augmented-dodeca',
+    faceComposition: '△×10 + ⬠×10',
+    faceCount: 20,
+    factory: () => new MetabiaugmentedDodecahedron(),
+  },
+  {
+    id: 'j61',
+    name: 'Triaugmented Dodecahedron',
+    category: 'johnson-augmented-dodeca',
+    faceComposition: '△×15 + ⬠×9',
+    faceCount: 24,
+    factory: () => new TriaugmentedDodecahedron(),
+  },
+  {
+    id: 'j65',
+    name: 'Augmented Truncated Tetrahedron',
+    category: 'johnson-augmented-truncated',
+    faceComposition: '△×8 + □×3 + ⬡×3',
+    faceCount: 14,
+    factory: () => new AugmentedTruncatedTetrahedron(),
+  },
+  {
+    id: 'j66',
+    name: 'Augmented Truncated Cube',
+    category: 'johnson-augmented-truncated',
+    faceComposition: '△×12 + □×5 + 8gon×5',
+    faceCount: 22,
+    factory: () => new AugmentedTruncatedCube(),
+  },
+  {
+    id: 'j67',
+    name: 'Biaugmented Truncated Cube',
+    category: 'johnson-augmented-truncated',
+    faceComposition: '△×16 + □×10 + 8gon×4',
+    faceCount: 30,
+    factory: () => new BiaugmentedTruncatedCube(),
+  },
+  {
+    id: 'j68',
+    name: 'Augmented Truncated Dodecahedron',
+    category: 'johnson-augmented-truncated',
+    faceComposition: '△×25 + □×5 + ⬠×1 + 10gon×11',
+    faceCount: 42,
+    factory: () => new AugmentedTruncatedDodecahedron(),
+  },
+  {
+    id: 'j69',
+    name: 'Parabiaugmented Truncated Dodecahedron',
+    category: 'johnson-augmented-truncated',
+    faceComposition: '△×30 + □×10 + ⬠×2 + 10gon×10',
+    faceCount: 52,
+    factory: () => new ParabiaugmentedTruncatedDodecahedron(),
+  },
+  {
+    id: 'j70',
+    name: 'Metabiaugmented Truncated Dodecahedron',
+    category: 'johnson-augmented-truncated',
+    faceComposition: '△×30 + □×10 + ⬠×2 + 10gon×10',
+    faceCount: 52,
+    factory: () => new MetabiaugmentedTruncatedDodecahedron(),
+  },
+  {
+    id: 'j71',
+    name: 'Triaugmented Truncated Dodecahedron',
+    category: 'johnson-augmented-truncated',
+    faceComposition: '△×35 + □×15 + ⬠×3 + 10gon×9',
+    faceCount: 62,
+    factory: () => new TriaugmentedTruncatedDodecahedron(),
   },
 ];
 
