@@ -53,8 +53,7 @@ html, body {
 }
 
 #controls select,
-#controls input[type="number"],
-#controls input[type="search"] {
+#controls input[type="number"] {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -62,10 +61,6 @@ html, body {
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 14px;
-}
-
-#controls input[type="search"] + select {
-  margin-top: 6px;
 }
 
 #controls input[type="range"] {
