@@ -53,6 +53,18 @@ import { PentagonalTrapezohedron } from './dipyramidal/pentagonal-trapezohedron.
 import { HexagonalTrapezohedron } from './dipyramidal/hexagonal-trapezohedron.ts';
 import { OctagonalTrapezohedron } from './dipyramidal/octagonal-trapezohedron.ts';
 import { DecagonalTrapezohedron } from './dipyramidal/decagonal-trapezohedron.ts';
+import { TriangularCupola } from './johnson/j03-triangular-cupola.ts';
+import { SquareCupola } from './johnson/j04-square-cupola.ts';
+import { PentagonalCupola } from './johnson/j05-pentagonal-cupola.ts';
+import { PentagonalRotunda } from './johnson/j06-pentagonal-rotunda.ts';
+import { TriangularOrthobicupola } from './johnson/j27-triangular-orthobicupola.ts';
+import { SquareOrthobicupola } from './johnson/j28-square-orthobicupola.ts';
+import { SquareGyrobicupola } from './johnson/j29-square-gyrobicupola.ts';
+import { PentagonalOrthobicupola } from './johnson/j30-pentagonal-orthobicupola.ts';
+import { PentagonalGyrobicupola } from './johnson/j31-pentagonal-gyrobicupola.ts';
+import { PentagonalOrthocupolarotunda } from './johnson/j32-pentagonal-orthocupolarotunda.ts';
+import { PentagonalGyrocupolarotunda } from './johnson/j33-pentagonal-gyrocupolarotunda.ts';
+import { PentagonalOrthobirotunda } from './johnson/j34-pentagonal-orthobirotunda.ts';
 
 export type ShapeCategory =
   | 'platonic'
@@ -514,6 +526,102 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: 'kite×20',
     faceCount: 20,
     factory: () => new DecagonalTrapezohedron(),
+  },
+  {
+    id: 'j3',
+    name: 'Triangular Cupola',
+    category: 'johnson',
+    faceComposition: '△×4 + □×3 + ⬡×1',
+    faceCount: 8,
+    factory: () => new TriangularCupola(),
+  },
+  {
+    id: 'j4',
+    name: 'Square Cupola',
+    category: 'johnson',
+    faceComposition: '△×4 + □×5 + 8gon×1',
+    faceCount: 10,
+    factory: () => new SquareCupola(),
+  },
+  {
+    id: 'j5',
+    name: 'Pentagonal Cupola',
+    category: 'johnson',
+    faceComposition: '△×5 + □×5 + ⬠×1 + 10gon×1',
+    faceCount: 12,
+    factory: () => new PentagonalCupola(),
+  },
+  {
+    id: 'j6',
+    name: 'Pentagonal Rotunda',
+    category: 'johnson',
+    faceComposition: '△×10 + ⬠×6 + 10gon×1',
+    faceCount: 17,
+    factory: () => new PentagonalRotunda(),
+  },
+  {
+    id: 'j27',
+    name: 'Triangular Orthobicupola',
+    category: 'johnson',
+    faceComposition: '△×8 + □×6',
+    faceCount: 14,
+    factory: () => new TriangularOrthobicupola(),
+  },
+  {
+    id: 'j28',
+    name: 'Square Orthobicupola',
+    category: 'johnson',
+    faceComposition: '△×8 + □×10',
+    faceCount: 18,
+    factory: () => new SquareOrthobicupola(),
+  },
+  {
+    id: 'j29',
+    name: 'Square Gyrobicupola',
+    category: 'johnson',
+    faceComposition: '△×8 + □×10',
+    faceCount: 18,
+    factory: () => new SquareGyrobicupola(),
+  },
+  {
+    id: 'j30',
+    name: 'Pentagonal Orthobicupola',
+    category: 'johnson',
+    faceComposition: '△×10 + □×10 + ⬠×2',
+    faceCount: 22,
+    factory: () => new PentagonalOrthobicupola(),
+  },
+  {
+    id: 'j31',
+    name: 'Pentagonal Gyrobicupola',
+    category: 'johnson',
+    faceComposition: '△×10 + □×10 + ⬠×2',
+    faceCount: 22,
+    factory: () => new PentagonalGyrobicupola(),
+  },
+  {
+    id: 'j32',
+    name: 'Pentagonal Orthocupolarotunda',
+    category: 'johnson',
+    faceComposition: '△×15 + □×5 + ⬠×7',
+    faceCount: 27,
+    factory: () => new PentagonalOrthocupolarotunda(),
+  },
+  {
+    id: 'j33',
+    name: 'Pentagonal Gyrocupolarotunda',
+    category: 'johnson',
+    faceComposition: '△×15 + □×5 + ⬠×7',
+    faceCount: 27,
+    factory: () => new PentagonalGyrocupolarotunda(),
+  },
+  {
+    id: 'j34',
+    name: 'Pentagonal Orthobirotunda',
+    category: 'johnson',
+    faceComposition: '△×20 + ⬠×12',
+    faceCount: 32,
+    factory: () => new PentagonalOrthobirotunda(),
   },
 ];
 

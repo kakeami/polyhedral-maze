@@ -1,0 +1,12 @@
+export { TriangularCupola } from './j03-triangular-cupola.ts';
+export { SquareCupola } from './j04-square-cupola.ts';
+export { PentagonalCupola } from './j05-pentagonal-cupola.ts';
+export { PentagonalRotunda } from './j06-pentagonal-rotunda.ts';
+export { TriangularOrthobicupola } from './j27-triangular-orthobicupola.ts';
+export { SquareOrthobicupola } from './j28-square-orthobicupola.ts';
+export { SquareGyrobicupola } from './j29-square-gyrobicupola.ts';
+export { PentagonalOrthobicupola } from './j30-pentagonal-orthobicupola.ts';
+export { PentagonalGyrobicupola } from './j31-pentagonal-gyrobicupola.ts';
+export { PentagonalOrthocupolarotunda } from './j32-pentagonal-orthocupolarotunda.ts';
+export { PentagonalGyrocupolarotunda } from './j33-pentagonal-gyrocupolarotunda.ts';
+export { PentagonalOrthobirotunda } from './j34-pentagonal-orthobirotunda.ts';

@@ -4,6 +4,7 @@ export * from './catalan/index.ts';
 export * from './deltahedra/index.ts';
 export * from './prismatic/index.ts';
 export * from './dipyramidal/index.ts';
+export * from './johnson/index.ts';
 export * from './grids/index.ts';
 export {
   SHAPES,
