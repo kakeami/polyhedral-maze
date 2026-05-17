@@ -45,6 +45,14 @@ import { PentagonalAntiprism } from './prismatic/pentagonal-antiprism.ts';
 import { HexagonalAntiprism } from './prismatic/hexagonal-antiprism.ts';
 import { OctagonalAntiprism } from './prismatic/octagonal-antiprism.ts';
 import { DecagonalAntiprism } from './prismatic/decagonal-antiprism.ts';
+import { HexagonalBipyramid } from './dipyramidal/hexagonal-bipyramid.ts';
+import { OctagonalBipyramid } from './dipyramidal/octagonal-bipyramid.ts';
+import { DecagonalBipyramid } from './dipyramidal/decagonal-bipyramid.ts';
+import { TetragonalTrapezohedron } from './dipyramidal/tetragonal-trapezohedron.ts';
+import { PentagonalTrapezohedron } from './dipyramidal/pentagonal-trapezohedron.ts';
+import { HexagonalTrapezohedron } from './dipyramidal/hexagonal-trapezohedron.ts';
+import { OctagonalTrapezohedron } from './dipyramidal/octagonal-trapezohedron.ts';
+import { DecagonalTrapezohedron } from './dipyramidal/decagonal-trapezohedron.ts';
 
 export type ShapeCategory =
   | 'platonic'
@@ -52,6 +60,7 @@ export type ShapeCategory =
   | 'catalan'
   | 'deltahedra'
   | 'prismatic'
+  | 'dipyramidal'
   | 'johnson';
 
 export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
@@ -60,6 +69,7 @@ export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
   catalan: 'Catalan',
   deltahedra: 'Deltahedra',
   prismatic: 'Prismatic',
+  dipyramidal: 'Dipyramidal',
   johnson: 'Johnson',
 };
 
@@ -440,6 +450,70 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '10gon×2 + △×20',
     faceCount: 22,
     factory: () => new DecagonalAntiprism(),
+  },
+  {
+    id: 'hexagonal-bipyramid',
+    name: 'Hexagonal Bipyramid',
+    category: 'dipyramidal',
+    faceComposition: '△×12',
+    faceCount: 12,
+    factory: () => new HexagonalBipyramid(),
+  },
+  {
+    id: 'octagonal-bipyramid',
+    name: 'Octagonal Bipyramid',
+    category: 'dipyramidal',
+    faceComposition: '△×16',
+    faceCount: 16,
+    factory: () => new OctagonalBipyramid(),
+  },
+  {
+    id: 'decagonal-bipyramid',
+    name: 'Decagonal Bipyramid',
+    category: 'dipyramidal',
+    faceComposition: '△×20',
+    faceCount: 20,
+    factory: () => new DecagonalBipyramid(),
+  },
+  {
+    id: 'tetragonal-trapezohedron',
+    name: 'Tetragonal Trapezohedron',
+    category: 'dipyramidal',
+    faceComposition: 'kite×8',
+    faceCount: 8,
+    factory: () => new TetragonalTrapezohedron(),
+  },
+  {
+    id: 'pentagonal-trapezohedron',
+    name: 'Pentagonal Trapezohedron',
+    category: 'dipyramidal',
+    faceComposition: 'kite×10',
+    faceCount: 10,
+    factory: () => new PentagonalTrapezohedron(),
+  },
+  {
+    id: 'hexagonal-trapezohedron',
+    name: 'Hexagonal Trapezohedron',
+    category: 'dipyramidal',
+    faceComposition: 'kite×12',
+    faceCount: 12,
+    factory: () => new HexagonalTrapezohedron(),
+  },
+  {
+    id: 'octagonal-trapezohedron',
+    name: 'Octagonal Trapezohedron',
+    category: 'dipyramidal',
+    faceComposition: 'kite×16',
+    faceCount: 16,
+    factory: () => new OctagonalTrapezohedron(),
+  },
+  {
+    id: 'decagonal-trapezohedron',
+    name: 'Decagonal Trapezohedron',
+    category: 'dipyramidal',
+    faceComposition: 'kite×20',
+    faceCount: 20,
+    factory: () => new DecagonalTrapezohedron(),
   },
 ];
 
