@@ -35,12 +35,23 @@ import { PentagonalBipyramid } from './deltahedra/pentagonal-bipyramid.ts';
 import { SnubDisphenoid } from './deltahedra/snub-disphenoid.ts';
 import { TriaugmentedTriangularPrism } from './deltahedra/triaugmented-triangular-prism.ts';
 import { GyroelongatedSquareBipyramid } from './deltahedra/gyroelongated-square-bipyramid.ts';
+import { TriangularPrism } from './prismatic/triangular-prism.ts';
+import { PentagonalPrism } from './prismatic/pentagonal-prism.ts';
+import { HexagonalPrism } from './prismatic/hexagonal-prism.ts';
+import { OctagonalPrism } from './prismatic/octagonal-prism.ts';
+import { DecagonalPrism } from './prismatic/decagonal-prism.ts';
+import { SquareAntiprism } from './prismatic/square-antiprism.ts';
+import { PentagonalAntiprism } from './prismatic/pentagonal-antiprism.ts';
+import { HexagonalAntiprism } from './prismatic/hexagonal-antiprism.ts';
+import { OctagonalAntiprism } from './prismatic/octagonal-antiprism.ts';
+import { DecagonalAntiprism } from './prismatic/decagonal-antiprism.ts';
 
 export type ShapeCategory =
   | 'platonic'
   | 'archimedean'
   | 'catalan'
   | 'deltahedra'
+  | 'prismatic'
   | 'johnson';
 
 export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
@@ -48,6 +59,7 @@ export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
   archimedean: 'Archimedean',
   catalan: 'Catalan',
   deltahedra: 'Deltahedra',
+  prismatic: 'Prismatic',
   johnson: 'Johnson',
 };
 
@@ -348,6 +360,86 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '△×16',
     faceCount: 16,
     factory: () => new GyroelongatedSquareBipyramid(),
+  },
+  {
+    id: 'triangular-prism',
+    name: 'Triangular Prism',
+    category: 'prismatic',
+    faceComposition: '△×2 + □×3',
+    faceCount: 5,
+    factory: () => new TriangularPrism(),
+  },
+  {
+    id: 'pentagonal-prism',
+    name: 'Pentagonal Prism',
+    category: 'prismatic',
+    faceComposition: '⬠×2 + □×5',
+    faceCount: 7,
+    factory: () => new PentagonalPrism(),
+  },
+  {
+    id: 'hexagonal-prism',
+    name: 'Hexagonal Prism',
+    category: 'prismatic',
+    faceComposition: '⬡×2 + □×6',
+    faceCount: 8,
+    factory: () => new HexagonalPrism(),
+  },
+  {
+    id: 'octagonal-prism',
+    name: 'Octagonal Prism',
+    category: 'prismatic',
+    faceComposition: '8gon×2 + □×8',
+    faceCount: 10,
+    factory: () => new OctagonalPrism(),
+  },
+  {
+    id: 'decagonal-prism',
+    name: 'Decagonal Prism',
+    category: 'prismatic',
+    faceComposition: '10gon×2 + □×10',
+    faceCount: 12,
+    factory: () => new DecagonalPrism(),
+  },
+  {
+    id: 'square-antiprism',
+    name: 'Square Antiprism',
+    category: 'prismatic',
+    faceComposition: '□×2 + △×8',
+    faceCount: 10,
+    factory: () => new SquareAntiprism(),
+  },
+  {
+    id: 'pentagonal-antiprism',
+    name: 'Pentagonal Antiprism',
+    category: 'prismatic',
+    faceComposition: '⬠×2 + △×10',
+    faceCount: 12,
+    factory: () => new PentagonalAntiprism(),
+  },
+  {
+    id: 'hexagonal-antiprism',
+    name: 'Hexagonal Antiprism',
+    category: 'prismatic',
+    faceComposition: '⬡×2 + △×12',
+    faceCount: 14,
+    factory: () => new HexagonalAntiprism(),
+  },
+  {
+    id: 'octagonal-antiprism',
+    name: 'Octagonal Antiprism',
+    category: 'prismatic',
+    faceComposition: '8gon×2 + △×16',
+    faceCount: 18,
+    factory: () => new OctagonalAntiprism(),
+  },
+  {
+    id: 'decagonal-antiprism',
+    name: 'Decagonal Antiprism',
+    category: 'prismatic',
+    faceComposition: '10gon×2 + △×20',
+    faceCount: 22,
+    factory: () => new DecagonalAntiprism(),
   },
 ];
 

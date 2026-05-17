@@ -1,0 +1,10 @@
+export { TriangularPrism } from './triangular-prism.ts';
+export { PentagonalPrism } from './pentagonal-prism.ts';
+export { HexagonalPrism } from './hexagonal-prism.ts';
+export { OctagonalPrism } from './octagonal-prism.ts';
+export { DecagonalPrism } from './decagonal-prism.ts';
+export { SquareAntiprism } from './square-antiprism.ts';
+export { PentagonalAntiprism } from './pentagonal-antiprism.ts';
+export { HexagonalAntiprism } from './hexagonal-antiprism.ts';
+export { OctagonalAntiprism } from './octagonal-antiprism.ts';
+export { DecagonalAntiprism } from './decagonal-antiprism.ts';
