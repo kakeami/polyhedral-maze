@@ -61,4 +61,8 @@ export { TridiminishedRhombicosidodecahedron } from './j83-tridiminished-rhombic
 export { SnubSquareAntiprism } from './j85-snub-square-antiprism.ts';
 export { Sphenocorona } from './j86-sphenocorona.ts';
 export { AugmentedSphenocorona } from './j87-augmented-sphenocorona.ts';
+export { Sphenomegacorona } from './j88-sphenomegacorona.ts';
+export { Hebesphenomegacorona } from './j89-hebesphenomegacorona.ts';
+export { Disphenocingulum } from './j90-disphenocingulum.ts';
 export { Bilunabirotunda } from './j91-bilunabirotunda.ts';
+export { TriangularHebesphenorotunda } from './j92-triangular-hebesphenorotunda.ts';

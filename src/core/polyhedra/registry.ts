@@ -128,7 +128,11 @@ import { TridiminishedRhombicosidodecahedron } from './johnson/j83-tridiminished
 import { SnubSquareAntiprism } from './johnson/j85-snub-square-antiprism.ts';
 import { Sphenocorona } from './johnson/j86-sphenocorona.ts';
 import { AugmentedSphenocorona } from './johnson/j87-augmented-sphenocorona.ts';
+import { Sphenomegacorona } from './johnson/j88-sphenomegacorona.ts';
+import { Hebesphenomegacorona } from './johnson/j89-hebesphenomegacorona.ts';
+import { Disphenocingulum } from './johnson/j90-disphenocingulum.ts';
 import { Bilunabirotunda } from './johnson/j91-bilunabirotunda.ts';
+import { TriangularHebesphenorotunda } from './johnson/j92-triangular-hebesphenorotunda.ts';
 import { AugmentedTruncatedTetrahedron } from './johnson/j65-augmented-truncated-tetrahedron.ts';
 import { AugmentedTruncatedCube } from './johnson/j66-augmented-truncated-cube.ts';
 import { BiaugmentedTruncatedCube } from './johnson/j67-biaugmented-truncated-cube.ts';
@@ -1275,12 +1279,44 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     factory: () => new AugmentedSphenocorona(),
   },
   {
+    id: 'j88',
+    name: 'Sphenomegacorona',
+    category: 'johnson-sporadic',
+    faceComposition: '△×16 + □×2',
+    faceCount: 18,
+    factory: () => new Sphenomegacorona(),
+  },
+  {
+    id: 'j89',
+    name: 'Hebesphenomegacorona',
+    category: 'johnson-sporadic',
+    faceComposition: '△×18 + □×3',
+    faceCount: 21,
+    factory: () => new Hebesphenomegacorona(),
+  },
+  {
+    id: 'j90',
+    name: 'Disphenocingulum',
+    category: 'johnson-sporadic',
+    faceComposition: '△×20 + □×4',
+    faceCount: 24,
+    factory: () => new Disphenocingulum(),
+  },
+  {
     id: 'j91',
     name: 'Bilunabirotunda',
     category: 'johnson-sporadic',
     faceComposition: '△×8 + □×2 + ⬠×4',
     faceCount: 14,
     factory: () => new Bilunabirotunda(),
+  },
+  {
+    id: 'j92',
+    name: 'Triangular Hebesphenorotunda',
+    category: 'johnson-sporadic',
+    faceComposition: '△×13 + □×3 + ⬠×3 + ⬡×1',
+    faceCount: 20,
+    factory: () => new TriangularHebesphenorotunda(),
   },
 ];
 
