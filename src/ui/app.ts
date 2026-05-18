@@ -76,7 +76,16 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.controls.autoRotate = controls.getAutoRotate();
   });
 
-  window.addEventListener('resize', () => scene.resize());
+  const ac = new AbortController();
+  window.addEventListener('resize', () => scene.resize(), { signal: ac.signal });
 
   rebuild();
+
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+      ac.abort();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      scene.dispose();
+    });
+  }
 }

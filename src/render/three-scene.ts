@@ -96,12 +96,6 @@ export function createScene(container: HTMLElement): SceneContext {
     }
   }
 
-  function dispose() {
-    renderer.dispose();
-    controls.dispose();
-    if (mazeGroup) disposeMeshes(mazeGroup);
-  }
-
   // Render loop
   let running = true;
   function animate() {
@@ -111,6 +105,14 @@ export function createScene(container: HTMLElement): SceneContext {
     renderer.render(scene, camera);
   }
   animate();
+
+  function dispose() {
+    running = false;
+    renderer.dispose();
+    controls.dispose();
+    renderer.domElement.remove();
+    if (mazeGroup) disposeMeshes(mazeGroup);
+  }
 
   return { renderer, scene, camera, controls, updateMaze, resize, dispose };
 }
