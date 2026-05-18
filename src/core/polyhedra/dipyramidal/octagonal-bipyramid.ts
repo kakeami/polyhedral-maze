@@ -4,15 +4,15 @@ import type { Polyhedron } from '../../polyhedron.ts';
 import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
 import { Graph } from '../../graph.ts';
 import { TriGrid } from '../grids/tri-grid.ts';
-import { uniformBipyramid } from './_uniform_bipyramid.ts';
+import { compactBipyramid } from './_compact_bipyramid.ts';
 
 /**
- * Octagonal Bipyramid (n=8, dual of the octagonal prism).
+ * Octagonal Bipyramid (n=8) with aspect ratio h/r = 1.
  * 16 isosceles-triangle faces, 10 vertices, 24 edges. D_8h has central
  * inversion → every face has an antipode.
  */
 export class OctagonalBipyramid implements Polyhedron {
-  private _faces = normalizeFaces(uniformBipyramid(8), 1);
+  private _faces = normalizeFaces(compactBipyramid(8), 1);
 
   faces(): Face[] {
     return [...this._faces];

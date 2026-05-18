@@ -4,15 +4,15 @@ import type { Polyhedron } from '../../polyhedron.ts';
 import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
 import { Graph } from '../../graph.ts';
 import { TriGrid } from '../grids/tri-grid.ts';
-import { uniformBipyramid } from './_uniform_bipyramid.ts';
+import { compactBipyramid } from './_compact_bipyramid.ts';
 
 /**
- * Hexagonal Bipyramid (n=6, dual of the hexagonal prism).
+ * Hexagonal Bipyramid (n=6) with aspect ratio h/r = 1.
  * 12 isosceles-triangle faces, 8 vertices, 18 edges. D_6h has central
  * inversion → every face has an antipode.
  */
 export class HexagonalBipyramid implements Polyhedron {
-  private _faces = normalizeFaces(uniformBipyramid(6), 1);
+  private _faces = normalizeFaces(compactBipyramid(6), 1);
 
   faces(): Face[] {
     return [...this._faces];

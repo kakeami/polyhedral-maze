@@ -4,15 +4,15 @@ import type { Polyhedron } from '../../polyhedron.ts';
 import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
 import { Graph } from '../../graph.ts';
 import { TriGrid } from '../grids/tri-grid.ts';
-import { uniformBipyramid } from './_uniform_bipyramid.ts';
+import { compactBipyramid } from './_compact_bipyramid.ts';
 
 /**
- * Decagonal Bipyramid (n=10, dual of the decagonal prism).
+ * Decagonal Bipyramid (n=10) with aspect ratio h/r = 1.
  * 20 isosceles-triangle faces, 12 vertices, 30 edges. D_10h has central
  * inversion → every face has an antipode.
  */
 export class DecagonalBipyramid implements Polyhedron {
-  private _faces = normalizeFaces(uniformBipyramid(10), 1);
+  private _faces = normalizeFaces(compactBipyramid(10), 1);
 
   faces(): Face[] {
     return [...this._faces];
