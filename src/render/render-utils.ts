@@ -1,5 +1,5 @@
 /**
- * Shared rendering utilities used by both texture-painter and svg-net-renderer.
+ * Shared rendering utilities used by both maze-geometry and svg-net-renderer.
  */
 
 import type { CellKey, Face, Vec3 } from '../core/types.ts';

@@ -8,7 +8,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face, Vec3 } from '../core/types.ts';
-import type { MazeRenderData } from './texture-painter.ts';
+import type { MazeRenderData } from './maze-geometry.ts';
 import { SCENE_CONFIG, MAZE_STYLE } from './scene-constants.ts';
 
 export interface SceneContext {

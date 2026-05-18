@@ -4,7 +4,7 @@ import { computeMetrics } from '../core/metrics.ts';
 import { createRng } from '../core/prng.ts';
 import { getShape, SHAPES } from '../core/polyhedra/registry.ts';
 import { createScene } from '../render/three-scene.ts';
-import { computeRenderData } from '../render/texture-painter.ts';
+import { computeRenderData } from '../render/maze-geometry.ts';
 import { exportPDF } from '../render/pdf-exporter.ts';
 import { createControls } from './controls.ts';
 import { decodeParams, encodeParams } from './param-codec.ts';

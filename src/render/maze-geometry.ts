@@ -1,3 +1,9 @@
+/**
+ * 3D geometry for the maze rendered in the Three.js scene:
+ * wall segments, face-outline gaps, solution polyline, and marker positions.
+ * Output is consumed by three-scene.ts to build Line2 / LineSegments2 geometry.
+ */
+
 import type { Vec3, CellKey, Face } from '../core/types.ts';
 import { parseCell } from '../core/types.ts';
 import { add, sub, scale, mean, allClose } from '../core/vec3.ts';
