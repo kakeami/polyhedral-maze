@@ -12,7 +12,8 @@ import type { MazeGraph } from '../core/maze-graph.ts';
 import type { Maze } from '../core/maze.ts';
 import type { GridKind } from '../core/face-grid.ts';
 import { bfsShortestPath } from '../core/graph.ts';
-import { findAdjacentFaceId, hasTreeEdgeToFace } from './render-utils.ts';
+import { hasTreeEdgeToFace } from './render-utils.ts';
+import { buildEdgeIndex } from './edge-index.ts';
 
 const RADIAL_SECTORS: Partial<Record<GridKind, number>> = {
   kite: 4, pent: 5, hex: 6, oct: 8, dec: 10,
@@ -116,6 +117,7 @@ export function computeRenderData(
 
   const faces = mazeGraph.polyhedron.faces();
   const n = mazeGraph.n;
+  const edgeIndex = buildEdgeIndex(faces);
   const walls: Vec3[] = [];
   const outline: Vec3[] = [];
 
@@ -141,9 +143,7 @@ export function computeRenderData(
     for (let i = 0; i < nv; i++) {
       const edgeStart = faceVerts[i]!;
       const edgeEnd = faceVerts[(i + 1) % nv]!;
-
-      // Find the adjacent face that shares this edge
-      const adjFaceId = findAdjacentFaceId(faces, face.id, edgeStart, edgeEnd);
+      const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
 
       let boundaryCells: CellKey[];
       try {

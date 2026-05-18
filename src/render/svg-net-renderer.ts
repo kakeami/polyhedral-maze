@@ -13,7 +13,8 @@ import { parseCell } from '../core/types.ts';
 import type { GridKind } from '../core/face-grid.ts';
 import { bfsShortestPath } from '../core/graph.ts';
 import { VERTEX_EPSILON } from '../core/constants.ts';
-import { findAdjacentFaceId, hasTreeEdgeToFace } from './render-utils.ts';
+import { hasTreeEdgeToFace } from './render-utils.ts';
+import { buildEdgeIndex } from './edge-index.ts';
 import { SVG_STYLE } from './svg-constants.ts';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -31,6 +32,7 @@ export function renderNetSVG(
 ): SVGSVGElement {
   const faces = mazeGraph.polyhedron.faces();
   const n = mazeGraph.n;
+  const edgeIndex = buildEdgeIndex(faces);
 
   // Build tree-edge set
   const treeSet = new Set<string>();
@@ -64,11 +66,10 @@ export function renderNetSVG(
   //    Only draw one tab per cut edge: the face with the smaller ID draws it.
   for (const face of faces) {
     const verts2d = netMap.get(face.id)!;
-    const fv = face.vertices;
-    const nv = fv.length;
+    const nv = face.vertices.length;
     const fc = flip(centroid2(verts2d));
     for (let i = 0; i < nv; i++) {
-      const adjFaceId = findAdjacentFaceId(faces, face.id, fv[i]!, fv[(i + 1) % nv]!);
+      const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
       if (isFoldEdge(face.id, adjFaceId)) continue;
       if (adjFaceId !== null && face.id > adjFaceId) continue;
       drawGlueTab(svg, flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!), fc, tabWidth);
@@ -91,11 +92,10 @@ export function renderNetSVG(
   const outlinePaths: string[] = [];
   for (const face of faces) {
     const verts2d = netMap.get(face.id)!;
-    const fv = face.vertices;
-    const nv = fv.length;
+    const nv = face.vertices.length;
     const fc = flip(centroid2(verts2d));
     for (let i = 0; i < nv; i++) {
-      const adjFaceId = findAdjacentFaceId(faces, face.id, fv[i]!, fv[(i + 1) % nv]!);
+      const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
       if (isFoldEdge(face.id, adjFaceId)) continue;
       const [p, q] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
       // Offset outward (away from face center)
@@ -173,7 +173,7 @@ export function renderNetSVG(
     for (let i = 0; i < nv; i++) {
       const edgeStart3d = fv[i]!;
       const edgeEnd3d = fv[(i + 1) % nv]!;
-      const adjFaceId = findAdjacentFaceId(faces, face.id, edgeStart3d, edgeEnd3d);
+      const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
 
       let boundaryCells: CellKey[];
       try {

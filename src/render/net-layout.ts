@@ -9,6 +9,7 @@ import { sub, dot, cross, norm } from '../core/vec3.ts';
 
 import type { Vec2 } from '../core/vec2.ts';
 import { sub2, len2 } from '../core/vec2.ts';
+import { buildEdgeIndex } from './edge-index.ts';
 
 export type { Vec2 } from '../core/vec2.ts';
 
@@ -31,7 +32,7 @@ export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
   const faces = polyhedron.faces();
   if (faces.length === 0) return { faces: [], width: 0, height: 0, foldPairs: new Set() };
 
-  const adj = buildFaceAdjacency(faces);
+  const adj = buildEdgeIndex(faces).adjacencies();
   const placed = new Map<number, Vec2[]>();
   const foldPairs = new Set<string>();
 
@@ -91,48 +92,6 @@ function projectFace(face: Face): Vec2[] {
     const d = sub(p, o);
     return [dot(d, ux), dot(d, uy)] as Vec2;
   });
-}
-
-// ─── Face adjacency ───────────────────────────────────────────────
-
-interface AdjEdge {
-  neighborId: number;
-  parentIdx: [number, number];
-  childIdx: [number, number];
-}
-
-function buildFaceAdjacency(faces: Face[]): Map<number, AdjEdge[]> {
-  const eps = 1e-6;
-  const adj = new Map<number, AdjEdge[]>();
-  for (const f of faces) adj.set(f.id, []);
-
-  for (let i = 0; i < faces.length; i++) {
-    for (let j = i + 1; j < faces.length; j++) {
-      const fi = faces[i]!, fj = faces[j]!;
-      const mi: number[] = [], mj: number[] = [];
-      for (let a = 0; a < fi.vertices.length; a++) {
-        for (let b = 0; b < fj.vertices.length; b++) {
-          const d = sub(fi.vertices[a]!, fj.vertices[b]!);
-          if (Math.abs(d[0]) < eps && Math.abs(d[1]) < eps && Math.abs(d[2]) < eps) {
-            mi.push(a); mj.push(b);
-          }
-        }
-      }
-      if (mi.length !== 2) continue;
-
-      adj.get(fi.id)!.push({
-        neighborId: fj.id,
-        parentIdx: [mi[0]!, mi[1]!],
-        childIdx: [mj[0]!, mj[1]!],
-      });
-      adj.get(fj.id)!.push({
-        neighborId: fi.id,
-        parentIdx: [mj[0]!, mj[1]!],
-        childIdx: [mi[0]!, mi[1]!],
-      });
-    }
-  }
-  return adj;
 }
 
 // ─── Unfold a child face across a shared edge ─────────────────────
