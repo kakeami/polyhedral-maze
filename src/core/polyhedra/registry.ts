@@ -125,6 +125,9 @@ import { ParabidiminishedRhombicosidodecahedron } from './johnson/j80-parabidimi
 import { MetabidiminishedRhombicosidodecahedron } from './johnson/j81-metabidiminished-rhombicosidodecahedron.ts';
 import { GyrateBidiminishedRhombicosidodecahedron } from './johnson/j82-gyrate-bidiminished-rhombicosidodecahedron.ts';
 import { TridiminishedRhombicosidodecahedron } from './johnson/j83-tridiminished-rhombicosidodecahedron.ts';
+import { SnubSquareAntiprism } from './johnson/j85-snub-square-antiprism.ts';
+import { Sphenocorona } from './johnson/j86-sphenocorona.ts';
+import { AugmentedSphenocorona } from './johnson/j87-augmented-sphenocorona.ts';
 import { Bilunabirotunda } from './johnson/j91-bilunabirotunda.ts';
 import { AugmentedTruncatedTetrahedron } from './johnson/j65-augmented-truncated-tetrahedron.ts';
 import { AugmentedTruncatedCube } from './johnson/j66-augmented-truncated-cube.ts';
@@ -1246,6 +1249,30 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '△×5 + □×15 + ⬠×9 + 10gon×3',
     faceCount: 32,
     factory: () => new TridiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j85',
+    name: 'Snub Square Antiprism',
+    category: 'johnson-sporadic',
+    faceComposition: '△×24 + □×2',
+    faceCount: 26,
+    factory: () => new SnubSquareAntiprism(),
+  },
+  {
+    id: 'j86',
+    name: 'Sphenocorona',
+    category: 'johnson-sporadic',
+    faceComposition: '△×12 + □×2',
+    faceCount: 14,
+    factory: () => new Sphenocorona(),
+  },
+  {
+    id: 'j87',
+    name: 'Augmented Sphenocorona',
+    category: 'johnson-sporadic',
+    faceComposition: '△×16 + □×1',
+    faceCount: 17,
+    factory: () => new AugmentedSphenocorona(),
   },
   {
     id: 'j91',

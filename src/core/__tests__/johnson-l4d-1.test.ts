@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { SnubSquareAntiprism } from '../polyhedra/johnson/j85-snub-square-antiprism.ts';
+import { Sphenocorona } from '../polyhedra/johnson/j86-sphenocorona.ts';
+import { AugmentedSphenocorona } from '../polyhedra/johnson/j87-augmented-sphenocorona.ts';
 import { Bilunabirotunda } from '../polyhedra/johnson/j91-bilunabirotunda.ts';
 import { TriGrid } from '../polyhedra/grids/tri-grid.ts';
 import { RectGrid } from '../polyhedra/grids/rect-grid.ts';
@@ -20,15 +23,10 @@ interface JohnsonCase {
 }
 
 const cases: JohnsonCase[] = [
-  {
-    id: 'j91',
-    name: 'Bilunabirotunda',
-    make: () => new Bilunabirotunda(),
-    faceCount: 14,
-    edgeCount: 26,
-    vertexCount: 14,
-    composition: { 3: 8, 4: 2, 5: 4 },
-  },
+  { id: 'j85', name: 'Snub Square Antiprism',  make: () => new SnubSquareAntiprism(),  faceCount: 26, edgeCount: 40, vertexCount: 16, composition: { 3: 24, 4: 2 } },
+  { id: 'j86', name: 'Sphenocorona',           make: () => new Sphenocorona(),         faceCount: 14, edgeCount: 22, vertexCount: 10, composition: { 3: 12, 4: 2 } },
+  { id: 'j87', name: 'Augmented Sphenocorona', make: () => new AugmentedSphenocorona(),faceCount: 17, edgeCount: 26, vertexCount: 11, composition: { 3: 16, 4: 1 } },
+  { id: 'j91', name: 'Bilunabirotunda',        make: () => new Bilunabirotunda(),      faceCount: 14, edgeCount: 26, vertexCount: 14, composition: { 3: 8, 4: 2, 5: 4 } },
 ];
 
 describe.each(cases)('Johnson L4d-1: $name ($id)', ({ make, faceCount, edgeCount, vertexCount, composition }) => {
