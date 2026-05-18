@@ -32,52 +32,52 @@ export async function exportPDF(
   offscreen.appendChild(puzzleSvg);
   offscreen.appendChild(answerSvg);
 
-  // Generate QR code (data URL)
-  const mazeUrl = baseUrl + encodeParams(params);
-  const qrDataUrl = await QRCode.toDataURL(mazeUrl, {
-    width: 200,
-    margin: 1,
-    color: { dark: '#000000', light: '#ffffff' },
-  });
+  try {
+    // Generate QR code (data URL)
+    const mazeUrl = baseUrl + encodeParams(params);
+    const qrDataUrl = await QRCode.toDataURL(mazeUrl, {
+      width: 200,
+      margin: 1,
+      color: { dark: '#000000', light: '#ffffff' },
+    });
 
-  // A4 landscape: 297 × 210 mm
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const pageW = 297, pageH = 210;
-  const info = formatInfo(params);
+    // A4 landscape: 297 × 210 mm
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageW = 297, pageH = 210;
+    const info = formatInfo(params);
 
-  // ─── Page 1: Puzzle ──────────────────────────────────────────
-  drawHeader(doc, 'Polyhedral Maze', info, pageW);
-  await doc.svg(puzzleSvg, { x: 8, y: 24, width: 220, height: 178 });
+    // ─── Page 1: Puzzle ──────────────────────────────────────────
+    drawHeader(doc, 'Polyhedral Maze', info, pageW);
+    await doc.svg(puzzleSvg, { x: 8, y: 24, width: 220, height: 178 });
 
-  // Right sidebar: QR + legend + metrics
-  const sideX = 238;
-  doc.addImage(qrDataUrl, 'PNG', sideX, 28, 40, 40);
-  doc.setFontSize(7);
-  doc.text('Scan to view online', sideX + 20, 72, { align: 'center' });
+    // Right sidebar: QR + legend + metrics
+    const sideX = 238;
+    doc.addImage(qrDataUrl, 'PNG', sideX, 28, 40, 40);
+    doc.setFontSize(7);
+    doc.text('Scan to view online', sideX + 20, 72, { align: 'center' });
 
-  drawLegend(doc, sideX, 78, params.warp);
-  drawMetrics(doc, sideX, params.warp ? 102 : 96, metrics);
+    drawLegend(doc, sideX, 78, params.warp);
+    drawMetrics(doc, sideX, params.warp ? 102 : 96, metrics);
 
-  // Footer
-  doc.setFontSize(6);
-  doc.setTextColor(150);
-  doc.text(mazeUrl, pageW / 2, pageH - 7, { align: 'center' });
-  doc.text(
-    '\u00A9 kakeami | PolyForm Noncommercial 1.0.0 — Non-commercial use only',
-    pageW / 2, pageH - 3, { align: 'center' },
-  );
-  doc.setTextColor(0);
+    // Footer
+    doc.setFontSize(6);
+    doc.setTextColor(150);
+    doc.text(mazeUrl, pageW / 2, pageH - 7, { align: 'center' });
+    doc.text(
+      '© kakeami | PolyForm Noncommercial 1.0.0 — Non-commercial use only',
+      pageW / 2, pageH - 3, { align: 'center' },
+    );
+    doc.setTextColor(0);
 
-  // ─── Page 2: Answer ──────────────────────────────────────────
-  doc.addPage();
-  drawHeader(doc, 'Polyhedral Maze — Answer', info, pageW);
-  await doc.svg(answerSvg, { x: 8, y: 24, width: 277, height: 178 });
+    // ─── Page 2: Answer ──────────────────────────────────────────
+    doc.addPage();
+    drawHeader(doc, 'Polyhedral Maze — Answer', info, pageW);
+    await doc.svg(answerSvg, { x: 8, y: 24, width: 277, height: 178 });
 
-  // Cleanup
-  offscreen.remove();
-
-  // Save
-  doc.save(`polyhedral-maze-${params.shape}-${params.seed}.pdf`);
+    doc.save(`polyhedral-maze-${params.shape}-${params.seed}.pdf`);
+  } finally {
+    offscreen.remove();
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import type { MazeParams } from './param-codec.ts';
+import type { Algorithm } from '../core/maze.ts';
 import type { MazeMetrics } from '../core/metrics.ts';
 import {
   SHAPES,
@@ -69,14 +70,14 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
       for (const c of availableCategories()) {
         const group = byCat.get(c);
         if (!group || group.length === 0) continue;
-        html += `<optgroup label="${CATEGORY_LABELS[c]}">`;
+        html += `<optgroup label="${esc(CATEGORY_LABELS[c])}">`;
         for (const s of group) {
-          html += `<option value="${s.id}">${s.name}</option>`;
+          html += `<option value="${esc(s.id)}">${esc(s.name)}</option>`;
         }
         html += `</optgroup>`;
       }
     } else {
-      html = shapes.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      html = shapes.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
     }
     shapeSelect.innerHTML = html;
 
@@ -130,7 +131,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
       shape: shapeSelect.value,
       n: Number(nSlider.value),
       k: Number(kSlider.value),
-      algorithm: algoSelect.value,
+      algorithm: algoSelect.value as Algorithm,
       seed: Number(seedInput.value),
       warp: warpCheck.checked,
       showSolution: solutionCheck.checked,
@@ -164,7 +165,7 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
   const categories = availableCategories();
   const categoryOptions = [
     ...categories.map(c =>
-      `<option value="${c}"${c === activeCategory ? ' selected' : ''}>${CATEGORY_LABELS[c]}</option>`,
+      `<option value="${esc(c)}"${c === activeCategory ? ' selected' : ''}>${esc(CATEGORY_LABELS[c])}</option>`,
     ),
     `<option value="${ALL_CATEGORIES}"${activeCategory === ALL_CATEGORIES ? ' selected' : ''}>All categories</option>`,
   ].join('');
@@ -230,4 +231,14 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
       </a>
     </div>
   `;
+}
+
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, ch => (
+    ch === '&' ? '&amp;' :
+    ch === '<' ? '&lt;' :
+    ch === '>' ? '&gt;' :
+    ch === '"' ? '&quot;' :
+    '&#39;'
+  ));
 }

@@ -1,12 +1,16 @@
+import type { Algorithm } from '../core/maze.ts';
+
 export interface MazeParams {
   shape: string;
   n: number;
   k: number;
-  algorithm: string;
+  algorithm: Algorithm;
   seed: number;
   warp: boolean;
   showSolution: boolean;
 }
+
+const ALGORITHMS: readonly Algorithm[] = ['KRUSKAL', 'DFS', 'WILSON'];
 
 export const DEFAULT_PARAMS: MazeParams = {
   shape: 'icosahedron',
@@ -37,11 +41,19 @@ export function decodeParams(search: string): MazeParams {
     shape: p.get('shape') ?? DEFAULT_PARAMS.shape,
     n: clamp(Number(p.get('n') ?? DEFAULT_PARAMS.n), 2, 12),
     k: clamp(Number(p.get('k') ?? DEFAULT_PARAMS.k), 1, 4),
-    algorithm: (p.get('algo') ?? DEFAULT_PARAMS.algorithm).toUpperCase(),
+    algorithm: parseAlgorithm(p.get('algo')),
     seed: clamp(Number(p.get('seed') ?? DEFAULT_PARAMS.seed), 0, 999999),
     warp: p.get('warp') === '1',
     showSolution: p.get('solution') === '1',
   };
+}
+
+function parseAlgorithm(raw: string | null): Algorithm {
+  if (raw === null) return DEFAULT_PARAMS.algorithm;
+  const up = raw.toUpperCase();
+  return (ALGORITHMS as readonly string[]).includes(up)
+    ? (up as Algorithm)
+    : DEFAULT_PARAMS.algorithm;
 }
 
 function clamp(v: number, min: number, max: number): number {
