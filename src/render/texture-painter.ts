@@ -88,7 +88,6 @@ function sharedEdge(v1: Vec3[], v2: Vec3[]): [Vec3, Vec3] | null {
 export interface MazeRenderData {
   walls: Vec3[];       // pairs of Vec3 (p1, p2, p1, p2, ...)
   outline: Vec3[];     // face boundary wall segments (with gaps at passages)
-  portals: Vec3[];     // midpoints of inter-face passage gaps
   solution: Vec3[];    // solution path cell centers (with boundary midpoints)
   startPos: Vec3;
   goalPos: Vec3;
@@ -113,7 +112,6 @@ export function computeRenderData(
   const n = mazeGraph.n;
   const walls: Vec3[] = [];
   const outline: Vec3[] = [];
-  const portals: Vec3[] = [];
 
   for (const face of faces) {
     const grid = mazeGraph.grids.get(face.id)!;
@@ -159,8 +157,7 @@ export function computeRenderData(
         const segEnd = add(edgeStart, scale(du, j + 1));
 
         if (adjFaceId !== null && hasTreeEdgeToFace(cell, maze.tree, adjFaceId)) {
-          // Gap at inter-face passage
-          portals.push(scale(add(segStart, segEnd), 0.5));
+          // Gap at inter-face passage (no segment drawn)
         } else {
           outline.push(segStart, segEnd);
         }
@@ -209,7 +206,6 @@ export function computeRenderData(
   return {
     walls,
     outline,
-    portals,
     solution,
     startPos: center(maze.start),
     goalPos: center(maze.goal),

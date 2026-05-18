@@ -12,7 +12,6 @@ import type { ShapeCategory, ShapeDescriptor } from '../core/polyhedra/registry.
 export interface ControlsContext {
   container: HTMLElement;
   getParams(): MazeParams;
-  setParams(p: MazeParams): void;
   setMetrics(m: MazeMetrics): void;
   getAutoRotate(): boolean;
   onChange(cb: () => void): void;
@@ -44,7 +43,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const metricsDiv = el<HTMLDivElement>('ctrl-metrics');
 
   const callbacks: (() => void)[] = [];
-  const actions = new Map<string, (() => void)[]>();
+  const actions = new Map<string, () => void>();
 
   function fire() {
     callbacks.forEach(cb => cb());
@@ -113,18 +112,17 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   el('btn-random').addEventListener('click', () => {
     seedInput.value = String(Math.floor(Math.random() * 999999));
     fire();
-    actions.get('random')?.forEach(cb => cb());
   });
   el('btn-copy-url').addEventListener('click', () => {
-    actions.get('copy-url')?.forEach(cb => cb());
+    actions.get('copy-url')?.();
   });
   el('btn-export-pdf').addEventListener('click', () => {
-    actions.get('export-pdf')?.forEach(cb => cb());
+    actions.get('export-pdf')?.();
   });
 
   const autoRotateCheck = el<HTMLInputElement>('ctrl-auto-rotate');
   autoRotateCheck.addEventListener('change', () => {
-    actions.get('auto-rotate')?.forEach(cb => cb());
+    actions.get('auto-rotate')?.();
   });
 
   function getParams(): MazeParams {
@@ -137,22 +135,6 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
       warp: warpCheck.checked,
       showSolution: solutionCheck.checked,
     };
-  }
-
-  function setParams(p: MazeParams) {
-    const shape = getShape(p.shape) ?? SHAPES[0]!;
-    if (categorySelect.value !== shape.category) {
-      categorySelect.value = shape.category;
-    }
-    renderShapeOptions(shape.id);
-    nSlider.value = String(p.n);
-    nValue.textContent = String(p.n);
-    kSlider.value = String(p.k);
-    kValue.textContent = String(p.k);
-    algoSelect.value = p.algorithm;
-    seedInput.value = String(p.seed);
-    warpCheck.checked = p.warp;
-    solutionCheck.checked = p.showSolution;
   }
 
   function setMetrics(m: MazeMetrics) {
@@ -171,14 +153,10 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   return {
     container,
     getParams,
-    setParams,
     setMetrics,
     getAutoRotate() { return autoRotateCheck.checked; },
     onChange(cb) { callbacks.push(cb); },
-    onAction(action, cb) {
-      if (!actions.has(action)) actions.set(action, []);
-      actions.get(action)!.push(cb);
-    },
+    onAction(action, cb) { actions.set(action, cb); },
   };
 }
 
