@@ -125,6 +125,7 @@ import { ParabidiminishedRhombicosidodecahedron } from './johnson/j80-parabidimi
 import { MetabidiminishedRhombicosidodecahedron } from './johnson/j81-metabidiminished-rhombicosidodecahedron.ts';
 import { GyrateBidiminishedRhombicosidodecahedron } from './johnson/j82-gyrate-bidiminished-rhombicosidodecahedron.ts';
 import { TridiminishedRhombicosidodecahedron } from './johnson/j83-tridiminished-rhombicosidodecahedron.ts';
+import { Bilunabirotunda } from './johnson/j91-bilunabirotunda.ts';
 import { AugmentedTruncatedTetrahedron } from './johnson/j65-augmented-truncated-tetrahedron.ts';
 import { AugmentedTruncatedCube } from './johnson/j66-augmented-truncated-cube.ts';
 import { BiaugmentedTruncatedCube } from './johnson/j67-biaugmented-truncated-cube.ts';
@@ -1245,6 +1246,14 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '△×5 + □×15 + ⬠×9 + 10gon×3',
     faceCount: 32,
     factory: () => new TridiminishedRhombicosidodecahedron(),
+  },
+  {
+    id: 'j91',
+    name: 'Bilunabirotunda',
+    category: 'johnson-sporadic',
+    faceComposition: '△×8 + □×2 + ⬠×4',
+    faceCount: 14,
+    factory: () => new Bilunabirotunda(),
   },
 ];
 

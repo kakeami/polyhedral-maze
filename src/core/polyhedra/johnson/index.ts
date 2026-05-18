@@ -58,3 +58,4 @@ export { ParabidiminishedRhombicosidodecahedron } from './j80-parabidiminished-r
 export { MetabidiminishedRhombicosidodecahedron } from './j81-metabidiminished-rhombicosidodecahedron.ts';
 export { GyrateBidiminishedRhombicosidodecahedron } from './j82-gyrate-bidiminished-rhombicosidodecahedron.ts';
 export { TridiminishedRhombicosidodecahedron } from './j83-tridiminished-rhombicosidodecahedron.ts';
+export { Bilunabirotunda } from './j91-bilunabirotunda.ts';
