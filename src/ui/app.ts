@@ -54,10 +54,10 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     const p = controls.getParams();
     const url = window.location.origin + window.location.pathname + encodeParams(p);
     navigator.clipboard.writeText(url).then(
-      () => alert('URL copied to clipboard'),
+      () => controls.showToast('URL copied'),
       err => {
         console.warn('Clipboard write failed:', err);
-        alert('Could not copy URL. Copy it manually from the address bar.');
+        controls.showToast('Copy failed — use the address bar');
       },
     );
   });
@@ -66,10 +66,13 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     if (!lastBuild) return;
     const p = controls.getParams();
     const baseUrl = window.location.origin + window.location.pathname;
-    exportPDF(p, lastBuild.mg, lastBuild.maze, lastBuild.metrics, baseUrl).catch(err => {
-      console.error('PDF export failed:', err);
-      alert('PDF export failed. See console for details.');
-    });
+    controls.setExportBusy(true);
+    exportPDF(p, lastBuild.mg, lastBuild.maze, lastBuild.metrics, baseUrl)
+      .catch(err => {
+        console.error('PDF export failed:', err);
+        controls.showToast('PDF export failed — see console');
+      })
+      .finally(() => controls.setExportBusy(false));
   });
 
   controls.onAction('auto-rotate', () => {

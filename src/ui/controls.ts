@@ -17,6 +17,8 @@ export interface ControlsContext {
   getAutoRotate(): boolean;
   onChange(cb: () => void): void;
   onAction(action: string, cb: () => void): void;
+  showToast(message: string): void;
+  setExportBusy(busy: boolean): void;
 }
 
 const ALL_CATEGORIES = '__all__';
@@ -111,7 +113,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   }
 
   el('btn-random').addEventListener('click', () => {
-    seedInput.value = String(Math.floor(Math.random() * 999999));
+    seedInput.value = String(Math.floor(Math.random() * 1000000));
     fire();
   });
   el('btn-copy-url').addEventListener('click', () => {
@@ -151,6 +153,26 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
 
   renderShapeOptions(initialShape.id);
 
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  function showToast(message: string) {
+    let toast = document.querySelector<HTMLDivElement>('.toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.className = 'toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast?.classList.remove('show'), 1800);
+  }
+
+  const exportBtn = el<HTMLButtonElement>('btn-export-pdf');
+  function setExportBusy(busy: boolean) {
+    exportBtn.disabled = busy;
+    exportBtn.textContent = busy ? 'Exporting...' : 'Export PDF';
+  }
+
   return {
     container,
     getParams,
@@ -158,6 +180,8 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     getAutoRotate() { return autoRotateCheck.checked; },
     onChange(cb) { callbacks.push(cb); },
     onAction(action, cb) { actions.set(action, cb); },
+    showToast,
+    setExportBusy,
   };
 }
 
