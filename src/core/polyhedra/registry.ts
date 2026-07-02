@@ -53,6 +53,10 @@ import { PentagonalTrapezohedron } from './dipyramidal/pentagonal-trapezohedron.
 import { HexagonalTrapezohedron } from './dipyramidal/hexagonal-trapezohedron.ts';
 import { OctagonalTrapezohedron } from './dipyramidal/octagonal-trapezohedron.ts';
 import { DecagonalTrapezohedron } from './dipyramidal/decagonal-trapezohedron.ts';
+import { SquareTorus } from './torus/square-torus.ts';
+import { HexagonalTorus } from './torus/hexagonal-torus.ts';
+import { DrilledTruncatedOctahedron } from './torus/drilled-truncated-octahedron.ts';
+import { CsaszarPolyhedron } from './torus/csaszar-polyhedron.ts';
 import { SquarePyramid } from './johnson/j01-square-pyramid.ts';
 import { PentagonalPyramid } from './johnson/j02-pentagonal-pyramid.ts';
 import { ElongatedTriangularPyramid } from './johnson/j07-elongated-triangular-pyramid.ts';
@@ -148,6 +152,7 @@ export type ShapeCategory =
   | 'deltahedra'
   | 'prismatic'
   | 'dipyramidal'
+  | 'torus'
   | 'johnson-cupola'
   | 'johnson-bicupola'
   | 'johnson-pyramid'
@@ -167,6 +172,7 @@ export const CATEGORY_LABELS: Record<ShapeCategory, string> = {
   deltahedra: 'Deltahedra',
   prismatic: 'Prismatic',
   dipyramidal: 'Dipyramidal',
+  torus: 'Toroidal',
   'johnson-cupola': 'Johnson: Cupolae & Rotunda',
   'johnson-bicupola': 'Johnson: Bicupolae & Birotunda',
   'johnson-pyramid': 'Johnson: Pyramids & Elongated',
@@ -621,6 +627,38 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: 'kite×20',
     faceCount: 20,
     factory: () => new DecagonalTrapezohedron(),
+  },
+  {
+    id: 'square-torus',
+    name: 'Square Torus',
+    category: 'torus',
+    faceComposition: '□×32',
+    faceCount: 32,
+    factory: () => new SquareTorus(),
+  },
+  {
+    id: 'hexagonal-torus',
+    name: 'Hexagonal Torus',
+    category: 'torus',
+    faceComposition: '△×36 + □×18',
+    faceCount: 54,
+    factory: () => new HexagonalTorus(),
+  },
+  {
+    id: 'drilled-truncated-octahedron',
+    name: 'Drilled Truncated Octahedron',
+    category: 'torus',
+    faceComposition: '□×8 + ⬡×8',
+    faceCount: 16,
+    factory: () => new DrilledTruncatedOctahedron(),
+  },
+  {
+    id: 'csaszar-polyhedron',
+    name: 'Császár Polyhedron',
+    category: 'torus',
+    faceComposition: '△×14',
+    faceCount: 14,
+    factory: () => new CsaszarPolyhedron(),
   },
   {
     id: 'j1',
