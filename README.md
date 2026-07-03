@@ -1,6 +1,7 @@
 # Polyhedral Maze
 
-Interactive 3D maze generator on polyhedral surfaces.
+Interactive 3D maze generator on polyhedral surfaces — from the Platonic
+solids to genus-1 toroids.
 
 Generate perfect mazes (unique-solution spanning trees) on all 5 Platonic, all
 13 Archimedean, all 13 Catalan, the 5 non-Platonic convex deltahedra, 10
@@ -28,7 +29,7 @@ interactive 3D viewer.
 - **Warp tunnels**: a straight skewer through the solid, surfacing at the first face it reaches — on toroidal shapes it pierces one wall without crossing the hole
 - **Interactive 3D viewer**: rotate, zoom, auto-rotate, and inspect the maze on the surface
 - **URL sharing**: any maze configuration is reproducible via URL parameters
-- **PDF export**: download unfolded net diagrams (puzzle + answer) for paper craft
+- **PDF export**: download unfolded net diagrams (puzzle + answer) for paper craft — nets are guaranteed overlap-free with glue tabs and cut guides, even for toroidal shapes
 
 ## Demo
 
