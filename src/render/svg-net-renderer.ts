@@ -63,7 +63,18 @@ export function renderNetSVG(
   };
 
   // 0. Glue tabs (drawn first, behind face backgrounds)
-  //    Only draw one tab per cut edge: the face with the smaller ID draws it.
+  //    Only draw one tab per cut edge. Within a piece the face with the
+  //    smaller ID draws it; between pieces the later piece (the tunnel liner,
+  //    which rolls into a tube) carries the tab so it can be glued under the
+  //    rim of the outer shell.
+  const pieceOf = new Map<number, number>();
+  layout.pieces.forEach((ids, p) => ids.forEach((f) => pieceOf.set(f, p)));
+  const drawsTab = (faceId: number, adjFaceId: number): boolean => {
+    const pa = pieceOf.get(faceId) ?? 0;
+    const pb = pieceOf.get(adjFaceId) ?? 0;
+    if (pa !== pb) return pa > pb;
+    return faceId < adjFaceId;
+  };
   for (const face of faces) {
     const verts2d = netMap.get(face.id)!;
     const nv = face.vertices.length;
@@ -71,7 +82,7 @@ export function renderNetSVG(
     for (let i = 0; i < nv; i++) {
       const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
       if (isFoldEdge(face.id, adjFaceId)) continue;
-      if (adjFaceId !== null && face.id > adjFaceId) continue;
+      if (adjFaceId !== null && !drawsTab(face.id, adjFaceId)) continue;
       drawGlueTab(svg, flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!), fc, tabWidth);
     }
   }
@@ -110,6 +121,30 @@ export function renderNetSVG(
       stroke: SVG_STYLE.outlineColor,
       'stroke-width': String(layout.width * SVG_STYLE.outlineWidthRatio),
       'stroke-dasharray': `${layout.width * SVG_STYLE.outlineDashRatios[0]},${layout.width * SVG_STYLE.outlineDashRatios[1]}`,
+    }));
+  }
+
+  // 1.2. Fold lines (fine dotted on the shared edge — fold here, don't cut)
+  const foldPaths: string[] = [];
+  for (const face of faces) {
+    const verts2d = netMap.get(face.id)!;
+    const nv = face.vertices.length;
+    for (let i = 0; i < nv; i++) {
+      const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
+      if (adjFaceId === null || face.id > adjFaceId) continue; // draw once per edge
+      if (!isFoldEdge(face.id, adjFaceId)) continue;
+      const [p, q] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
+      foldPaths.push(`M${p[0]},${p[1]}L${q[0]},${q[1]}`);
+    }
+  }
+  if (foldPaths.length > 0) {
+    svg.appendChild(svgEl('path', {
+      d: foldPaths.join(''),
+      fill: 'none',
+      stroke: SVG_STYLE.foldColor,
+      'stroke-width': String(layout.width * SVG_STYLE.foldWidthRatio),
+      'stroke-dasharray': `${layout.width * SVG_STYLE.foldDashRatios[0]},${layout.width * SVG_STYLE.foldDashRatios[1]}`,
+      'stroke-linecap': 'round',
     }));
   }
 

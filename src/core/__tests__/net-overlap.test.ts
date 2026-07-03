@@ -3,7 +3,7 @@
  * Faces touching along fold edges or at vertices are fine.
  */
 import { describe, it, expect } from 'vitest';
-import { SHAPES } from '../polyhedra/registry.ts';
+import { SHAPES, getShape } from '../polyhedra/registry.ts';
 import { computeNetLayout, polygonsOverlap } from '../../render/net-layout.ts';
 
 describe('net layout has no overlapping faces', () => {
@@ -23,4 +23,32 @@ describe('net layout has no overlapping faces', () => {
     }
     expect(overlaps, `overlapping face pairs: ${overlaps.join(', ')}`).toEqual([]);
   });
+});
+
+describe('net pieces', () => {
+  it('convex solids unfold as a single piece', () => {
+    for (const id of ['cube', 'icosahedron', 'j37']) {
+      const layout = computeNetLayout(getShape(id)!.factory());
+      expect(layout.pieces.length, id).toBe(1);
+    }
+  });
+
+  it.each(['square-torus', 'hexagonal-torus', 'drilled-truncated-octahedron'])(
+    '%s unfolds as two pieces (outer shell + tunnel liner)',
+    (id) => {
+      const shape = getShape(id)!;
+      const layout = computeNetLayout(shape.factory());
+      expect(layout.pieces.length).toBe(2);
+      // Every face belongs to exactly one piece
+      const all = layout.pieces.flat().sort((a, b) => a - b);
+      expect(all).toEqual(Array.from({ length: shape.faceCount }, (_, i) => i));
+      // Fold edges never span pieces
+      const pieceOf = new Map<number, number>();
+      layout.pieces.forEach((ids, p) => ids.forEach((f) => pieceOf.set(f, p)));
+      for (const fp of layout.foldPairs) {
+        const [a, b] = fp.split(':').map(Number);
+        expect(pieceOf.get(a!)).toBe(pieceOf.get(b!));
+      }
+    },
+  );
 });

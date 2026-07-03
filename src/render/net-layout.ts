@@ -7,11 +7,16 @@
  * nonconvex and toroidal solids, where naive BFS unfolding self-overlaps.
  * For convex solids no deferral ever triggers, so the layout is identical
  * to plain BFS.
+ *
+ * Toroidal solids additionally split into multiple pieces: the tunnel-lining
+ * faces (outward normal pointing back toward the solid's center) unfold as
+ * their own strip, because a one-piece net of a genus-1 surface is nearly
+ * impossible to assemble as papercraft.
  */
 
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face, Vec3 } from '../core/types.ts';
-import { sub, dot, cross, norm } from '../core/vec3.ts';
+import { sub, dot, cross, norm, mean } from '../core/vec3.ts';
 
 import type { Vec2 } from '../core/vec2.ts';
 import { sub2, len2 } from '../core/vec2.ts';
@@ -31,13 +36,17 @@ export interface NetLayout {
   height: number;
   /** "min:max" face-ID pairs connected by fold edges in the BFS tree. */
   foldPairs: Set<string>;
+  /** Face-id groups laid out as separate net pieces (1 group for genus-0 solids). */
+  pieces: number[][];
 }
 
 // ─── Main entry ───────────────────────────────────────────────────
 
 export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
   const faces = polyhedron.faces();
-  if (faces.length === 0) return { faces: [], width: 0, height: 0, foldPairs: new Set() };
+  if (faces.length === 0) {
+    return { faces: [], width: 0, height: 0, foldPairs: new Set(), pieces: [] };
+  }
 
   const adj = buildEdgeIndex(faces).adjacencies();
 
@@ -52,15 +61,47 @@ export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
   }
   const eps = maxEdge * 1e-7;
 
-  // Root 0 succeeds without any forced overlap for convex solids. Toroidal
-  // solids can paint themselves into a corner, in which case the unfolding is
-  // retried from every other root and the cleanest layout wins.
-  let best = unfoldFrom(faces, adj, 0, eps);
-  for (let root = 1; root < faces.length && best.forced > 0; root++) {
-    const attempt = unfoldFrom(faces, adj, root, eps);
-    if (attempt.forced < best.forced) best = attempt;
+  // Split off tunnel-lining faces (normal pointing back toward the center):
+  // they become separate net pieces. Convex solids have none, giving the
+  // usual single-piece net.
+  const center = vertexCentroid(faces);
+  const isInward = (f: Face) => dot(f.normal, sub(mean(f.vertices), center)) < 0;
+  const pieces: number[][] = [
+    ...connectedComponents(faces.filter((f) => !isInward(f)), adj),
+    ...connectedComponents(faces.filter(isInward), adj),
+  ];
+
+  // Unfold each piece. Root ids[0] succeeds without any forced overlap for
+  // convex solids. Toroidal solids can paint themselves into a corner, in
+  // which case the unfolding is retried from every other root within the
+  // piece and the cleanest layout wins.
+  const foldPairs = new Set<string>();
+  const placed = new Map<number, Vec2[]>();
+  const gap = maxEdge * 0.6;
+  let xOffset = 0;
+
+  for (const ids of pieces) {
+    const allowed = new Set(ids);
+    let best = unfoldFrom(faces, adj, ids[0]!, eps, allowed);
+    for (let r = 1; r < ids.length && best.forced > 0; r++) {
+      const attempt = unfoldFrom(faces, adj, ids[r]!, eps, allowed);
+      if (attempt.forced < best.forced) best = attempt;
+    }
+
+    // Pack pieces left-to-right, each normalized to y = 0.
+    let minX = Infinity, minY = Infinity, maxX = -Infinity;
+    for (const vs of best.placed.values()) {
+      for (const [x, y] of vs) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+      }
+    }
+    for (const [fid, vs] of best.placed) {
+      placed.set(fid, vs.map(([x, y]) => [x - minX + xOffset, y - minY] as Vec2));
+    }
+    for (const fp of best.foldPairs) foldPairs.add(fp);
+    xOffset += maxX - minX + gap;
   }
-  const { placed, foldPairs } = best;
 
   // Bounding box → normalize to origin
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -76,7 +117,50 @@ export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
     vertices2d: placed.get(f.id)!.map(([x, y]) => [x - minX, y - minY] as Vec2),
   }));
 
-  return { faces: netFaces, width: maxX - minX, height: maxY - minY, foldPairs };
+  return { faces: netFaces, width: maxX - minX, height: maxY - minY, foldPairs, pieces };
+}
+
+/** Mean of the polyhedron's unique vertices. */
+function vertexCentroid(faces: Face[]): Vec3 {
+  const seen = new Set<string>();
+  const unique: Vec3[] = [];
+  for (const f of faces) {
+    for (const v of f.vertices) {
+      const key = v.map((x) => x.toFixed(10)).join(',');
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(v);
+      }
+    }
+  }
+  return mean(unique);
+}
+
+/** Connected components of a face subset under shared-edge adjacency. */
+function connectedComponents(
+  subset: Face[],
+  adj: ReadonlyMap<number, AdjEdge[]>,
+): number[][] {
+  const remaining = new Set(subset.map((f) => f.id));
+  const components: number[][] = [];
+  while (remaining.size > 0) {
+    const root = remaining.values().next().value!;
+    remaining.delete(root);
+    const component = [root];
+    const queue = [root];
+    while (queue.length > 0) {
+      const fid = queue.shift()!;
+      for (const edge of adj.get(fid)!) {
+        if (remaining.has(edge.neighborId)) {
+          remaining.delete(edge.neighborId);
+          component.push(edge.neighborId);
+          queue.push(edge.neighborId);
+        }
+      }
+    }
+    components.push(component.sort((a, b) => a - b));
+  }
+  return components;
 }
 
 // ─── Overlap-aware unfolding from a given root face ───────────────
@@ -93,6 +177,7 @@ function unfoldFrom(
   adj: ReadonlyMap<number, AdjEdge[]>,
   root: number,
   eps: number,
+  allowed: ReadonlySet<number>,
 ): UnfoldResult {
   const placed = new Map<number, Vec2[]>();
   const foldPairs = new Set<string>();
@@ -126,7 +211,7 @@ function unfoldFrom(
     while (queue.length > 0) {
       const pid = queue.shift()!;
       for (const edge of adj.get(pid)!) {
-        if (placed.has(edge.neighborId)) continue;
+        if (!allowed.has(edge.neighborId) || placed.has(edge.neighborId)) continue;
         const cand = unfold(pid, edge);
         if (overlapsPlaced(cand)) {
           // Defer: the face may unfold cleanly across a different edge.
@@ -136,7 +221,7 @@ function unfoldFrom(
         commit(pid, edge, cand);
       }
     }
-    if (placed.size >= faces.length) break;
+    if (placed.size >= allowed.size) break;
     // Every remaining reachable face overlaps from all its placed neighbors.
     // Force the earliest deferral so the layout is still complete.
     const idx = deferred.findIndex((d) => !placed.has(d.edge.neighborId));

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { SquareTorus } from '../polyhedra/torus/square-torus.ts';
 import { HexagonalTorus } from '../polyhedra/torus/hexagonal-torus.ts';
 import { DrilledTruncatedOctahedron } from '../polyhedra/torus/drilled-truncated-octahedron.ts';
-import { CsaszarPolyhedron } from '../polyhedra/torus/csaszar-polyhedron.ts';
 import { MazeGraph } from '../maze-graph.ts';
 import { generate } from '../maze.ts';
 import { createRng } from '../prng.ts';
@@ -39,12 +38,6 @@ const cases: TorusCase[] = [
     make: () => new DrilledTruncatedOctahedron(),
     faceCount: 16, edgeCount: 40, vertexCount: 24,
     composition: { 4: 8, 6: 8 }, inwardFaces: 4,
-  },
-  {
-    id: 'csaszar-polyhedron', name: 'Császár Polyhedron',
-    make: () => new CsaszarPolyhedron(),
-    faceCount: 14, edgeCount: 21, vertexCount: 7,
-    composition: { 3: 14 }, inwardFaces: null,
   },
 ];
 
@@ -124,12 +117,6 @@ describe.each(cases)('Torus: $name ($id)', ({ make, faceCount, edgeCount, vertex
 });
 
 describe('Torus specifics', () => {
-  it('Császár polyhedron has no diagonals (K₇: every vertex pair is an edge)', () => {
-    // 7 vertices and 21 polyhedron edges ⇒ all C(7,2) pairs are edges.
-    const poly = new CsaszarPolyhedron();
-    expect(poly.faceAdjacency().edgeCount()).toBe(21);
-  });
-
   it('Square torus finds a warp pair', () => {
     const mg = new MazeGraph(new SquareTorus(), 3, 2);
     mg.build();

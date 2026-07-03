@@ -56,7 +56,6 @@ import { DecagonalTrapezohedron } from './dipyramidal/decagonal-trapezohedron.ts
 import { SquareTorus } from './torus/square-torus.ts';
 import { HexagonalTorus } from './torus/hexagonal-torus.ts';
 import { DrilledTruncatedOctahedron } from './torus/drilled-truncated-octahedron.ts';
-import { CsaszarPolyhedron } from './torus/csaszar-polyhedron.ts';
 import { SquarePyramid } from './johnson/j01-square-pyramid.ts';
 import { PentagonalPyramid } from './johnson/j02-pentagonal-pyramid.ts';
 import { ElongatedTriangularPyramid } from './johnson/j07-elongated-triangular-pyramid.ts';
@@ -651,14 +650,6 @@ export const SHAPES: readonly ShapeDescriptor[] = [
     faceComposition: '□×8 + ⬡×8',
     faceCount: 16,
     factory: () => new DrilledTruncatedOctahedron(),
-  },
-  {
-    id: 'csaszar-polyhedron',
-    name: 'Császár Polyhedron',
-    category: 'torus',
-    faceComposition: '△×14',
-    faceCount: 14,
-    factory: () => new CsaszarPolyhedron(),
   },
   {
     id: 'j1',

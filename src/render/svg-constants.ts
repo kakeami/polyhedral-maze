@@ -10,6 +10,11 @@ export const SVG_STYLE = {
   outlineDashRatios: [0.006, 0.004] as const,
   outlineOffsetRatio: 0.003,
 
+  // Fold lines (dotted — fold here, don't cut)
+  foldColor: '#c4c4c4',
+  foldWidthRatio: 0.0015,
+  foldDashRatios: [0.0012, 0.0035] as const,
+
   // Cell markers
   startColor: '#b2f0b2',
   goalColor: '#f0b2b2',
