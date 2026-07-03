@@ -2,21 +2,26 @@
  * Generic BFS net unfolding for any closed polyhedral surface.
  * Places each face via trilateration across the shared edge.
  *
- * Placements that would overlap an already-placed face are deferred so the
- * face can be reached through a different neighbor instead — necessary for
- * nonconvex and toroidal solids, where naive BFS unfolding self-overlaps.
- * For convex solids no deferral ever triggers, so the layout is identical
- * to plain BFS.
+ * Placements that would overlap an already-placed face — or lie edge-flush
+ * against an unrelated face — are deferred so the face can be reached through
+ * a different neighbor instead. This matters for toroidal solids: their flat
+ * (360°) vertices make naive BFS unfolding self-overlap and produce butted
+ * cut edges whose walls and cut guides collide visually. Convex solids have
+ * positive angle deficit everywhere, so neither rejection ever triggers and
+ * their layout is identical to plain BFS.
  *
- * Toroidal solids additionally split into multiple pieces: the tunnel-lining
- * faces (outward normal pointing back toward the solid's center) unfold as
- * their own strip, because a one-piece net of a genus-1 surface is nearly
- * impossible to assemble as papercraft.
+ * Two kinds of edge coincidence are distinguished in the result:
+ * - A cut edge whose two occurrences land exactly on each other (e.g. a ring
+ *   of coplanar faces closing up flat) is a "virtual fold": the paper is
+ *   continuous there, so the pair is added to `foldPairs` and needs no cut
+ *   guide or glue tab.
+ * - A cut edge butted against an unrelated face is recorded in `flushEdges`
+ *   so the renderer can avoid drawing misleading marks into the neighbor.
  */
 
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face, Vec3 } from '../core/types.ts';
-import { sub, dot, cross, norm, mean } from '../core/vec3.ts';
+import { sub, dot, cross, norm } from '../core/vec3.ts';
 
 import type { Vec2 } from '../core/vec2.ts';
 import { sub2, len2 } from '../core/vec2.ts';
@@ -34,10 +39,16 @@ export interface NetLayout {
   faces: NetFace[];
   width: number;
   height: number;
-  /** "min:max" face-ID pairs connected by fold edges in the BFS tree. */
+  /**
+   * "min:max" face-ID pairs joined by fold edges: the BFS spanning tree plus
+   * virtual folds (cut edges whose two occurrences coincide exactly, leaving
+   * the paper continuous).
+   */
   foldPairs: Set<string>;
-  /** Face-id groups laid out as separate net pieces (1 group for genus-0 solids). */
-  pieces: number[][];
+  /** "faceId:edgeIdx" cut edges butted flush against an unrelated face. */
+  flushEdges: Set<string>;
+  /** "faceId:edgeIdx" — which occurrence of each cut edge carries the glue tab. */
+  tabOwners: Set<string>;
 }
 
 // ─── Main entry ───────────────────────────────────────────────────
@@ -45,12 +56,15 @@ export interface NetLayout {
 export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
   const faces = polyhedron.faces();
   if (faces.length === 0) {
-    return { faces: [], width: 0, height: 0, foldPairs: new Set(), pieces: [] };
+    return {
+      faces: [], width: 0, height: 0,
+      foldPairs: new Set(), flushEdges: new Set(), tabOwners: new Set(),
+    };
   }
 
   const adj = buildEdgeIndex(faces).adjacencies();
 
-  // Overlap tolerance: relative to edge scale so layouts stay scale-invariant.
+  // Tolerances relative to edge scale so layouts stay scale-invariant.
   let maxEdge = 0;
   for (const f of faces) {
     const nv = f.vertices.length;
@@ -60,47 +74,81 @@ export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
     }
   }
   const eps = maxEdge * 1e-7;
+  const flushTol = maxEdge * 1e-6;
 
-  // Split off tunnel-lining faces (normal pointing back toward the center):
-  // they become separate net pieces. Convex solids have none, giving the
-  // usual single-piece net.
-  const center = vertexCentroid(faces);
-  const isInward = (f: Face) => dot(f.normal, sub(mean(f.vertices), center)) < 0;
-  const pieces: number[][] = [
-    ...connectedComponents(faces.filter((f) => !isInward(f)), adj),
-    ...connectedComponents(faces.filter(isInward), adj),
-  ];
+  // Root 0 succeeds without any compromise for convex solids. Toroidal solids
+  // can paint themselves into a corner, in which case the unfolding is
+  // retried from every other root and the cleanest layout wins.
+  const score = (r: UnfoldResult) => r.overlapForced * 1e6 + r.flushAccepted;
+  let best = unfoldFrom(faces, adj, 0, eps, flushTol);
+  for (let root = 1; root < faces.length && score(best) > 0; root++) {
+    const attempt = unfoldFrom(faces, adj, root, eps, flushTol);
+    if (score(attempt) < score(best)) best = attempt;
+  }
+  const { placed, foldPairs } = best;
 
-  // Unfold each piece. Root ids[0] succeeds without any forced overlap for
-  // convex solids. Toroidal solids can paint themselves into a corner, in
-  // which case the unfolding is retried from every other root within the
-  // piece and the cleanest layout wins.
-  const foldPairs = new Set<string>();
-  const placed = new Map<number, Vec2[]>();
-  const gap = maxEdge * 0.6;
-  let xOffset = 0;
+  const edgeSeg = (fid: number, i: number): [Vec2, Vec2] => {
+    const vs = placed.get(fid)!;
+    return [vs[i]!, vs[(i + 1) % vs.length]!];
+  };
 
-  for (const ids of pieces) {
-    const allowed = new Set(ids);
-    let best = unfoldFrom(faces, adj, ids[0]!, eps, allowed);
-    for (let r = 1; r < ids.length && best.forced > 0; r++) {
-      const attempt = unfoldFrom(faces, adj, ids[r]!, eps, allowed);
-      if (attempt.forced < best.forced) best = attempt;
+  // Virtual folds: 3D-adjacent faces whose shared (cut) edge lands on itself.
+  for (const [fid, edges] of adj) {
+    for (const e of edges) {
+      if (e.neighborId <= fid) continue; // handle each pair once
+      const pairKey = `${fid}:${e.neighborId}`;
+      if (foldPairs.has(pairKey)) continue;
+      const [a, b] = edgeSeg(fid, edgeIdxOf(e.parentIdx));
+      const [c, d] = edgeSeg(e.neighborId, edgeIdxOf(e.childIdx));
+      if (sameSegment(a, b, c, d, flushTol)) foldPairs.add(pairKey);
     }
+  }
 
-    // Pack pieces left-to-right, each normalized to y = 0.
-    let minX = Infinity, minY = Infinity, maxX = -Infinity;
-    for (const vs of best.placed.values()) {
-      for (const [x, y] of vs) {
-        if (x < minX) minX = x; if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
+  const isFoldEdge = (fid: number, nb: number): boolean => {
+    const key = fid < nb ? `${fid}:${nb}` : `${nb}:${fid}`;
+    return foldPairs.has(key);
+  };
+
+  // Flush cut edges: butted against some unrelated face in the layout.
+  const flushEdges = new Set<string>();
+  for (const f of faces) {
+    const nv = placed.get(f.id)!.length;
+    const partnerByEdge = new Map<number, number>();
+    for (const e of adj.get(f.id)!) partnerByEdge.set(edgeIdxOf(e.parentIdx), e.neighborId);
+    for (let i = 0; i < nv; i++) {
+      const partner = partnerByEdge.get(i);
+      if (partner !== undefined && isFoldEdge(f.id, partner)) continue;
+      const [a, b] = edgeSeg(f.id, i);
+      outer: for (const g of faces) {
+        if (g.id === f.id) continue;
+        const gv = placed.get(g.id)!;
+        for (let j = 0; j < gv.length; j++) {
+          const [c, d] = edgeSeg(g.id, j);
+          if (collinearOverlapLen(a, b, c, d, flushTol) > flushTol) {
+            flushEdges.add(`${f.id}:${i}`);
+            break outer;
+          }
+        }
       }
     }
-    for (const [fid, vs] of best.placed) {
-      placed.set(fid, vs.map(([x, y]) => [x - minX + xOffset, y - minY] as Vec2));
+  }
+
+  // Tab ownership: each cut edge appears twice in the net; put the glue tab
+  // on an occurrence with open space outside (not flush), falling back to
+  // the smaller face id.
+  const tabOwners = new Set<string>();
+  for (const [fid, edges] of adj) {
+    for (const e of edges) {
+      if (e.neighborId <= fid) continue;
+      if (isFoldEdge(fid, e.neighborId)) continue;
+      const iA = edgeIdxOf(e.parentIdx);
+      const iB = edgeIdxOf(e.childIdx);
+      const flushA = flushEdges.has(`${fid}:${iA}`);
+      const flushB = flushEdges.has(`${e.neighborId}:${iB}`);
+      if (flushA && !flushB) tabOwners.add(`${e.neighborId}:${iB}`);
+      else if (flushB && !flushA) tabOwners.add(`${fid}:${iA}`);
+      else tabOwners.add(fid < e.neighborId ? `${fid}:${iA}` : `${e.neighborId}:${iB}`);
     }
-    for (const fp of best.foldPairs) foldPairs.add(fp);
-    xOffset += maxX - minX + gap;
   }
 
   // Bounding box → normalize to origin
@@ -117,50 +165,18 @@ export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
     vertices2d: placed.get(f.id)!.map(([x, y]) => [x - minX, y - minY] as Vec2),
   }));
 
-  return { faces: netFaces, width: maxX - minX, height: maxY - minY, foldPairs, pieces };
+  return {
+    faces: netFaces, width: maxX - minX, height: maxY - minY,
+    foldPairs, flushEdges, tabOwners,
+  };
 }
 
-/** Mean of the polyhedron's unique vertices. */
-function vertexCentroid(faces: Face[]): Vec3 {
-  const seen = new Set<string>();
-  const unique: Vec3[] = [];
-  for (const f of faces) {
-    for (const v of f.vertices) {
-      const key = v.map((x) => x.toFixed(10)).join(',');
-      if (!seen.has(key)) {
-        seen.add(key);
-        unique.push(v);
-      }
-    }
-  }
-  return mean(unique);
-}
-
-/** Connected components of a face subset under shared-edge adjacency. */
-function connectedComponents(
-  subset: Face[],
-  adj: ReadonlyMap<number, AdjEdge[]>,
-): number[][] {
-  const remaining = new Set(subset.map((f) => f.id));
-  const components: number[][] = [];
-  while (remaining.size > 0) {
-    const root = remaining.values().next().value!;
-    remaining.delete(root);
-    const component = [root];
-    const queue = [root];
-    while (queue.length > 0) {
-      const fid = queue.shift()!;
-      for (const edge of adj.get(fid)!) {
-        if (remaining.has(edge.neighborId)) {
-          remaining.delete(edge.neighborId);
-          component.push(edge.neighborId);
-          queue.push(edge.neighborId);
-        }
-      }
-    }
-    components.push(component.sort((a, b) => a - b));
-  }
-  return components;
+/** Edge index from an AdjEdge vertex-index pair ({i, i+1 mod nv} in either order). */
+function edgeIdxOf(vIdx: [number, number]): number {
+  const [x, y] = vIdx;
+  if (y === x + 1) return x;
+  if (x === y + 1) return y;
+  return Math.max(x, y); // wraparound pair {0, nv-1} → edge nv-1
 }
 
 // ─── Overlap-aware unfolding from a given root face ───────────────
@@ -168,8 +184,10 @@ function connectedComponents(
 interface UnfoldResult {
   placed: Map<number, Vec2[]>;
   foldPairs: Set<string>;
-  /** Number of faces that had to be placed overlapping (0 = clean net). */
-  forced: number;
+  /** Faces placed overlapping another face (0 = clean net). */
+  overlapForced: number;
+  /** Faces placed butted flush against an unrelated face. */
+  flushAccepted: number;
 }
 
 function unfoldFrom(
@@ -177,15 +195,41 @@ function unfoldFrom(
   adj: ReadonlyMap<number, AdjEdge[]>,
   root: number,
   eps: number,
-  allowed: ReadonlySet<number>,
+  flushTol: number,
 ): UnfoldResult {
   const placed = new Map<number, Vec2[]>();
   const foldPairs = new Set<string>();
-  let forced = 0;
+  let overlapForced = 0;
+  let flushAccepted = 0;
 
   const overlapsPlaced = (cand: Vec2[]): boolean => {
     for (const verts of placed.values()) {
       if (polygonsOverlap(cand, verts, eps)) return true;
+    }
+    return false;
+  };
+
+  // True if the candidate lies edge-flush against a placed face, other than
+  // exactly closing up with its own 3D partner edge (which is harmless — the
+  // paper is simply continuous there).
+  const unrelatedFlush = (cand: Vec2[], candId: number): boolean => {
+    const nv = cand.length;
+    for (const [fid, verts] of placed) {
+      const gv = verts.length;
+      for (let i = 0; i < nv; i++) {
+        const a = cand[i]!, b = cand[(i + 1) % nv]!;
+        for (let j = 0; j < gv; j++) {
+          const c = verts[j]!, d = verts[(j + 1) % gv]!;
+          if (collinearOverlapLen(a, b, c, d, flushTol) <= flushTol) continue;
+          const aligned =
+            sameSegment(a, b, c, d, flushTol) &&
+            adj.get(candId)!.some(
+              (e) => e.neighborId === fid &&
+                edgeIdxOf(e.parentIdx) === i && edgeIdxOf(e.childIdx) === j,
+            );
+          if (!aligned) return true;
+        }
+      }
     }
     return false;
   };
@@ -211,9 +255,9 @@ function unfoldFrom(
     while (queue.length > 0) {
       const pid = queue.shift()!;
       for (const edge of adj.get(pid)!) {
-        if (!allowed.has(edge.neighborId) || placed.has(edge.neighborId)) continue;
+        if (placed.has(edge.neighborId)) continue;
         const cand = unfold(pid, edge);
-        if (overlapsPlaced(cand)) {
+        if (overlapsPlaced(cand) || unrelatedFlush(cand, edge.neighborId)) {
           // Defer: the face may unfold cleanly across a different edge.
           deferred.push({ pid, edge });
           continue;
@@ -221,17 +265,26 @@ function unfoldFrom(
         commit(pid, edge, cand);
       }
     }
-    if (placed.size >= allowed.size) break;
-    // Every remaining reachable face overlaps from all its placed neighbors.
-    // Force the earliest deferral so the layout is still complete.
-    const idx = deferred.findIndex((d) => !placed.has(d.edge.neighborId));
-    if (idx === -1) break; // not edge-connected
-    const { pid, edge } = deferred.splice(idx, 1)[0]!;
+    if (placed.size >= faces.length) break;
+    // Every remaining reachable face is compromised from all its placed
+    // neighbors. Prefer a flush-but-not-overlapping placement; overlap only
+    // as a last resort. The layout must always complete.
+    let pick = -1;
+    let pickOverlaps = false;
+    for (let k = 0; k < deferred.length; k++) {
+      const d = deferred[k]!;
+      if (placed.has(d.edge.neighborId)) continue;
+      if (!overlapsPlaced(unfold(d.pid, d.edge))) { pick = k; break; }
+      if (pick === -1) { pick = k; pickOverlaps = true; }
+    }
+    if (pick === -1) break; // not edge-connected
+    const { pid, edge } = deferred.splice(pick, 1)[0]!;
     commit(pid, edge, unfold(pid, edge));
-    forced++;
+    if (pickOverlaps) overlapForced++;
+    else flushAccepted++;
   }
 
-  return { placed, foldPairs, forced };
+  return { placed, foldPairs, overlapForced, flushAccepted };
 }
 
 // ─── Project first face onto its own plane ────────────────────────
@@ -320,6 +373,34 @@ function hasSeparatingAxis(poly: Vec2[], other: Vec2[], eps: number): boolean {
   return false;
 }
 
+// ─── Segment coincidence helpers ───────────────────────────────────
+
+/** Length of the collinear overlap of segment cd with segment ab (0 if not collinear). */
+export function collinearOverlapLen(
+  a: Vec2, b: Vec2, c: Vec2, d: Vec2, tol: number,
+): number {
+  const abx = b[0] - a[0], aby = b[1] - a[1];
+  const len = Math.hypot(abx, aby);
+  if (len < tol) return 0;
+  const ux = abx / len, uy = aby / len;
+  // Both endpoints of cd must lie on the ab line
+  const distC = Math.abs((c[0] - a[0]) * uy - (c[1] - a[1]) * ux);
+  const distD = Math.abs((d[0] - a[0]) * uy - (d[1] - a[1]) * ux);
+  if (distC > tol || distD > tol) return 0;
+  const tc = (c[0] - a[0]) * ux + (c[1] - a[1]) * uy;
+  const td = (d[0] - a[0]) * ux + (d[1] - a[1]) * uy;
+  const lo = Math.max(0, Math.min(tc, td));
+  const hi = Math.min(len, Math.max(tc, td));
+  return Math.max(0, hi - lo);
+}
+
+/** True if segments ab and cd have the same endpoints (either orientation). */
+export function sameSegment(a: Vec2, b: Vec2, c: Vec2, d: Vec2, tol: number): boolean {
+  const close = (p: Vec2, q: Vec2) =>
+    Math.abs(p[0] - q[0]) <= tol && Math.abs(p[1] - q[1]) <= tol;
+  return (close(a, c) && close(b, d)) || (close(a, d) && close(b, c));
+}
+
 // ─── Trilateration: intersect two circles, pick side away from ref ─
 
 function trilaterate(a: Vec2, da: number, b: Vec2, db: number, awayFrom: Vec2): Vec2 {
@@ -341,4 +422,3 @@ function trilaterate(a: Vec2, da: number, b: Vec2, db: number, awayFrom: Vec2): 
   const crossP1 = ab[0] * (p1[1] - a[1]) - ab[1] * (p1[0] - a[0]);
   return crossP1 * crossRef < 0 ? p1 : p2;
 }
-

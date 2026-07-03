@@ -63,18 +63,8 @@ export function renderNetSVG(
   };
 
   // 0. Glue tabs (drawn first, behind face backgrounds)
-  //    Only draw one tab per cut edge. Within a piece the face with the
-  //    smaller ID draws it; between pieces the later piece (the tunnel liner,
-  //    which rolls into a tube) carries the tab so it can be glued under the
-  //    rim of the outer shell.
-  const pieceOf = new Map<number, number>();
-  layout.pieces.forEach((ids, p) => ids.forEach((f) => pieceOf.set(f, p)));
-  const drawsTab = (faceId: number, adjFaceId: number): boolean => {
-    const pa = pieceOf.get(faceId) ?? 0;
-    const pb = pieceOf.get(adjFaceId) ?? 0;
-    if (pa !== pb) return pa > pb;
-    return faceId < adjFaceId;
-  };
+  //    Each cut edge appears twice in the net; the layout decides which
+  //    occurrence carries the tab (preferring one with open space outside).
   for (const face of faces) {
     const verts2d = netMap.get(face.id)!;
     const nv = face.vertices.length;
@@ -82,7 +72,7 @@ export function renderNetSVG(
     for (let i = 0; i < nv; i++) {
       const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
       if (isFoldEdge(face.id, adjFaceId)) continue;
-      if (adjFaceId !== null && !drawsTab(face.id, adjFaceId)) continue;
+      if (adjFaceId !== null && !layout.tabOwners.has(`${face.id}:${i}`)) continue;
       drawGlueTab(svg, flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!), fc, tabWidth);
     }
   }
@@ -99,6 +89,8 @@ export function renderNetSVG(
 
   // 1.1. Net outline (light gray dashed — cut guide, outer edges only)
   //      Offset slightly outward so it doesn't overlap boundary walls.
+  //      Skipped for flush cut edges: the offset line would intrude into the
+  //      butted neighbor face (and double up with its own guide).
   const outlineOffset = layout.width * SVG_STYLE.outlineOffsetRatio;
   const outlinePaths: string[] = [];
   for (const face of faces) {
@@ -108,6 +100,7 @@ export function renderNetSVG(
     for (let i = 0; i < nv; i++) {
       const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
       if (isFoldEdge(face.id, adjFaceId)) continue;
+      if (layout.flushEdges.has(`${face.id}:${i}`)) continue;
       const [p, q] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
       // Offset outward (away from face center)
       const [op, oq] = offsetEdgeOutward(p, q, fc, outlineOffset);
@@ -121,30 +114,6 @@ export function renderNetSVG(
       stroke: SVG_STYLE.outlineColor,
       'stroke-width': String(layout.width * SVG_STYLE.outlineWidthRatio),
       'stroke-dasharray': `${layout.width * SVG_STYLE.outlineDashRatios[0]},${layout.width * SVG_STYLE.outlineDashRatios[1]}`,
-    }));
-  }
-
-  // 1.2. Fold lines (fine dotted on the shared edge — fold here, don't cut)
-  const foldPaths: string[] = [];
-  for (const face of faces) {
-    const verts2d = netMap.get(face.id)!;
-    const nv = face.vertices.length;
-    for (let i = 0; i < nv; i++) {
-      const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
-      if (adjFaceId === null || face.id > adjFaceId) continue; // draw once per edge
-      if (!isFoldEdge(face.id, adjFaceId)) continue;
-      const [p, q] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
-      foldPaths.push(`M${p[0]},${p[1]}L${q[0]},${q[1]}`);
-    }
-  }
-  if (foldPaths.length > 0) {
-    svg.appendChild(svgEl('path', {
-      d: foldPaths.join(''),
-      fill: 'none',
-      stroke: SVG_STYLE.foldColor,
-      'stroke-width': String(layout.width * SVG_STYLE.foldWidthRatio),
-      'stroke-dasharray': `${layout.width * SVG_STYLE.foldDashRatios[0]},${layout.width * SVG_STYLE.foldDashRatios[1]}`,
-      'stroke-linecap': 'round',
     }));
   }
 
@@ -198,10 +167,14 @@ export function renderNetSVG(
   }
 
   // 3. Boundary walls (with gaps at passages)
+  //    Walls on flush cut edges are inset slightly into their own face, so
+  //    the butted neighbor's wall cannot visually block this face's passages.
+  const flushInset = layout.width * SVG_STYLE.flushWallInsetRatio;
   const boundaryPaths: string[] = [];
   for (const face of faces) {
     const grid = mazeGraph.grids.get(face.id)!;
     const verts2d = netMap.get(face.id)!;
+    const fc = flip(centroid2(verts2d));
     const fv = face.vertices;
     const nv = fv.length;
 
@@ -209,18 +182,21 @@ export function renderNetSVG(
       const edgeStart3d = fv[i]!;
       const edgeEnd3d = fv[(i + 1) % nv]!;
       const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
+      const isFlush = layout.flushEdges.has(`${face.id}:${i}`);
+
+      let [es, ee] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
+      if (isFlush) {
+        [es, ee] = offsetEdgeOutward(es, ee, fc, -flushInset);
+      }
 
       let boundaryCells: CellKey[];
       try {
         boundaryCells = grid.boundaryCells(edgeStart3d, edgeEnd3d);
       } catch {
-        const [p, q] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
-        boundaryPaths.push(`M${p[0]},${p[1]}L${q[0]},${q[1]}`);
+        boundaryPaths.push(`M${es[0]},${es[1]}L${ee[0]},${ee[1]}`);
         continue;
       }
 
-      const es = flip(verts2d[i]!);
-      const ee = flip(verts2d[(i + 1) % nv]!);
       const du: Vec2 = [(ee[0] - es[0]) / n, (ee[1] - es[1]) / n];
 
       for (let j = 0; j < boundaryCells.length; j++) {
