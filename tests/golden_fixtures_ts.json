@@ -889,19 +889,19 @@
           "n": 6,
           "seed": 42,
           "algorithm": "KRUSKAL",
-          "start": "7:3:1",
+          "start": "7:5:2",
           "goal": "5:5:10",
-          "solution_length": 77,
-          "solution_ratio": 0.267361,
-          "dead_end_count": 74,
-          "dead_end_density": 0.256944,
-          "face_crossings": 10,
-          "face_coverage": 7,
+          "solution_length": 87,
+          "solution_ratio": 0.302083,
+          "dead_end_count": 73,
+          "dead_end_density": 0.253472,
+          "face_crossings": 9,
+          "face_coverage": 6,
           "warp_used": true,
           "warp_enabled": true,
           "warp": {
-            "cell_a": "2:4:2",
-            "cell_b": "4:3:1"
+            "cell_a": "7:1:1",
+            "cell_b": "5:4:4"
           }
         },
         {

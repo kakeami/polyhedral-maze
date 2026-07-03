@@ -25,7 +25,7 @@ interactive 3D viewer.
   - **Johnson (87)** — pyramids, cupolas, rotunda, their bicupola/birotunda joins, elongated/gyroelongated variants and bicupolae, the gyrobifastigium, augmented prisms / dodecahedra / truncated solids, diminished icosahedra, the 12 gyrate/diminished rhombicosidodecahedra, and the 8 sporadic Johnson solids. The UI splits them into eleven sub-lists (pyramids & elongated, cupolas & rotunda, bicupolas & birotunda, elongated cupolas, elongated bicupolae, augmented prisms, augmented dodecahedra, augmented truncated, diminished icosahedra, rhombicosi. mods, sporadic). Members: J1–J11 (except J12, J13), J14–J16, J18–J50, J52–J83, J85–J92. The 5 deltahedron-equivalent Johnsons (J12, J13, J17, J51, J84) appear in the Deltahedra category. Combined coverage of the Johnson family is 92/92.
 - **7 face-type grids** (rectangular, triangular, kite, pentagonal, hexagonal, octagonal, decagonal) that compose freely on mixed-face solids
 - **3 maze algorithms**: Kruskal, DFS backtracker, Wilson (loop-erased random walk)
-- **Warp tunnels**: shortcut through the polyhedron connecting opposite faces
+- **Warp tunnels**: a straight skewer through the solid, surfacing at the first face it reaches — on toroidal shapes it pierces one wall without crossing the hole
 - **Interactive 3D viewer**: rotate, zoom, auto-rotate, and inspect the maze on the surface
 - **URL sharing**: any maze configuration is reproducible via URL parameters
 - **PDF export**: download unfolded net diagrams (puzzle + answer) for paper craft

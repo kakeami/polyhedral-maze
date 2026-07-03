@@ -9,6 +9,8 @@ import { bfsSingleSourceLengths } from '../graph.ts';
 import { dot, sub, cross, norm, mean } from '../vec3.ts';
 import type { Polyhedron } from '../polyhedron.ts';
 import type { Vec3 } from '../types.ts';
+import { cellKey, parseCell } from '../types.ts';
+import { Cube } from '../polyhedra/platonic/cube.ts';
 
 interface TorusCase {
   id: string;
@@ -122,5 +124,59 @@ describe('Torus specifics', () => {
     mg.build();
     const maze = generate(mg, { algorithm: 'KRUSKAL', warp: true, rng: createRng(7) });
     expect(maze.warp).not.toBeNull();
+  });
+});
+
+describe('Warp skewer semantics', () => {
+  it('square torus: outer wall warps to the near tunnel wall, not across the hole', () => {
+    const poly = new SquareTorus();
+    const mg = new MazeGraph(poly, 3, 2);
+    mg.build();
+    const faces = poly.faces();
+    const centroid = (f: (typeof faces)[number]) => mean(f.vertices);
+    // Middle piece of the +x outer wall (normal +x, centroid on the x axis,
+    // far from the origin — the near inner wall also faces +x)
+    const outer = faces.find(
+      (f) =>
+        f.normal[0] > 0.999 &&
+        centroid(f)[0] > 0.3 &&
+        Math.abs(centroid(f)[1]) < 1e-9 &&
+        Math.abs(centroid(f)[2]) < 1e-9,
+    )!;
+    // Inner tunnel wall facing it (normal -x, on the +x side of the hole)
+    const inner = faces.find((f) => f.normal[0] < -0.999 && centroid(f)[0] > 0.1)!;
+    const opp = mg.oppositeCell(cellKey(outer.id, 1, 1))!;
+    expect(parseCell(opp).faceId).toBe(inner.id);
+  });
+
+  it('square torus: top ring warps straight down to the bottom ring', () => {
+    const poly = new SquareTorus();
+    const mg = new MazeGraph(poly, 3, 2);
+    mg.build();
+    const faces = poly.faces();
+    const top = faces.find((f) => f.normal[2] > 0.999)!;
+    const src = cellKey(top.id, 1, 1);
+    const opp = mg.oppositeCell(src)!;
+    const oppFace = faces.find((f) => f.id === parseCell(opp).faceId)!;
+    expect(oppFace.normal[2]).toBeLessThan(-0.999);
+    const a = mg.grids.get(top.id)!.cellCenter3d(src);
+    const b = mg.grids.get(oppFace.id)!.cellCenter3d(opp);
+    expect(b[0]).toBeCloseTo(a[0], 9);
+    expect(b[1]).toBeCloseTo(a[1], 9);
+  });
+
+  it('cube: skewer lands perpendicular on the opposite face', () => {
+    const mg = new MazeGraph(new Cube(), 4, 2);
+    mg.build();
+    const faces = mg.polyhedron.faces();
+    const src = cellKey(0, 1, 2);
+    const opp = mg.oppositeCell(src)!;
+    const f0 = faces.find((f) => f.id === 0)!;
+    const fo = faces.find((f) => f.id === parseCell(opp).faceId)!;
+    expect(dot(f0.normal, fo.normal)).toBeCloseTo(-1, 9);
+    // The connecting segment is parallel to the source normal — a straight skewer
+    const a = mg.grids.get(0)!.cellCenter3d(src);
+    const b = mg.grids.get(fo.id)!.cellCenter3d(opp);
+    expect(norm(cross(sub(b, a), f0.normal))).toBeCloseTo(0, 9);
   });
 });

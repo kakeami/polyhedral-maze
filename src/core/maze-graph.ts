@@ -1,6 +1,6 @@
-import type { CellKey, Vec3, EdgeVertices, MazeNodeData, MazeEdgeData } from './types.ts';
+import type { CellKey, Face, Vec3, EdgeVertices, MazeNodeData, MazeEdgeData } from './types.ts';
 import { parseCell } from './types.ts';
-import { dot, sub, norm, mean, scale } from './vec3.ts';
+import { dot, sub, add, cross, norm, scale } from './vec3.ts';
 import { Graph } from './graph.ts';
 import type { FaceGrid } from './face-grid.ts';
 import type { Polyhedron } from './polyhedron.ts';
@@ -15,8 +15,6 @@ export class MazeGraph {
   interFaceEdges = new Set<string>(); // "u|v" keys for inter-face edges
   grids = new Map<number, FaceGrid>();
 
-  private _cachedCenter: Vec3 | null = null;
-
   constructor(polyhedron: Polyhedron, n = 6, k = 2) {
     this.polyhedron = polyhedron;
     this.n = n;
@@ -27,7 +25,6 @@ export class MazeGraph {
     this.graph.clear();
     this.interFaceEdges.clear();
     this.grids.clear();
-    this._cachedCenter = null;
 
     const faces = this.polyhedron.faces();
     const adj = this.polyhedron.faceAdjacency();
@@ -117,25 +114,42 @@ export class MazeGraph {
   oppositeCell(cell: CellKey): CellKey | null {
     const parsed = parseCell(cell);
     const faces = this.polyhedron.faces();
-    const oppFid = oppositeFace(faces, parsed.faceId);
-    if (oppFid === null) return null;
+    // Warp availability is unchanged: only shapes whose face has an
+    // antiparallel partner participate (the tetrahedron never warps).
+    if (oppositeFace(faces, parsed.faceId) === null) return null;
 
-    const grid = this.grids.get(parsed.faceId)!;
-    const pos = grid.cellCenter3d(cell);
     const face = faces.find((f) => f.id === parsed.faceId)!;
-    const center = this._polyhedronCenter();
+    const grid = this.grids.get(parsed.faceId)!;
+    const origin = grid.cellCenter3d(cell);
+    const dir = scale(face.normal, -1);
 
-    // Project perpendicular to the face along normal
-    const diff = sub(pos, center);
-    const d = dot(diff, face.normal);
-    const projected = sub(pos, scale(face.normal, 2 * d));
+    // The warp is a physical skewer: cast a ray straight into the solid and
+    // surface at the FIRST face it reaches. On a toroidal solid this is the
+    // near tunnel wall — not the far side across the hole, which a straw
+    // could never thread.
+    let exitFace: Face | null = null;
+    let exitPoint: Vec3 | null = null;
+    let bestT = Infinity;
+    for (const f of faces) {
+      if (f.id === parsed.faceId) continue;
+      const denom = dot(dir, f.normal);
+      if (Math.abs(denom) < 1e-12) continue;
+      const t = dot(sub(f.vertices[0]!, origin), f.normal) / denom;
+      if (t <= RAY_EPSILON || t >= bestT) continue;
+      const p = add(origin, scale(dir, t));
+      if (pointInConvexFace(p, f)) {
+        bestT = t;
+        exitFace = f;
+        exitPoint = p;
+      }
+    }
+    if (exitFace === null || exitPoint === null) return null;
 
-    const oppGrid = this.grids.get(oppFid)!;
+    const oppGrid = this.grids.get(exitFace.id)!;
     let bestCell: CellKey | null = null;
     let bestDist = Infinity;
     for (const c of oppGrid.cells()) {
-      const cPos = oppGrid.cellCenter3d(c);
-      const dist = norm(sub(cPos, projected));
+      const dist = norm(sub(oppGrid.cellCenter3d(c), exitPoint));
       if (dist < bestDist) {
         bestDist = dist;
         bestCell = c;
@@ -143,22 +157,17 @@ export class MazeGraph {
     }
     return bestCell;
   }
+}
 
-  private _polyhedronCenter(): Vec3 {
-    if (this._cachedCenter) return this._cachedCenter;
+const RAY_EPSILON = 1e-9;
 
-    const seen = new Set<string>();
-    const unique: Vec3[] = [];
-    for (const face of this.polyhedron.faces()) {
-      for (const v of face.vertices) {
-        const key = v.map((x) => x.toFixed(10)).join(',');
-        if (!seen.has(key)) {
-          seen.add(key);
-          unique.push(v);
-        }
-      }
-    }
-    this._cachedCenter = mean(unique);
-    return this._cachedCenter;
+/** True if a point on the face's plane lies inside the (convex) face polygon. */
+function pointInConvexFace(p: Vec3, face: Face): boolean {
+  const vs = face.vertices;
+  for (let i = 0; i < vs.length; i++) {
+    const a = vs[i]!;
+    const b = vs[(i + 1) % vs.length]!;
+    if (dot(cross(sub(b, a), sub(p, a)), face.normal) < -RAY_EPSILON) return false;
   }
+  return true;
 }

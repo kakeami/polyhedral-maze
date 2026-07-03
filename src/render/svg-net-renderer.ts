@@ -169,8 +169,19 @@ export function renderNetSVG(
   // 3. Boundary walls (with gaps at passages)
   //    Walls on flush cut edges are inset slightly into their own face, so
   //    the butted neighbor's wall cannot visually block this face's passages.
+  //    Edges between coplanar faces are mere grid divisions of one flat
+  //    surface — no fold, no structure — so they use the internal-wall style.
+  const faceById = new Map<number, typeof faces[number]>();
+  for (const f of faces) faceById.set(f.id, f);
+  const isCoplanarWith = (a: typeof faces[number], adjFaceId: number | null): boolean => {
+    if (adjFaceId === null) return false;
+    const b = faceById.get(adjFaceId)!;
+    return a.normal[0] * b.normal[0] + a.normal[1] * b.normal[1] + a.normal[2] * b.normal[2] > 1 - 1e-9;
+  };
+
   const flushInset = layout.width * SVG_STYLE.flushWallInsetRatio;
   const boundaryPaths: string[] = [];
+  const flatDivisionPaths: string[] = [];
   for (const face of faces) {
     const grid = mazeGraph.grids.get(face.id)!;
     const verts2d = netMap.get(face.id)!;
@@ -183,6 +194,7 @@ export function renderNetSVG(
       const edgeEnd3d = fv[(i + 1) % nv]!;
       const adjFaceId = edgeIndex.findAdjacentFace(face.id, i);
       const isFlush = layout.flushEdges.has(`${face.id}:${i}`);
+      const paths = isCoplanarWith(face, adjFaceId) ? flatDivisionPaths : boundaryPaths;
 
       let [es, ee] = [flip(verts2d[i]!), flip(verts2d[(i + 1) % nv]!)];
       if (isFlush) {
@@ -193,7 +205,7 @@ export function renderNetSVG(
       try {
         boundaryCells = grid.boundaryCells(edgeStart3d, edgeEnd3d);
       } catch {
-        boundaryPaths.push(`M${es[0]},${es[1]}L${ee[0]},${ee[1]}`);
+        paths.push(`M${es[0]},${es[1]}L${ee[0]},${ee[1]}`);
         continue;
       }
 
@@ -205,9 +217,18 @@ export function renderNetSVG(
         if (adjFaceId !== null && hasTreeEdgeToFace(cell, maze.tree, adjFaceId)) continue;
         const segStart: Vec2 = [es[0] + j * du[0], es[1] + j * du[1]];
         const segEnd: Vec2 = [es[0] + (j + 1) * du[0], es[1] + (j + 1) * du[1]];
-        boundaryPaths.push(`M${segStart[0]},${segStart[1]}L${segEnd[0]},${segEnd[1]}`);
+        paths.push(`M${segStart[0]},${segStart[1]}L${segEnd[0]},${segEnd[1]}`);
       }
     }
+  }
+  if (flatDivisionPaths.length > 0) {
+    svg.appendChild(svgEl('path', {
+      d: flatDivisionPaths.join(''),
+      stroke: SVG_STYLE.wallColor,
+      'stroke-width': String(layout.width * SVG_STYLE.wallWidthRatio),
+      'stroke-linecap': 'round',
+      fill: 'none',
+    }));
   }
   if (boundaryPaths.length > 0) {
     svg.appendChild(svgEl('path', {
