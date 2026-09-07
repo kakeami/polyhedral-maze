@@ -1,0 +1,462 @@
+/**
+ * One-face-per-page model for large papercraft.
+ *
+ * Turns the unfolded net into a list of drawing primitives **in page
+ * millimetres**, one page per face, so a very large model can be printed at a
+ * scale the whole-net PDF could never reach (the net has to fit a single
+ * sheet; a single face gets a sheet of its own).
+ *
+ * Two properties make the output buildable and both are enforced here:
+ *
+ * - **One scale for every page.** `computeFacePageScale` picks the largest
+ *   mm-per-unit factor at which *every* face still fits the printable area,
+ *   and all pages then use it. Per-page fitting would produce pieces that
+ *   cannot be joined.
+ * - **Nothing is drawn inside the piece that must not survive cutting.** The
+ *   assembly aids (edge labels naming the neighbouring face) live in a ring
+ *   *outside* the cut line, so they are cut away rather than printed on the
+ *   finished model. Only the maze itself and the S/G/W markers stay inside.
+ *
+ * DOM-free on purpose: the geometry is unit-testable, and `pdf-face-pages.ts`
+ * only has to paint the primitives.
+ */
+
+import type { NetLayout } from './net-layout.ts';
+import type { MazeGraph } from '../core/maze-graph.ts';
+import type { Maze } from '../core/maze.ts';
+import type { CellKey, Face } from '../core/types.ts';
+import { parseCell } from '../core/types.ts';
+import type { Vec2 } from '../core/vec2.ts';
+import { centroid2 } from '../core/vec2.ts';
+import { buildEdgeIndex } from './edge-index.ts';
+import { hasTreeEdgeToFace } from './render-utils.ts';
+import { cellVerts2d, sharedEdge2d } from './net-cell-geometry.ts';
+import { FACE_PAGE_STYLE, type RGB } from './face-page-constants.ts';
+
+// ─── Page geometry ────────────────────────────────────────────────
+
+export interface PageGeometry {
+  /** Sheet size in mm. */
+  pageW: number;
+  pageH: number;
+  /** Outer page margin in mm. */
+  margin: number;
+  /** Band reserved at the top for the title and the locator diagram. */
+  headerH: number;
+  /** Band reserved at the bottom for the footer line. */
+  footerH: number;
+  /** Ring kept free around the piece for edge labels (outside the cut line). */
+  ring: number;
+}
+
+export const A4_PORTRAIT: PageGeometry = {
+  pageW: 210, pageH: 297, margin: 10, headerH: 30, footerH: 8, ring: 8,
+};
+
+export interface Rect { x: number; y: number; w: number; h: number }
+
+/** Area a piece may occupy, in page mm (y grows downward, as in a PDF). */
+export function pieceArea(page: PageGeometry): Rect {
+  const { pageW, pageH, margin, headerH, footerH, ring } = page;
+  return {
+    x: margin + ring,
+    y: margin + headerH + ring,
+    w: pageW - 2 * (margin + ring),
+    h: pageH - margin - headerH - footerH - margin - 2 * ring,
+  };
+}
+
+// ─── Shared scale across all pages ────────────────────────────────
+
+export interface FacePlacement {
+  faceId: number;
+  /** Piece turned a quarter turn to fit the sheet better. */
+  rotate90: boolean;
+}
+
+export interface FacePageScale {
+  /** Page millimetres per net unit — identical on every page. */
+  mmPerUnit: number;
+  placements: Map<number, FacePlacement>;
+  area: Rect;
+}
+
+/**
+ * A quarter turn has to beat the upright fit by this much to be used. Without
+ * a margin, a square piece flips on floating-point noise; a fraction of a
+ * percent of scale is not worth an unexpected rotation.
+ */
+const TURN_GAIN_THRESHOLD = 1.005;
+
+/**
+ * Largest scale at which every face fits the printable area of one page.
+ * Each face independently takes the sheet orientation (upright or a quarter
+ * turn) that suits it better; the global scale is then the minimum over the
+ * fits of the orientations actually chosen.
+ */
+export function computeFacePageScale(
+  layout: NetLayout, page: PageGeometry = A4_PORTRAIT,
+): FacePageScale {
+  const area = pieceArea(page);
+  const placements = new Map<number, FacePlacement>();
+  let mmPerUnit = Infinity;
+
+  for (const nf of layout.faces) {
+    const [w, h] = bboxSize(nf.vertices2d, false);
+    const upright = Math.min(area.w / w, area.h / h);
+    const turned = Math.min(area.w / h, area.h / w);
+    const rotate90 = turned > upright * TURN_GAIN_THRESHOLD;
+    placements.set(nf.faceId, { faceId: nf.faceId, rotate90 });
+    mmPerUnit = Math.min(mmPerUnit, rotate90 ? turned : upright);
+  }
+
+  return { mmPerUnit: Number.isFinite(mmPerUnit) ? mmPerUnit : 1, placements, area };
+}
+
+/** Median edge length of the solid, in net units. */
+export function medianEdgeLength(faces: Face[]): number {
+  const lengths: number[] = [];
+  for (const f of faces) {
+    const v = f.vertices;
+    const nv = v.length;
+    for (let i = 0; i < nv; i++) {
+      const a = v[i]!, b = v[(i + 1) % nv]!;
+      lengths.push(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+    }
+  }
+  if (lengths.length === 0) return 0;
+  lengths.sort((p, q) => p - q);
+  return lengths[Math.floor(lengths.length / 2)]!;
+}
+
+/**
+ * Net units → page mm for one face: quarter turn if the placement asks for
+ * it, uniform scale, Y flipped (net is y-up, the page is y-down), centred in
+ * `rect`.
+ */
+export function faceToPageTransform(
+  vertices2d: Vec2[], placement: FacePlacement, mmPerUnit: number, rect: Rect,
+): (p: Vec2) => Vec2 {
+  const rotate = placement.rotate90;
+  const [w, h] = bboxSize(vertices2d, rotate);
+  const [minX, minY] = bboxMin(vertices2d, rotate);
+  const padX = (rect.w - w * mmPerUnit) / 2;
+  const padY = (rect.h - h * mmPerUnit) / 2;
+
+  return (p: Vec2): Vec2 => {
+    const [x, y] = turn(p, rotate);
+    return [
+      rect.x + padX + (x - minX) * mmPerUnit,
+      rect.y + rect.h - padY - (y - minY) * mmPerUnit,
+    ];
+  };
+}
+
+// ─── Drawing primitives (page mm, y down) ─────────────────────────
+
+export type PageItem =
+  | {
+      kind: 'poly';
+      pts: Vec2[];
+      fill?: RGB;
+      stroke?: RGB;
+      width?: number;
+      dash?: [number, number];
+    }
+  | {
+      kind: 'line';
+      a: Vec2;
+      b: Vec2;
+      stroke: RGB;
+      width: number;
+      dash?: [number, number];
+    }
+  | {
+      kind: 'text';
+      at: Vec2;
+      text: string;
+      /** Cap height in mm; the painter converts to points. */
+      size: number;
+      color: RGB;
+      /** Degrees counter-clockwise, as jsPDF expects. */
+      angle?: number;
+      bold?: boolean;
+    };
+
+export interface FacePageOptions {
+  /** Draw the locator diagram into this rect (page mm). */
+  locator?: Rect;
+}
+
+export interface FacePage {
+  faceId: number;
+  placement: FacePlacement;
+  items: PageItem[];
+  /** Face ids this piece is joined to, in edge order. */
+  neighbors: (number | null)[];
+}
+
+/**
+ * Everything that gets drawn on the page for one face: cut guide, maze walls,
+ * markers, edge labels and (optionally) the locator diagram.
+ */
+export function buildFacePage(
+  layout: NetLayout,
+  mazeGraph: MazeGraph,
+  maze: Maze,
+  scale: FacePageScale,
+  faceId: number,
+  options: FacePageOptions = {},
+): FacePage {
+  const faces = mazeGraph.polyhedron.faces();
+  const face = faces.find(f => f.id === faceId);
+  const netFace = layout.faces.find(nf => nf.faceId === faceId);
+  if (!face || !netFace) throw new Error(`Unknown face id: ${faceId}`);
+
+  const n = mazeGraph.n;
+  const grid = mazeGraph.grids.get(faceId)!;
+  const edgeIndex = buildEdgeIndex(faces);
+  const placement = scale.placements.get(faceId)!;
+  const tf = faceToPageTransform(netFace.vertices2d, placement, scale.mmPerUnit, scale.area);
+
+  const verts2d = netFace.vertices2d;
+  const pagePts = verts2d.map(tf);
+  const center = centroid2(pagePts);
+  const nv = face.vertices.length;
+  const S = FACE_PAGE_STYLE;
+
+  const items: PageItem[] = [];
+  const neighbors: (number | null)[] = [];
+
+  // 1. Cut guide: dashed, on the outline itself. The boundary wall covers most
+  //    of it and is inset so its outer edge coincides with the guide; the
+  //    dashes stay visible across the passage gaps, where the outline has no
+  //    wall to follow.
+  for (let i = 0; i < nv; i++) {
+    items.push({
+      kind: 'line', a: pagePts[i]!, b: pagePts[(i + 1) % nv]!,
+      stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
+    });
+  }
+
+  // 2. Cell markers (behind the walls, inside the piece — these belong on the
+  //    finished model).
+  for (const { cell, color, label } of markersOnFace(maze, faceId)) {
+    const cv = cellVerts2d(verts2d, cell, n, grid.kind).map(tf);
+    items.push({ kind: 'poly', pts: cv, fill: color });
+    const c = centroid2(cv);
+    items.push({
+      kind: 'text',
+      at: c,
+      text: label,
+      size: inradius(cv, c) * S.labelInradiusScale,
+      color: S.labelColor,
+      bold: true,
+    });
+  }
+
+  // 3. Internal walls — grid edges the spanning tree did not open.
+  const treeSet = new Set<string>();
+  for (const [a, b] of maze.tree.edges()) {
+    treeSet.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+  }
+  for (const [c1, c2] of grid.internalEdges()) {
+    const key = c1 < c2 ? `${c1}|${c2}` : `${c2}|${c1}`;
+    if (treeSet.has(key)) continue;
+    const edge = sharedEdge2d(
+      cellVerts2d(verts2d, c1, n, grid.kind),
+      cellVerts2d(verts2d, c2, n, grid.kind),
+    );
+    if (!edge) continue;
+    items.push({
+      kind: 'line', a: tf(edge[0]), b: tf(edge[1]),
+      stroke: S.wallColor, width: S.wallWidth,
+    });
+  }
+
+  // 4. Boundary walls, with a gap wherever the maze passes to the neighbour.
+  //    Every edge of a face page is a cut edge — including seams between
+  //    coplanar faces, which the net renderer can draw as a mere grid
+  //    division because there the paper stays continuous.
+  for (let i = 0; i < nv; i++) {
+    const adjFaceId = edgeIndex.findAdjacentFace(faceId, i);
+    neighbors.push(adjFaceId);
+    const [es, ee] = offsetOutward(
+      pagePts[i]!, pagePts[(i + 1) % nv]!, center, -S.boundaryInset,
+    );
+
+    let boundaryCells: CellKey[];
+    try {
+      boundaryCells = grid.boundaryCells(face.vertices[i]!, face.vertices[(i + 1) % nv]!);
+    } catch {
+      items.push({
+        kind: 'line', a: es, b: ee,
+        stroke: S.boundaryColor, width: S.boundaryWidth,
+      });
+      continue;
+    }
+
+    const du: Vec2 = [(ee[0] - es[0]) / n, (ee[1] - es[1]) / n];
+    for (let j = 0; j < boundaryCells.length; j++) {
+      const cell = boundaryCells[j]!;
+      if (adjFaceId !== null && hasTreeEdgeToFace(cell, maze.tree, adjFaceId)) continue;
+      items.push({
+        kind: 'line',
+        a: [es[0] + j * du[0], es[1] + j * du[1]],
+        b: [es[0] + (j + 1) * du[0], es[1] + (j + 1) * du[1]],
+        stroke: S.boundaryColor,
+        width: S.boundaryWidth,
+      });
+    }
+  }
+
+  // 5. Edge labels — the face each edge joins. Placed outside the cut line so
+  //    they are cut away; without glue tabs these are the only join hints.
+  const faceById = new Map(faces.map(f => [f.id, f]));
+  for (let i = 0; i < nv; i++) {
+    const adjFaceId = neighbors[i]!;
+    if (adjFaceId === null) continue;
+    const other = faceById.get(adjFaceId)!;
+    const coplanar = dot3(face.normal, other.normal) > 1 - 1e-9;
+    const a = pagePts[i]!;
+    const b = pagePts[(i + 1) % nv]!;
+    const [p, q] = offsetOutward(a, b, center, S.edgeLabelOffset);
+    items.push({
+      kind: 'text',
+      at: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2],
+      text: `${adjFaceId}${coplanar ? S.flatSeamMark : ''}`,
+      size: S.edgeLabelSize,
+      color: S.edgeLabelColor,
+      angle: readableAngle(a, b),
+    });
+  }
+
+  if (options.locator) {
+    items.push(...buildLocatorItems(layout, faceId, placement, options.locator));
+  }
+
+  return { faceId, placement, items, neighbors };
+}
+
+/**
+ * The whole net in miniature with this piece filled in — where the page sits
+ * in the overall unfolding. Turned the same quarter turn as the piece, so the
+ * big drawing and the diagram always read in the same orientation.
+ */
+export function buildLocatorItems(
+  layout: NetLayout, faceId: number, placement: FacePlacement, rect: Rect,
+): PageItem[] {
+  const all: Vec2[] = layout.faces.flatMap(nf => nf.vertices2d);
+  if (all.length === 0) return [];
+
+  const [w, h] = bboxSize(all, placement.rotate90);
+  const [minX, minY] = bboxMin(all, placement.rotate90);
+  const s = Math.min(rect.w / (w || 1), rect.h / (h || 1));
+  const padX = (rect.w - w * s) / 2;
+  const padY = (rect.h - h * s) / 2;
+  const tf = (p: Vec2): Vec2 => {
+    const [x, y] = turn(p, placement.rotate90);
+    return [
+      rect.x + padX + (x - minX) * s,
+      rect.y + rect.h - padY - (y - minY) * s,
+    ];
+  };
+
+  const S = FACE_PAGE_STYLE;
+  const items: PageItem[] = [];
+  for (const nf of layout.faces) {
+    const pts = nf.vertices2d.map(tf);
+    items.push(nf.faceId === faceId
+      ? { kind: 'poly', pts, fill: S.locatorHighlight, stroke: S.locatorColor, width: S.locatorWidth }
+      : { kind: 'poly', pts, stroke: S.locatorColor, width: S.locatorWidth });
+  }
+  return items;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────
+
+function markersOnFace(
+  maze: Maze, faceId: number,
+): { cell: CellKey; color: RGB; label: string }[] {
+  const S = FACE_PAGE_STYLE;
+  const all: { cell: CellKey; color: RGB; label: string }[] = [
+    { cell: maze.start, color: S.startColor, label: 'S' },
+    { cell: maze.goal, color: S.goalColor, label: 'G' },
+  ];
+  if (maze.warp) {
+    all.push(
+      { cell: maze.warp.cellA, color: S.warpColor, label: 'W' },
+      { cell: maze.warp.cellB, color: S.warpColor, label: 'W' },
+    );
+  }
+  return all.filter(m => parseCell(m.cell).faceId === faceId);
+}
+
+/** Quarter turn (counter-clockwise in net coordinates) when `rotate` is set. */
+function turn(p: Vec2, rotate: boolean): Vec2 {
+  return rotate ? [-p[1], p[0]] : [p[0], p[1]];
+}
+
+function bboxSize(pts: Vec2[], rotate: boolean): [number, number] {
+  const [minX, minY, maxX, maxY] = bbox(pts, rotate);
+  return [maxX - minX, maxY - minY];
+}
+
+function bboxMin(pts: Vec2[], rotate: boolean): [number, number] {
+  const [minX, minY] = bbox(pts, rotate);
+  return [minX, minY];
+}
+
+function bbox(pts: Vec2[], rotate: boolean): [number, number, number, number] {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    const [x, y] = turn(p, rotate);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return [minX, minY, maxX, maxY];
+}
+
+/** Shift segment ab away from `from` by `dist` mm. */
+function offsetOutward(a: Vec2, b: Vec2, from: Vec2, dist: number): [Vec2, Vec2] {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-12) return [a, b];
+  const nx = -dy / len, ny = dx / len;
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  const s = (from[0] - mx) * nx + (from[1] - my) * ny > 0 ? -1 : 1;
+  const ox = nx * s * dist, oy = ny * s * dist;
+  return [[a[0] + ox, a[1] + oy], [b[0] + ox, b[1] + oy]];
+}
+
+/**
+ * Angle for text running along ab, in degrees counter-clockwise (jsPDF's
+ * convention) on a y-down page, always within ±90° so the label reads
+ * upright rather than upside down.
+ */
+function readableAngle(a: Vec2, b: Vec2): number {
+  let deg = -Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI;
+  if (deg > 90) deg -= 180;
+  if (deg < -90) deg += 180;
+  return deg;
+}
+
+/** Min distance from a point to any edge of a polygon — the inscribed radius. */
+function inradius(verts: Vec2[], center: Vec2): number {
+  let min = Infinity;
+  for (let i = 0; i < verts.length; i++) {
+    const a = verts[i]!, b = verts[(i + 1) % verts.length]!;
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-12) continue;
+    const d = Math.abs((center[0] - a[0]) * dy - (center[1] - a[1]) * dx) / len;
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+function dot3(a: readonly number[], b: readonly number[]): number {
+  return a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
+}

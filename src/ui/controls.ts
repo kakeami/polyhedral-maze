@@ -19,6 +19,7 @@ export interface ControlsContext {
   onAction(action: string, cb: () => void): void;
   showToast(message: string): void;
   setExportBusy(busy: boolean): void;
+  setFacePagesBusy(busy: boolean, progress?: string): void;
 }
 
 const ALL_CATEGORIES = '__all__';
@@ -122,6 +123,9 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   el('btn-export-pdf').addEventListener('click', () => {
     actions.get('export-pdf')?.();
   });
+  el('btn-export-faces').addEventListener('click', () => {
+    actions.get('export-face-pages')?.();
+  });
 
   const autoRotateCheck = el<HTMLInputElement>('ctrl-auto-rotate');
   autoRotateCheck.addEventListener('change', () => {
@@ -170,7 +174,15 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const exportBtn = el<HTMLButtonElement>('btn-export-pdf');
   function setExportBusy(busy: boolean) {
     exportBtn.disabled = busy;
-    exportBtn.textContent = busy ? 'Exporting...' : 'Export PDF';
+    exportBtn.textContent = busy ? 'Exporting...' : 'Export net PDF';
+  }
+
+  const facesBtn = el<HTMLButtonElement>('btn-export-faces');
+  function setFacePagesBusy(busy: boolean, progress?: string) {
+    facesBtn.disabled = busy;
+    facesBtn.textContent = busy
+      ? (progress ? `Exporting ${progress}...` : 'Exporting...')
+      : 'Export face pages PDF';
   }
 
   return {
@@ -182,6 +194,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     onAction(action, cb) { actions.set(action, cb); },
     showToast,
     setExportBusy,
+    setFacePagesBusy,
   };
 }
 
@@ -237,7 +250,8 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
     <div class="buttons">
       <button id="btn-random">Random</button>
       <button id="btn-copy-url">Copy URL</button>
-      <button id="btn-export-pdf">Export PDF</button>
+      <button id="btn-export-pdf" class="wide" title="Two pages: the whole net as a puzzle, plus the answer">Export net PDF</button>
+      <button id="btn-export-faces" class="wide" title="One page per face, all at the same scale — for large papercraft">Export face pages PDF</button>
     </div>
 
     <div id="ctrl-metrics" class="metrics"></div>

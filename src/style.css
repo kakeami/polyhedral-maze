@@ -130,6 +130,10 @@ html, body {
   margin-bottom: 16px;
 }
 
+.buttons button.wide {
+  grid-column: 1 / -1;
+}
+
 .buttons button {
   padding: 8px 12px;
   border: 1px solid #bbb;

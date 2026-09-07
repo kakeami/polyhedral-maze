@@ -5,14 +5,13 @@
 
 import type { NetLayout } from './net-layout.ts';
 import type { Vec2 } from '../core/vec2.ts';
-import { add2, sub2, scale2, centroid2, midpoint2 } from '../core/vec2.ts';
+import { centroid2, midpoint2 } from '../core/vec2.ts';
 import type { MazeGraph } from '../core/maze-graph.ts';
 import type { Maze } from '../core/maze.ts';
 import type { CellKey } from '../core/types.ts';
 import { parseCell } from '../core/types.ts';
-import type { GridKind } from '../core/face-grid.ts';
 import { bfsShortestPath } from '../core/graph.ts';
-import { VERTEX_EPSILON } from '../core/constants.ts';
+import { cellVerts2d, cellCenter2dNet, sharedEdge2d } from './net-cell-geometry.ts';
 import { hasTreeEdgeToFace } from './render-utils.ts';
 import { buildEdgeIndex } from './edge-index.ts';
 import { SVG_STYLE } from './svg-constants.ts';
@@ -21,6 +20,8 @@ const NS = 'http://www.w3.org/2000/svg';
 
 export interface NetSVGOptions {
   showFaceIds?: boolean;
+  /** Glue tabs are pointless when the piece is cut out on its own. */
+  showGlueTabs?: boolean;
 }
 
 export function renderNetSVG(
@@ -65,7 +66,7 @@ export function renderNetSVG(
   // 0. Glue tabs (drawn first, behind face backgrounds)
   //    Each cut edge appears twice in the net; the layout decides which
   //    occurrence carries the tab (preferring one with open space outside).
-  for (const face of faces) {
+  for (const face of options.showGlueTabs === false ? [] : faces) {
     const verts2d = netMap.get(face.id)!;
     const nv = face.vertices.length;
     const fc = flip(centroid2(verts2d));
@@ -349,80 +350,6 @@ export function renderNetSVG(
   }
 
   return svg;
-}
-
-// ─── 2D cell vertex computation (mirrors cellVertices3d) ──────────
-
-const RADIAL_SECTORS_2D: Partial<Record<GridKind, number>> = {
-  kite: 4, pent: 5, hex: 6, oct: 8, dec: 10,
-};
-
-function cellVerts2d(
-  faceVerts: Vec2[], cell: CellKey, n: number, kind: GridKind,
-): Vec2[] {
-  const { row, col } = parseCell(cell);
-
-  if (kind === 'rect') {
-    const o = faceVerts[0]!;
-    const u = sub2(faceVerts[1]!, o);
-    const v = sub2(faceVerts[3]!, o);
-    return [
-      add2(o, add2(scale2(u, col / n), scale2(v, row / n))),
-      add2(o, add2(scale2(u, (col + 1) / n), scale2(v, row / n))),
-      add2(o, add2(scale2(u, (col + 1) / n), scale2(v, (row + 1) / n))),
-      add2(o, add2(scale2(u, col / n), scale2(v, (row + 1) / n))),
-    ];
-  }
-
-  if (kind === 'tri') {
-    const o = faceVerts[0]!;
-    const u = sub2(faceVerts[1]!, o);
-    const v = sub2(faceVerts[2]!, o);
-    return triCellVerts(o, u, v, row, col, n);
-  }
-
-  const sectors = RADIAL_SECTORS_2D[kind];
-  if (sectors !== undefined) {
-    const center = centroid2(faceVerts);
-    const sector = Math.floor(row / n);
-    const localRow = row - sector * n;
-    const su = sub2(faceVerts[sector]!, center);
-    const sv = sub2(faceVerts[(sector + 1) % sectors]!, center);
-    return triCellVerts(center, su, sv, localRow, col, n);
-  }
-
-  throw new Error(`Unsupported grid kind: ${kind}`);
-}
-
-function triCellVerts(o: Vec2, u: Vec2, v: Vec2, r: number, c: number, n: number): Vec2[] {
-  const k = Math.floor(c / 2);
-  const vtx = (a: number, b: number): Vec2 =>
-    add2(o, add2(scale2(u, a / n), scale2(v, b / n)));
-  if (c % 2 === 0) {
-    return [vtx(r - k, k), vtx(r - k + 1, k), vtx(r - k, k + 1)];
-  } else {
-    return [vtx(r - k, k), vtx(r - k, k + 1), vtx(r - k - 1, k + 1)];
-  }
-}
-
-function cellCenter2dNet(
-  faceVerts: Vec2[], cell: CellKey, n: number, kind: GridKind,
-): Vec2 {
-  return centroid2(cellVerts2d(faceVerts, cell, n, kind));
-}
-
-function sharedEdge2d(v1: Vec2[], v2: Vec2[]): [Vec2, Vec2] | null {
-  const eps = VERTEX_EPSILON;
-  const shared: Vec2[] = [];
-  for (const a of v1) {
-    for (const b of v2) {
-      if (Math.abs(a[0] - b[0]) < eps && Math.abs(a[1] - b[1]) < eps) {
-        shared.push(a);
-        break;
-      }
-    }
-  }
-  return shared.length >= 2 ? [shared[0]!, shared[1]!] : null;
 }
 
 function drawGlueTab(

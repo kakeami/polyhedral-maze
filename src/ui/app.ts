@@ -6,6 +6,7 @@ import { getShape, SHAPES } from '../core/polyhedra/registry.ts';
 import { createScene } from '../render/three-scene.ts';
 import { computeRenderData } from '../render/maze-geometry.ts';
 import { exportPDF } from '../render/pdf-exporter.ts';
+import { exportFacePagesPDF } from '../render/pdf-face-pages.ts';
 import { createControls } from './controls.ts';
 import { decodeParams, encodeParams } from './param-codec.ts';
 
@@ -73,6 +74,22 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
         controls.showToast('PDF export failed — see console');
       })
       .finally(() => controls.setExportBusy(false));
+  });
+
+  controls.onAction('export-face-pages', () => {
+    if (!lastBuild) return;
+    const p = controls.getParams();
+    const baseUrl = window.location.origin + window.location.pathname;
+    controls.setFacePagesBusy(true);
+    exportFacePagesPDF(
+      p, lastBuild.mg, lastBuild.maze, lastBuild.metrics, baseUrl,
+      (done, total) => controls.setFacePagesBusy(true, `${done}/${total}`),
+    )
+      .catch(err => {
+        console.error('Face pages PDF export failed:', err);
+        controls.showToast('Face pages export failed — see console');
+      })
+      .finally(() => controls.setFacePagesBusy(false));
   });
 
   controls.onAction('auto-rotate', () => {
