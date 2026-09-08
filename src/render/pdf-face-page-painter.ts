@@ -8,6 +8,7 @@
  */
 
 import type { jsPDF } from 'jspdf';
+import type { Vec2 } from '../core/vec2.ts';
 import type { PageItem } from './face-page-model.ts';
 import type { SheetSize } from './pdf-chrome.ts';
 
@@ -59,14 +60,43 @@ export function paintItems(doc: jsPDF, items: PageItem[]): void {
     doc.setFont('helvetica', item.bold ? 'bold' : 'normal');
     doc.setFontSize(item.size * MM_TO_PT);
     doc.setTextColor(...item.color);
-    doc.text(item.text, item.at[0], item.at[1], {
-      align: 'center',
-      baseline: 'middle',
-      angle: item.angle ?? 0,
-    });
+    drawCenteredText(doc, item.text, item.at, item.size, item.angle ?? 0);
   }
 
   resetStyle(doc);
+}
+
+/**
+ * Draws `text` centred on `at`, rotated by `angle` degrees.
+ *
+ * jsPDF cannot be asked for this directly: `align: 'center'` and
+ * `baseline: 'middle'` shift the anchor along the *page* axes and only then
+ * rotate about the shifted point, so a rotated label lands half its own width
+ * off perpendicular to the text. On an edge label — offset barely 3.6 mm from
+ * the cut line — that is enough to drop a two-digit neighbour id straight onto
+ * the piece it labels. So the baseline origin is placed here instead, in the
+ * text's own frame, and jsPDF is asked for no adjustment at all. At `angle` 0
+ * this reproduces `align: 'center'` with `baseline: 'middle'` exactly.
+ */
+function drawCenteredText(
+  doc: jsPDF, text: string, at: readonly [number, number], size: number, angle: number,
+): void {
+  // Page axes are y-down and `angle` turns counter-clockwise, so the text
+  // advances along (cos, -sin) with its ascenders along (-sin, -cos).
+  const rad = (angle * Math.PI) / 180;
+  const adv: Vec2 = [Math.cos(rad), -Math.sin(rad)];
+  const up: Vec2 = [-Math.sin(rad), -Math.cos(rad)];
+  // The rise jsPDF's own `baseline: 'middle'` uses, so labels sit at the same
+  // height above their anchor whichever way they are turned.
+  const rise = size * (1.5 - doc.getLineHeightFactor());
+  const half = doc.getTextWidth(text) / 2;
+
+  doc.text(
+    text,
+    at[0] - adv[0] * half - up[0] * rise,
+    at[1] - adv[1] * half - up[1] * rise,
+    { angle },
+  );
 }
 
 /**
