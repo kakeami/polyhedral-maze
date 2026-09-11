@@ -23,8 +23,11 @@ export async function exportPDF(
   const layout = computeNetLayout(mazeGraph.polyhedron);
 
   // Generate SVGs
+  // No face ids on either page: this export is a puzzle to solve, not a set of
+  // pieces to assemble, so the numbers would only crowd the answer's solution
+  // path. They belong to the face-pages index sheet, where they are the map.
   const puzzleSvg = renderNetSVG(layout, mazeGraph, maze, false, { showFaceIds: false });
-  const answerSvg = renderNetSVG(layout, mazeGraph, maze, true, { showFaceIds: true });
+  const answerSvg = renderNetSVG(layout, mazeGraph, maze, true, { showFaceIds: false });
 
   // Temporarily add to DOM (required by svg2pdf.js for measurement)
   const offscreen = document.createElement('div');

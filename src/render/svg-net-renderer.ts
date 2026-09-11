@@ -299,6 +299,15 @@ export function renderNetSVG(
     }
   }
 
+  // 4.4. Face ids — large, underlined, haloed, over the maze. Above the walls
+  //      because a dense face hides anything drawn beneath them, and below the
+  //      S/G/W letters because those are the puzzle and the id is only a name.
+  if (options.showFaceIds !== false) {
+    for (const nf of layout.faces) {
+      drawFaceId(svg, nf.vertices2d.map(flip), nf.faceId);
+    }
+  }
+
   // 4.5. Text labels on Start / Goal / Warp cells (visible in B&W print)
   const labelCells: { cell: CellKey; label: string }[] = [
     { cell: maze.start, label: 'S' },
@@ -325,31 +334,80 @@ export function renderNetSVG(
       'font-weight': 'bold',
       'text-anchor': 'middle',
       'dominant-baseline': 'central',
+      // svg2pdf.js reads `alignment-baseline`, never `dominant-baseline`, and
+      // falls back to the alphabetic baseline without it — the glyph would sit
+      // half a cap height high in its cell.
+      'alignment-baseline': 'central',
       fill: SVG_STYLE.labelColor,
     });
     text.textContent = label;
     svg.appendChild(text);
   }
 
-  // 5. Face ID labels (optional)
-  if (options.showFaceIds !== false) {
-    for (const nf of layout.faces) {
-      const c = flip(centroid2(nf.vertices2d));
-      const fontSize = layout.width * SVG_STYLE.faceIdSizeRatio;
-      const text = svgEl('text', {
-        x: String(c[0]), y: String(c[1]),
-        'font-size': String(fontSize),
-        'font-family': 'Arial, sans-serif',
-        'text-anchor': 'middle',
-        'dominant-baseline': 'central',
-        fill: SVG_STYLE.faceIdColor,
-      });
-      text.textContent = String(nf.faceId);
-      svg.appendChild(text);
-    }
-  }
-
   return svg;
+}
+
+/**
+ * The face id and its rule, set as large as the face's inscribed circle
+ * allows, each drawn twice: a fattened white copy that knocks a hole in the
+ * maze beneath, then the grey ink on top of it. `paint-order: stroke` would
+ * say the same thing in one element, but svg2pdf.js does not implement it.
+ * Coordinates are the net's flipped (page) ones.
+ */
+function drawFaceId(svg: SVGSVGElement, verts: Vec2[], faceId: number) {
+  const c = centroid2(verts);
+  const inradius = cellInradius(verts, c);
+  if (!Number.isFinite(inradius) || inradius <= 0) return;
+
+  const label = String(faceId);
+  const advance = label.length * SVG_STYLE.faceIdDigitAdvance;
+  const fontSize = Math.min(
+    inradius * SVG_STYLE.faceIdInradiusScale,
+    (inradius * SVG_STYLE.faceIdMaxWidthRatio) / advance,
+  );
+  const halo = fontSize * SVG_STYLE.faceIdHaloWidth;
+
+  const glyph = (attrs: Record<string, string>) => {
+    const text = svgEl('text', {
+      x: String(c[0]), y: String(c[1]),
+      'font-size': String(fontSize),
+      'font-family': 'Arial, sans-serif',
+      'font-weight': 'bold',
+      'text-anchor': 'middle',
+      'dominant-baseline': 'central',
+      // See the marker labels: without this the id floats off its own rule.
+      'alignment-baseline': 'central',
+      ...attrs,
+    });
+    text.textContent = label;
+    svg.appendChild(text);
+  };
+
+  const ruleHalf = (advance * fontSize * SVG_STYLE.faceIdUnderlineOverhang) / 2;
+  const ruleY = c[1] + fontSize * SVG_STYLE.faceIdUnderlineDrop;
+  const rule = (attrs: Record<string, string>) => svg.appendChild(svgEl('path', {
+    d: `M${c[0] - ruleHalf},${ruleY}L${c[0] + ruleHalf},${ruleY}`,
+    fill: 'none',
+    ...attrs,
+  }));
+
+  glyph({
+    fill: SVG_STYLE.faceIdHaloColor,
+    stroke: SVG_STYLE.faceIdHaloColor,
+    'stroke-width': String(halo),
+    'stroke-linejoin': 'round',
+  });
+  rule({
+    stroke: SVG_STYLE.faceIdHaloColor,
+    'stroke-width': String(fontSize * SVG_STYLE.faceIdUnderlineWidth + halo),
+    'stroke-linecap': 'round',
+  });
+  glyph({ fill: SVG_STYLE.faceIdColor });
+  rule({
+    stroke: SVG_STYLE.faceIdColor,
+    'stroke-width': String(fontSize * SVG_STYLE.faceIdUnderlineWidth),
+    'stroke-linecap': 'butt',
+  });
 }
 
 function drawGlueTab(
