@@ -18,7 +18,7 @@ interface BuildSnapshot {
 
 export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   const params = decodeParams(window.location.search);
-  const scene = createScene(viewportEl);
+  const scene = createScene(viewportEl, params.style);
   const controls = createControls(controlsEl, params);
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,6 +43,10 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.updateMaze(polyhedron, renderData);
     controls.setMetrics(metrics);
 
+    syncUrl(p);
+  }
+
+  function syncUrl(p: ReturnType<typeof controls.getParams>) {
     history.replaceState(null, '', encodeParams(p) || window.location.pathname);
   }
 
@@ -90,6 +94,13 @@ export function initApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
         controls.showToast('Face pages export failed — see console');
       })
       .finally(() => controls.setFacePagesBusy(false));
+  });
+
+  // Purely visual: swap the material preset without regenerating the maze.
+  controls.onAction('style', () => {
+    const p = controls.getParams();
+    scene.setPreset(p.style);
+    syncUrl(p);
   });
 
   controls.onAction('auto-rotate', () => {

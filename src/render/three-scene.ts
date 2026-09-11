@@ -6,10 +6,27 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face, Vec3 } from '../core/types.ts';
 import type { MazeMarker, MazeRenderData } from './maze-geometry.ts';
 import { SCENE_CONFIG, MAZE_STYLE } from './scene-constants.ts';
+import {
+  DEFAULT_PRESET_ID,
+  faceColorHex,
+  resolvePreset,
+} from './scene-presets.ts';
+import type {
+  FaceMaterialSpec,
+  GroundSpec,
+  PresetId,
+  RimSpec,
+  ScenePreset,
+} from './scene-presets.ts';
 
 export interface SceneContext {
   renderer: THREE.WebGLRenderer;
@@ -17,14 +34,18 @@ export interface SceneContext {
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   updateMaze(polyhedron: Polyhedron, data: MazeRenderData): void;
+  /** Swap the visual preset. Reuses the last maze — no regeneration. */
+  setPreset(id: PresetId): void;
   resize(): void;
   dispose(): void;
 }
 
-export function createScene(container: HTMLElement): SceneContext {
+export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT_PRESET_ID): SceneContext {
   const scene = new THREE.Scene();
 
-  const { camera: camCfg, sky: skyCfg, toneMapping, controls: ctrlCfg, lights } = SCENE_CONFIG;
+  const { camera: camCfg, sky: skyCfg, controls: ctrlCfg, lights } = SCENE_CONFIG;
+
+  let preset: ScenePreset = resolvePreset(presetId);
 
   const camera = new THREE.PerspectiveCamera(
     camCfg.fov,
@@ -38,13 +59,11 @@ export function createScene(container: HTMLElement): SceneContext {
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, SCENE_CONFIG.pixelRatioClamp));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = toneMapping.exposure;
   container.appendChild(renderer.domElement);
 
   // Sky (twilight atmosphere)
   const sky = new Sky();
   sky.scale.setScalar(skyCfg.scale);
-  scene.add(sky);
 
   const skyUniforms = sky.material.uniforms as Record<string, { value: unknown }>;
   skyUniforms['turbidity']!.value = skyCfg.turbidity;
@@ -58,6 +77,18 @@ export function createScene(container: HTMLElement): SceneContext {
   sun.setFromSphericalCoords(1, phi, theta);
   (skyUniforms['sunPosition']!.value as THREE.Vector3).copy(sun);
 
+  // Turn the sky into an environment map. Metal reflects the environment and
+  // nothing else — without this, anything with metalness renders black. The
+  // sky is briefly parented to a scratch scene because PMREMGenerator renders
+  // whatever scene it is handed from the origin outwards.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const skyOnly = new THREE.Scene();
+  skyOnly.add(sky);
+  const envTarget = pmrem.fromScene(skyOnly);
+  scene.environment = envTarget.texture;
+  scene.add(sky);
+  pmrem.dispose();
+
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(...ctrlCfg.target);
   controls.enableDamping = true;
@@ -65,24 +96,110 @@ export function createScene(container: HTMLElement): SceneContext {
   controls.autoRotate = true;
   controls.autoRotateSpeed = ctrlCfg.autoRotateSpeed;
 
-  // Lighting — directional light aligned with the sun
-  scene.add(new THREE.AmbientLight(lights.ambientColor, lights.ambientIntensity));
-  const dir = new THREE.DirectionalLight(lights.directionalColor, lights.directionalIntensity);
+  // Lighting — directional light aligned with the sun. Intensities per preset.
+  const ambient = new THREE.AmbientLight(lights.ambientColor, 1);
+  scene.add(ambient);
+  const dir = new THREE.DirectionalLight(lights.directionalColor, 1);
   dir.position.copy(sun).multiplyScalar(10);
   scene.add(dir);
 
-  let mazeGroup: THREE.Group | null = null;
-  let lineMaterials: LineMaterial[] = [];
+  // Bloom needs a post-processing chain; the presets that do without it keep
+  // rendering straight to the canvas, so they pay nothing for it.
+  //
+  // It takes two chains rather than one, because the sky must not bloom. The
+  // sky is HDR — the sun disc is orders of magnitude past any threshold that
+  // still lets the white face outlines glow — so blooming the frame as a whole
+  // wraps the sun in a halo the size of the viewport. Instead the first chain
+  // renders the solid alone, with the sky hidden, and keeps only the bloom;
+  // the second renders the real frame and adds that glow back on top, before
+  // tone mapping.
+  let bloomComposer: EffectComposer | null = null;
+  let finalComposer: EffectComposer | null = null;
+  let bloomPass: UnrealBloomPass | null = null;
 
-  function updateMaze(polyhedron: Polyhedron, data: MazeRenderData) {
+  function ensureComposers(): UnrealBloomPass {
+    if (bloomPass) return bloomPass;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const pr = renderer.getPixelRatio();
+
+    // Glow only — no antialiasing needed on something this blurry.
+    const bloomTarget = new THREE.WebGLRenderTarget(w * pr, h * pr, {
+      type: THREE.HalfFloatType,
+    });
+    bloomComposer = new EffectComposer(renderer, bloomTarget);
+    bloomComposer.setSize(w, h);
+    bloomComposer.renderToScreen = false;
+    bloomComposer.addPass(new RenderPass(scene, camera));
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0, 0.5, 0.85);
+    bloomComposer.addPass(bloomPass);
+
+    // MSAA on the visible chain: the default composer target has none, and
+    // losing antialiasing on a maze made of hairlines is very visible.
+    const baseTarget = new THREE.WebGLRenderTarget(w * pr, h * pr, {
+      type: THREE.HalfFloatType,
+      samples: 4,
+    });
+    finalComposer = new EffectComposer(renderer, baseTarget);
+    finalComposer.setSize(w, h);
+    finalComposer.addPass(new RenderPass(scene, camera));
+    finalComposer.addPass(makeBloomMixPass(bloomComposer.renderTarget2.texture));
+    finalComposer.addPass(new OutputPass());
+    return bloomPass;
+  }
+
+  let mazeGroup: THREE.Group | null = null;
+  let ground: THREE.Mesh | null = null;
+  let lineMaterials: LineMaterial[] = [];
+  let lastPolyhedron: Polyhedron | null = null;
+  let lastData: MazeRenderData | null = null;
+
+  function applyPreset() {
+    renderer.toneMappingExposure = preset.lighting.exposure;
+    ambient.intensity = preset.lighting.ambientIntensity;
+    dir.intensity = preset.lighting.directionalIntensity;
+
+    if (preset.bloom) {
+      const pass = ensureComposers();
+      pass.strength = preset.bloom.strength;
+      pass.radius = preset.bloom.radius;
+      pass.threshold = preset.bloom.threshold;
+    }
+
+    if (ground) {
+      scene.remove(ground);
+      disposeObject(ground);
+      ground = null;
+    }
+    if (preset.ground) {
+      ground = buildGround(preset.ground);
+      scene.add(ground);
+    }
+  }
+
+  function rebuildMazeGroup() {
     if (mazeGroup) {
       scene.remove(mazeGroup);
-      disposeMeshes(mazeGroup);
+      disposeObject(mazeGroup);
+      mazeGroup = null;
     }
     lineMaterials = [];
+    if (!lastPolyhedron || !lastData) return;
     const resolution = new THREE.Vector2(container.clientWidth, container.clientHeight);
-    mazeGroup = buildMazeGroup(polyhedron, data, resolution, lineMaterials);
+    mazeGroup = buildMazeGroup(lastPolyhedron, lastData, preset, resolution, lineMaterials);
     scene.add(mazeGroup);
+  }
+
+  function updateMaze(polyhedron: Polyhedron, data: MazeRenderData) {
+    lastPolyhedron = polyhedron;
+    lastData = data;
+    rebuildMazeGroup();
+  }
+
+  function setPreset(id: PresetId) {
+    preset = resolvePreset(id);
+    applyPreset();
+    rebuildMazeGroup();
   }
 
   function resize() {
@@ -91,10 +208,14 @@ export function createScene(container: HTMLElement): SceneContext {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    bloomComposer?.setSize(w, h);
+    finalComposer?.setSize(w, h);
     for (const mat of lineMaterials) {
       mat.resolution.set(w, h);
     }
   }
+
+  applyPreset();
 
   // Render loop
   let running = true;
@@ -102,19 +223,32 @@ export function createScene(container: HTMLElement): SceneContext {
     if (!running) return;
     requestAnimationFrame(animate);
     controls.update();
-    renderer.render(scene, camera);
+    if (preset.bloom && bloomComposer && finalComposer) {
+      sky.visible = false;
+      bloomComposer.render();
+      sky.visible = true;
+      finalComposer.render();
+    } else {
+      renderer.render(scene, camera);
+    }
   }
   animate();
 
   function dispose() {
     running = false;
+    if (mazeGroup) disposeObject(mazeGroup);
+    if (ground) disposeObject(ground);
+    bloomComposer?.dispose();
+    finalComposer?.dispose();
+    envTarget.dispose();
+    sky.geometry.dispose();
+    sky.material.dispose();
     renderer.dispose();
     controls.dispose();
     renderer.domElement.remove();
-    if (mazeGroup) disposeMeshes(mazeGroup);
   }
 
-  return { renderer, scene, camera, controls, updateMaze, resize, dispose };
+  return { renderer, scene, camera, controls, updateMaze, setPreset, resize, dispose };
 }
 
 // ─── Build 3D objects ───────────────────────────────────────────────
@@ -122,23 +256,22 @@ export function createScene(container: HTMLElement): SceneContext {
 function buildMazeGroup(
   polyhedron: Polyhedron,
   data: MazeRenderData,
+  preset: ScenePreset,
   resolution: THREE.Vector2,
   outLineMaterials: LineMaterial[],
 ): THREE.Group {
   const group = new THREE.Group();
   const faces = polyhedron.faces();
+  const { lines } = preset;
 
-  // 1. Face meshes (colored polyhedron)
-  const faceMeshGroup = buildFaceMeshes(faces);
-  group.add(faceMeshGroup);
+  // 1. Face surface (one merged mesh, plus the rim glow sharing its geometry)
+  group.add(buildFaceGroup(faces, preset));
 
   // 2. Wall lines (fat lines via Line2 addon)
   if (data.walls.length > 0) {
     const wallGeo = new LineSegmentsGeometry();
     wallGeo.setPositions(vecPairsToFlatArray(data.walls));
-    const wallMat = new LineMaterial({ color: MAZE_STYLE.walls.color, linewidth: MAZE_STYLE.walls.linewidth });
-    wallMat.resolution.copy(resolution);
-    outLineMaterials.push(wallMat);
+    const wallMat = makeLineMaterial(lines.wallColor, lines.wallWidth, resolution, outLineMaterials);
     group.add(new LineSegments2(wallGeo, wallMat));
   }
 
@@ -146,9 +279,7 @@ function buildMazeGroup(
   if (data.outline.length > 0) {
     const outGeo = new LineSegmentsGeometry();
     outGeo.setPositions(vecPairsToFlatArray(data.outline));
-    const outMat = new LineMaterial({ color: MAZE_STYLE.outline.color, linewidth: MAZE_STYLE.outline.linewidth });
-    outMat.resolution.copy(resolution);
-    outLineMaterials.push(outMat);
+    const outMat = makeLineMaterial(lines.outlineColor, lines.outlineWidth, resolution, outLineMaterials);
     group.add(new LineSegments2(outGeo, outMat));
   }
 
@@ -158,9 +289,7 @@ function buildMazeGroup(
     for (const v of data.solution) positions.push(v[0], v[1], v[2]);
     const lineGeo = new LineGeometry();
     lineGeo.setPositions(positions);
-    const lineMat = new LineMaterial({ color: MAZE_STYLE.solution.color, linewidth: MAZE_STYLE.solution.linewidth });
-    lineMat.resolution.copy(resolution);
-    outLineMaterials.push(lineMat);
+    const lineMat = makeLineMaterial(lines.solutionColor, lines.solutionWidth, resolution, outLineMaterials);
     group.add(new Line2(lineGeo, lineMat));
   }
 
@@ -172,48 +301,176 @@ function buildMazeGroup(
   return group;
 }
 
-function buildFaceMeshes(faces: Face[]): THREE.Group {
+function makeLineMaterial(
+  color: number,
+  linewidth: number,
+  resolution: THREE.Vector2,
+  outLineMaterials: LineMaterial[],
+): LineMaterial {
+  const mat = new LineMaterial({ color, linewidth });
+  mat.resolution.copy(resolution);
+  outLineMaterials.push(mat);
+  return mat;
+}
+
+/** Adds the bloom chain's glow onto the real frame, still in linear HDR. */
+function makeBloomMixPass(bloomTexture: THREE.Texture): ShaderPass {
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      baseTexture: { value: null },
+      bloomTexture: { value: bloomTexture },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform sampler2D baseTexture;
+      uniform sampler2D bloomTexture;
+      varying vec2 vUv;
+      void main() {
+        gl_FragColor = texture2D(baseTexture, vUv) + texture2D(bloomTexture, vUv);
+      }
+    `,
+  });
+  return new ShaderPass(material, 'baseTexture');
+}
+
+/**
+ * All faces in one geometry, tinted per face through vertex colours. One draw
+ * call instead of one per face — which matters at 120 faces, and lets the rim
+ * glow reuse the same buffers instead of doubling them.
+ */
+function buildFaceGroup(faces: Face[], preset: ScenePreset): THREE.Group {
   const group = new THREE.Group();
   const total = faces.length;
 
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const colors: number[] = [];
+  const color = new THREE.Color();
+
   for (const face of faces) {
+    color.set(faceColorHex(preset.palette, face.id, total));
     const verts = face.vertices;
-    const n = verts.length;
-
     // Triangulate face (fan from vertex 0)
-    const positions: number[] = [];
-    const normals: number[] = [];
-    const indices: number[] = [];
-
-    for (const v of verts) {
-      positions.push(v[0], v[1], v[2]);
-      normals.push(face.normal[0], face.normal[1], face.normal[2]);
+    for (let i = 1; i < verts.length - 1; i++) {
+      for (const v of [verts[0]!, verts[i]!, verts[i + 1]!]) {
+        positions.push(v[0], v[1], v[2]);
+        normals.push(face.normal[0], face.normal[1], face.normal[2]);
+        colors.push(color.r, color.g, color.b);
+      }
     }
-
-    for (let i = 1; i < n - 1; i++) {
-      indices.push(0, i, i + 1);
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    geo.setIndex(indices);
-
-    const hue = face.id / total;
-    const color = new THREE.Color().setHSL(hue, MAZE_STYLE.face.saturation, MAZE_STYLE.face.lightness);
-    const mat = new THREE.MeshStandardMaterial({
-      color,
-      side: THREE.DoubleSide,
-      flatShading: true,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1,
-    });
-
-    group.add(new THREE.Mesh(geo, mat));
   }
 
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+  group.add(new THREE.Mesh(geo, makeFaceMaterial(preset.material)));
+  if (preset.rim) group.add(new THREE.Mesh(geo, makeRimMaterial(preset.rim)));
+
   return group;
+}
+
+function makeFaceMaterial(m: FaceMaterialSpec): THREE.Material {
+  return new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide,
+    flatShading: true,
+    // Pushes the surface back so the wall lines sitting on it stay in front.
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+    metalness: m.metalness,
+    roughness: m.roughness,
+    envMapIntensity: m.envMapIntensity,
+  });
+}
+
+/**
+ * Fresnel rim, drawn as an additive shell over the same geometry. On a
+ * faceted solid this lights the faces you see edge-on — the ones whose maze
+ * you cannot read anyway — and leaves the faces turned towards you untouched.
+ * It shares the face's polygon offset, so the wall lines still win the depth
+ * test and the glow never washes over them.
+ */
+function makeRimMaterial(spec: RimSpec): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(spec.color) },
+      uIntensity: { value: spec.intensity },
+      uPower: { value: spec.power },
+    },
+    vertexShader: /* glsl */`
+      varying vec3 vNormalView;
+      varying vec3 vToEye;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vNormalView = normalize(normalMatrix * normal);
+        vToEye = -mv.xyz;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform vec3 uColor;
+      uniform float uIntensity;
+      uniform float uPower;
+      varying vec3 vNormalView;
+      varying vec3 vToEye;
+      void main() {
+        float facing = abs(dot(normalize(vNormalView), normalize(vToEye)));
+        float rim = pow(1.0 - facing, uPower);
+        gl_FragColor = vec4(uColor * rim * uIntensity, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+}
+
+/**
+ * Soft dark disc below the solid, to give it somewhere to stand. It is a
+ * painted shadow, not a cast one: the sun sits 3° above the horizon, so a real
+ * shadow would be stretched past the horizon and read as nothing at all.
+ * Unlit and double-sided so orbiting under the solid shows the same disc.
+ */
+function buildGround(spec: GroundSpec): THREE.Mesh {
+  const geo = new THREE.RingGeometry(1e-4, spec.radius, 64, 24);
+  geo.rotateX(-Math.PI / 2);
+
+  const pos = geo.getAttribute('position');
+  const color = new THREE.Color(spec.color);
+  const rgba = new Float32Array(pos.count * 4);
+  for (let i = 0; i < pos.count; i++) {
+    const t = Math.min(1, Math.hypot(pos.getX(i), pos.getZ(i)) / spec.radius);
+    rgba[i * 4] = color.r;
+    rgba[i * 4 + 1] = color.g;
+    rgba[i * 4 + 2] = color.b;
+    rgba[i * 4 + 3] = Math.pow(1 - t, 2.5) * spec.opacity;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
+
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  }));
+  mesh.position.y = -spec.drop;
+  mesh.renderOrder = -1;
+  return mesh;
 }
 
 function vecPairsToFlatArray(pairs: Vec3[]): number[] {
@@ -256,9 +513,7 @@ function makePin(
 
   const stemGeo = new LineSegmentsGeometry();
   stemGeo.setPositions([...foot, ...head]);
-  const stemMat = new LineMaterial({ color, linewidth: stemWidth });
-  stemMat.resolution.copy(resolution);
-  outLineMaterials.push(stemMat);
+  const stemMat = makeLineMaterial(color, stemWidth, resolution, outLineMaterials);
   group.add(new LineSegments2(stemGeo, stemMat));
 
   group.add(makeSphere(foot, color, footRadius));
@@ -274,7 +529,7 @@ function makeSphere(pos: Vec3, color: number, radius: number): THREE.Mesh {
   return mesh;
 }
 
-function disposeMeshes(obj: THREE.Object3D) {
+function disposeObject(obj: THREE.Object3D) {
   obj.traverse((child) => {
     if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments || child instanceof THREE.Line) {
       child.geometry.dispose();

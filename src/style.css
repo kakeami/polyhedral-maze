@@ -108,6 +108,11 @@ html, body {
   color: #888;
 }
 
+#controls label .hint {
+  font-weight: 400;
+  color: #999;
+}
+
 .checkboxes {
   display: flex;
   flex-wrap: wrap;

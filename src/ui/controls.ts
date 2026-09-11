@@ -9,6 +9,8 @@ import {
   availableCategories,
 } from '../core/polyhedra/registry.ts';
 import type { ShapeCategory, ShapeDescriptor } from '../core/polyhedra/registry.ts';
+import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
+import type { PresetId } from '../render/scene-presets.ts';
 
 export interface ControlsContext {
   container: HTMLElement;
@@ -42,6 +44,8 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const kValue = el<HTMLSpanElement>('ctrl-k-val');
   const algoSelect = el<HTMLSelectElement>('ctrl-algo');
   const seedInput = el<HTMLInputElement>('ctrl-seed');
+  const styleSelect = el<HTMLSelectElement>('ctrl-style');
+  const styleNote = el<HTMLDivElement>('ctrl-style-note');
   const warpCheck = el<HTMLInputElement>('ctrl-warp');
   const solutionCheck = el<HTMLInputElement>('ctrl-solution');
   const metricsDiv = el<HTMLDivElement>('ctrl-metrics');
@@ -127,6 +131,15 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     actions.get('export-face-pages')?.();
   });
 
+  function updateStyleNote() {
+    styleNote.textContent = resolvePreset(styleSelect.value).note;
+  }
+  updateStyleNote();
+  styleSelect.addEventListener('change', () => {
+    updateStyleNote();
+    actions.get('style')?.();
+  });
+
   const autoRotateCheck = el<HTMLInputElement>('ctrl-auto-rotate');
   autoRotateCheck.addEventListener('change', () => {
     actions.get('auto-rotate')?.();
@@ -141,6 +154,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
       seed: Number(seedInput.value),
       warp: warpCheck.checked,
       showSolution: solutionCheck.checked,
+      style: styleSelect.value as PresetId,
     };
   }
 
@@ -199,6 +213,10 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
 }
 
 function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
+  const styleOptions = SCENE_PRESETS.map(s =>
+    `<option value="${esc(s.id)}"${s.id === p.style ? ' selected' : ''}>${esc(s.label)}</option>`,
+  ).join('');
+
   const categories = availableCategories();
   const categoryOptions = [
     ...categories.map(c =>
@@ -240,6 +258,13 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
     <label>Seed
       <input id="ctrl-seed" type="number" min="0" max="999999" value="${p.seed}" />
     </label>
+
+    <label>Style <span class="hint">(3D view only)</span>
+      <select id="ctrl-style">
+        ${styleOptions}
+      </select>
+    </label>
+    <div class="shape-info" id="ctrl-style-note"></div>
 
     <div class="checkboxes">
       <label><input id="ctrl-warp" type="checkbox" ${p.warp ? 'checked' : ''} /> Warp</label>

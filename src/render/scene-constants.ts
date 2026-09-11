@@ -1,4 +1,12 @@
-/** Visual constants for Three.js scene rendering. */
+/**
+ * Visual constants for Three.js scene rendering.
+ *
+ * What lives here is the part of the scene that does not change with the
+ * visual preset: the camera, the sky, the orbit behaviour, and the geometry
+ * of the start / goal / warp pins. Material, palette, light intensity, line
+ * colour and the rim / bloom / ground extras are per-preset and live in
+ * `scene-presets.ts`.
+ */
 export const SCENE_CONFIG = {
   camera: {
     fov: 50,
@@ -15,28 +23,21 @@ export const SCENE_CONFIG = {
     elevation: 3,
     azimuth: 200,
   },
-  toneMapping: {
-    exposure: 0.4,
-  },
   controls: {
     target: [0, 0.3, 0] as const,
     dampingFactor: 0.08,
     autoRotateSpeed: 0.5,
   },
+  /** Light colours are fixed; the intensities come from the preset. */
   lights: {
     ambientColor: 0xfff0e0,
-    ambientIntensity: 0.8,
     directionalColor: 0xffe8c0,
-    directionalIntensity: 1.2,
   },
   pixelRatioClamp: 2,
 } as const;
 
 /** Visual constants for maze objects in the 3D scene. */
 export const MAZE_STYLE = {
-  walls: { color: 0x111111, linewidth: 2 },
-  outline: { color: 0x000000, linewidth: 3 },
-  solution: { color: 0xee3333, linewidth: 3 },
   /**
    * Start / goal / warp are drawn as pins, not as beads sitting on the
    * surface. A bead big enough to spot across the solid is bigger than a cell
@@ -44,6 +45,10 @@ export const MAZE_STYLE = {
    * cell it meant ambiguous. The head floats clear of the maze on a stem along
    * the face normal, and the foot dot on the surface is the actual answer.
    * Lengths are in model units — every solid here has circumradius 1.
+   *
+   * The colours are preset-independent: green / red / yellow at full chroma
+   * read against both the bright and the dark surfaces, and the legend in the
+   * control panel names them once.
    */
   markers: {
     startColor: 0x22bb22,
@@ -57,9 +62,5 @@ export const MAZE_STYLE = {
     stemWidth: 2,
     /** Dot left at the cell centre: small enough to sit inside a fine cell. */
     footRadius: 0.009,
-  },
-  face: {
-    saturation: 0.10,
-    lightness: 0.95,
   },
 } as const;

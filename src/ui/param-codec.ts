@@ -1,4 +1,6 @@
 import type { Algorithm } from '../core/maze.ts';
+import { DEFAULT_PRESET_ID, resolvePreset } from '../render/scene-presets.ts';
+import type { PresetId } from '../render/scene-presets.ts';
 
 export interface MazeParams {
   shape: string;
@@ -8,6 +10,8 @@ export interface MazeParams {
   seed: number;
   warp: boolean;
   showSolution: boolean;
+  /** 3D view only — the net and face-page PDFs are unaffected. */
+  style: PresetId;
 }
 
 const ALGORITHMS: readonly Algorithm[] = ['KRUSKAL', 'DFS', 'WILSON'];
@@ -20,6 +24,7 @@ export const DEFAULT_PARAMS: MazeParams = {
   seed: 42,
   warp: false,
   showSolution: false,
+  style: DEFAULT_PRESET_ID,
 };
 
 export function encodeParams(params: MazeParams): string {
@@ -31,6 +36,7 @@ export function encodeParams(params: MazeParams): string {
   if (params.seed !== DEFAULT_PARAMS.seed) p.set('seed', String(params.seed));
   if (params.warp) p.set('warp', '1');
   if (params.showSolution) p.set('solution', '1');
+  if (params.style !== DEFAULT_PARAMS.style) p.set('style', params.style);
   const qs = p.toString();
   return qs ? '?' + qs : '';
 }
@@ -45,6 +51,7 @@ export function decodeParams(search: string): MazeParams {
     seed: clamp(Number(p.get('seed') ?? DEFAULT_PARAMS.seed), 0, 999999),
     warp: p.get('warp') === '1',
     showSolution: p.get('solution') === '1',
+    style: resolvePreset(p.get('style')).id,
   };
 }
 
