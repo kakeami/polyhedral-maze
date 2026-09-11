@@ -29,10 +29,10 @@ import type {
 } from './scene-presets.ts';
 
 /**
- * Camera layers. The bloom chain renders layer 1 and nothing else, so what
- * glows is decided by which objects opt in rather than by brightness alone.
+ * Tag for the objects allowed to glow. While the bloom chain renders,
+ * everything else in the scene is masked to black rather than left out, so
+ * what glows is decided by opting in rather than by brightness alone.
  */
-const BASE_LAYER = 0;
 const BLOOM_LAYER = 1;
 
 export interface SceneContext {
@@ -118,14 +118,12 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
   // still lets the white face outlines glow — so blooming the frame as a whole
   // wraps the sun in a halo the size of the viewport.
   //
-  // So the first chain renders the bloom layer alone, on black, and the second
-  // renders the real frame and adds that glow on top before tone mapping.
-  // Restricting the first chain by layer rather than by brightness matters:
-  // UnrealBloomPass returns its input *plus* the glow, so anything visible to
-  // it is composited into the frame a second time. Only the face outline opts
-  // in, which is exactly what should be glowing — alongside a black copy of
-  // the surface, which adds nothing but keeps the far side of the solid from
-  // glowing through the near side.
+  // So the first chain renders the solid with everything but the glowing
+  // edges masked to black, and the second renders the real frame and adds
+  // that glow on top before tone mapping. Masking rather than omitting
+  // matters twice over: UnrealBloomPass returns its input *plus* the glow, so
+  // anything left visible is composited into the frame a second time, and
+  // anything left out stops occluding — see `maskForBloom`.
   let bloomComposer: EffectComposer | null = null;
   let finalComposer: EffectComposer | null = null;
   let bloomPass: UnrealBloomPass | null = null;
@@ -159,6 +157,55 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     finalComposer.addPass(makeBloomMixPass(bloomComposer.renderTarget2.texture));
     finalComposer.addPass(new OutputPass());
     return bloomPass;
+  }
+
+  // Masking for the bloom chain. Everything not tagged to glow is drawn black
+  // instead of being skipped, because the chain still needs the scene's depth:
+  // without it the outlines on the far side of the solid, and the ones behind
+  // a marker pin, are composited into the frame no matter what stands in
+  // front of them. Black adds nothing when the glow goes back on; occluding is
+  // the whole job. Transparent overlays write no depth, so they are hidden
+  // instead — which also stops them being composited twice.
+  const bloomMask = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    side: THREE.DoubleSide,
+    // Matches the surface, so the lines lying on it still win the depth test.
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+  const maskedMeshes: { mesh: THREE.Mesh; material: THREE.Material | THREE.Material[] }[] = [];
+  const maskedLines: { material: LineMaterial; color: number }[] = [];
+  const maskedHidden: THREE.Object3D[] = [];
+
+  function maskForBloom() {
+    mazeGroup?.traverse((obj) => {
+      if (obj.layers.isEnabled(BLOOM_LAYER)) return;
+      const mesh = obj as THREE.Mesh;
+      const material = mesh.material;
+      if (!material || Array.isArray(material)) return;
+
+      if (material.transparent) {
+        obj.visible = false;
+        maskedHidden.push(obj);
+      } else if ((material as LineMaterial).isLineMaterial) {
+        const line = material as LineMaterial;
+        maskedLines.push({ material: line, color: line.color.getHex() });
+        line.color.setHex(0x000000);
+      } else {
+        maskedMeshes.push({ mesh, material });
+        mesh.material = bloomMask;
+      }
+    });
+  }
+
+  function unmaskAfterBloom() {
+    for (const { mesh, material } of maskedMeshes) mesh.material = material;
+    for (const { material, color } of maskedLines) material.color.setHex(color);
+    for (const obj of maskedHidden) obj.visible = true;
+    maskedMeshes.length = 0;
+    maskedLines.length = 0;
+    maskedHidden.length = 0;
   }
 
   let mazeGroup: THREE.Group | null = null;
@@ -237,9 +284,11 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     requestAnimationFrame(animate);
     controls.update();
     if (preset.bloom && bloomComposer && finalComposer) {
-      camera.layers.set(BLOOM_LAYER);
+      sky.visible = false;
+      maskForBloom();
       bloomComposer.render();
-      camera.layers.set(BASE_LAYER);
+      unmaskAfterBloom();
+      sky.visible = true;
       finalComposer.render();
     } else {
       renderer.render(scene, camera);
@@ -253,6 +302,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     if (ground) disposeObject(ground);
     bloomComposer?.dispose();
     finalComposer?.dispose();
+    bloomMask.dispose();
     envTarget.dispose();
     sky.geometry.dispose();
     sky.material.dispose();
@@ -389,33 +439,8 @@ function buildFaceGroup(faces: Face[], preset: ScenePreset): THREE.Group {
 
   group.add(new THREE.Mesh(geo, makeFaceMaterial(preset.material)));
   if (preset.rim) group.add(new THREE.Mesh(geo, makeRimMaterial(preset.rim)));
-  if (preset.bloom) group.add(makeBloomOccluder(geo));
 
   return group;
-}
-
-/**
- * A black stand-in for the surface, drawn into the bloom chain only.
- *
- * That chain renders the bloom layer and nothing else, so on its own the face
- * outlines have nothing to hide behind — including the outlines on the far
- * side of the solid, which then get added back into the frame and make the
- * whole object look transparent. This writes the depth that stops them. Black
- * adds nothing when the glow is composited; occluding is all it does.
- */
-function makeBloomOccluder(geo: THREE.BufferGeometry): THREE.Mesh {
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-    color: 0x000000,
-    side: THREE.DoubleSide,
-    // Same offset as the real surface, so the outlines it is meant to occlude
-    // still win the depth test on the near side.
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
-  }));
-  // Layer 1 only — never drawn into the frame the viewer sees.
-  mesh.layers.set(BLOOM_LAYER);
-  return mesh;
 }
 
 function makeFaceMaterial(m: FaceMaterialSpec): THREE.Material {
