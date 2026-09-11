@@ -7,7 +7,8 @@ import { jsPDF } from 'jspdf';
 import {
   A4_PORTRAIT, buildFacePage, computeFacePageScale,
 } from '../../render/face-page-model.ts';
-import { paintFacePage, paintItems } from '../../render/pdf-face-page-painter.ts';
+import { frameChromeItems, packFaceSheets } from '../../render/face-sheet-layout.ts';
+import { paintFaceSheet, paintItems } from '../../render/pdf-face-page-painter.ts';
 import { drawIndexChrome, formatInfo } from '../../render/pdf-chrome.ts';
 import { computeMetrics } from '../metrics.ts';
 import { computeNetLayout } from '../../render/net-layout.ts';
@@ -24,32 +25,34 @@ function paintAllFaces(shapeId: string, n: number) {
   const maze = generate(mg, { algorithm: 'DFS', warp: true, rng: createRng(3) });
   const layout = computeNetLayout(polyhedron);
   const scale = computeFacePageScale(layout, A4_PORTRAIT);
+  const sheets = packFaceSheets(layout, scale, A4_PORTRAIT);
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const ids = layout.faces.map(f => f.faceId).sort((a, b) => a - b);
-  ids.forEach((faceId, i) => {
-    const page = buildFacePage(layout, mg, maze, scale, faceId, {
-      locator: { x: 148, y: 11, w: 52, h: 32 },
-    });
+  sheets.forEach((sheet, i) => {
+    const items = sheet.frames.flatMap(frame => [
+      ...frameChromeItems(frame),
+      ...buildFacePage(layout, mg, maze, scale, frame.faceId, {
+        area: frame.area, locator: frame.locator,
+      }).items,
+    ]);
     if (i > 0) doc.addPage();
-    paintFacePage(doc, A4_PORTRAIT, {
-      title: `Face ${faceId}`,
-      subtitle: `${i + 1} of ${ids.length}`,
+    paintFaceSheet(doc, A4_PORTRAIT, {
+      info: shapeId,
       footerLeft: shapeId,
-      footerRight: `page ${i + 2} / ${ids.length + 1}`,
-    }, page.items);
+      footerRight: `sheet ${i + 1} / ${sheets.length}`,
+    }, items);
   });
-  return { doc, faceCount: ids.length };
+  return { doc, sheetCount: sheets.length };
 }
 
-describe('paintFacePage', () => {
+describe('paintFaceSheet', () => {
   it.each([
     { shape: 'cube', n: 4 },
     { shape: 'icosahedron', n: 6 },
     { shape: 'truncated-icosahedron', n: 5 },
     { shape: 'square-torus', n: 4 },
-  ])('$shape: writes one page per face', ({ shape, n }) => {
-    const { doc, faceCount } = paintAllFaces(shape, n);
-    expect(doc.getNumberOfPages()).toBe(faceCount);
+  ])('$shape: writes one page per packed sheet', ({ shape, n }) => {
+    const { doc, sheetCount } = paintAllFaces(shape, n);
+    expect(doc.getNumberOfPages()).toBe(sheetCount);
 
     const bytes = doc.output('arraybuffer');
     expect(bytes.byteLength).toBeGreaterThan(1000);
@@ -77,6 +80,7 @@ describe('drawIndexChrome', () => {
       edgeMm: 174,
       modelMm: 300,
       faceCount: 6,
+      sheetCount: 4,
     }, params, computeMetrics(maze, mg));
 
     expect(doc.getNumberOfPages()).toBe(1);
@@ -182,8 +186,8 @@ function paintOneFace(shapeId: string, n: number, faceId: number) {
   const scale = computeFacePageScale(layout, A4_PORTRAIT);
   const page = buildFacePage(layout, mg, maze, scale, faceId, {});
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  paintFacePage(doc, A4_PORTRAIT, {
-    title: `Face ${faceId}`, subtitle: '', footerLeft: shapeId, footerRight: '',
+  paintFaceSheet(doc, A4_PORTRAIT, {
+    info: shapeId, footerLeft: shapeId, footerRight: '',
   }, page.items);
 
   // The dashed lines are the cut guide, pushed in edge order, so their start

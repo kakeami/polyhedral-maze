@@ -12,6 +12,7 @@ import {
   faceToPageTransform,
   medianEdgeLength,
   pieceArea,
+  QUARTER_TURN,
 } from '../../render/face-page-model.ts';
 import { FACE_PAGE_STYLE } from '../../render/face-page-constants.ts';
 import { computeNetLayout } from '../../render/net-layout.ts';
@@ -130,7 +131,7 @@ describe('computeFacePageScale', () => {
       const { layout, scale } = build(id);
       const area = pieceArea(A4_PORTRAIT);
       for (const nf of layout.faces) {
-        const { rotate90 } = scale.placements.get(nf.faceId)!;
+        const rotate90 = scale.placements.get(nf.faceId)!.turn !== 0;
         const bb = bboxOf(nf.vertices2d);
         const w = bb.maxX - bb.minX, h = bb.maxY - bb.minY;
         const upright = Math.min(area.w / w, area.h / h);
@@ -138,6 +139,8 @@ describe('computeFacePageScale', () => {
         // A square piece must stay upright rather than flip on rounding noise.
         if (Math.abs(turned / upright - 1) < 1e-3) expect(rotate90).toBe(false);
         else expect(rotate90).toBe(turned > upright);
+        // The scale only ever considers a quarter turn.
+        expect([0, QUARTER_TURN]).toContain(scale.placements.get(nf.faceId)!.turn);
       }
     },
   );

@@ -329,7 +329,7 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
       <button id="btn-shuffle-all" title="A new solid, algorithm, resolution, seed and material — everything except the Warp and Show solution switches">Shuffle all</button>
       <button id="btn-copy-url" class="wide">Copy URL</button>
       <button id="btn-export-pdf" class="wide" title="Two pages: the whole net as a puzzle, plus the answer">Export net PDF</button>
-      <button id="btn-export-faces" class="wide" title="One page per face, all at the same scale — for large papercraft">Export face pages PDF</button>
+      <button id="btn-export-faces" class="wide" title="Every face as a cut-out piece, all at the same scale, packed several to a sheet — for large papercraft">Export face pages PDF</button>
     </div>
 
     <div id="ctrl-metrics" class="metrics"></div>

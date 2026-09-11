@@ -30,7 +30,7 @@ interactive 3D viewer.
 - **Interactive 3D viewer**: rotate, zoom, auto-rotate, and inspect the maze on the surface
 - **URL sharing**: any maze configuration is reproducible via URL parameters
 - **PDF export**: download unfolded net diagrams (puzzle + answer) for paper craft — nets are guaranteed overlap-free with glue tabs and cut guides, even for toroidal shapes
-- **Face pages export**: for large models, an index sheet plus one page per face, every page at the same scale so the pieces still fit together. No glue tabs; each edge is labelled with the face it joins, outside the cut line. Print the set bigger (A3, say) and the model scales with it
+- **Face pages export**: for large models, an index sheet plus the pieces themselves, every piece at the same scale so they still fit together. Each piece gets its own framed panel with its own locator diagram, and panels are packed several to a sheet wherever they fit. No glue tabs; each edge is labelled with the face it joins, outside the cut line. Print the set bigger (A3, say) and the model scales with it
 
 ## Demo
 

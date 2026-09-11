@@ -1,6 +1,12 @@
 /**
- * Face-pages PDF export: an index sheet plus one A4 page per face, all at a
+ * Face-pages PDF export: an index sheet plus the pieces themselves, all at a
  * single shared scale, for building a very large papercraft model.
+ *
+ * Pieces are packed several to a sheet where they fit (`face-sheet-layout.ts`)
+ * — the scale never bends for the packing, so a sheet holds as many pieces as
+ * their true printed size allows and no more. Each piece keeps its own framed
+ * panel, title and locator diagram, so the panel reads exactly as the page it
+ * used to have.
  *
  * The pieces are painted with jsPDF vector primitives straight from
  * `face-page-model.ts` rather than through SVG: the page model already works
@@ -18,9 +24,10 @@ import {
   buildFacePage,
   computeFacePageScale,
   medianEdgeLength,
-  type Rect,
+  type PageItem,
 } from './face-page-model.ts';
-import { paintFacePage } from './pdf-face-page-painter.ts';
+import { frameChromeItems, packFaceSheets } from './face-sheet-layout.ts';
+import { paintFaceSheet } from './pdf-face-page-painter.ts';
 import {
   INDEX_NET_BOX, drawIndexChrome, formatInfo, type IndexFacts,
 } from './pdf-chrome.ts';
@@ -29,9 +36,6 @@ import type { MazeGraph } from '../core/maze-graph.ts';
 import type { Maze } from '../core/maze.ts';
 import type { MazeMetrics } from '../core/metrics.ts';
 import { encodeParams, type MazeParams } from '../ui/param-codec.ts';
-
-/** Locator diagram slot in the header band. */
-const LOCATOR: Rect = { x: 148, y: 11, w: 52, h: 27 };
 
 export interface FacePagesProgress {
   (done: number, total: number): void;
@@ -51,10 +55,11 @@ export async function exportFacePagesPDF(
   const layout = computeNetLayout(polyhedron);
   const scale = computeFacePageScale(layout, page);
 
+  const sheets = packFaceSheets(layout, scale, page);
+
   const edgeMm = medianEdgeLength(faces) * scale.mmPerUnit;
   const modelMm = modelExtent(faces) * scale.mmPerUnit;
-  const faceIds = layout.faces.map(nf => nf.faceId).sort((a, b) => a - b);
-  const totalPages = faceIds.length + 1;
+  const totalPages = sheets.length + 1;
   const mazeUrl = baseUrl + encodeParams(params);
   const info = formatInfo(params);
 
@@ -67,24 +72,33 @@ export async function exportFacePagesPDF(
   });
   await drawIndexPage(
     doc, page, layout, mazeGraph, maze, metrics, params,
-    { mazeUrl, info, edgeMm, modelMm, faceCount: faceIds.length, qrDataUrl },
+    {
+      mazeUrl, info, edgeMm, modelMm,
+      faceCount: faces.length, sheetCount: sheets.length, qrDataUrl,
+    },
   );
   onProgress?.(1, totalPages);
 
-  for (let i = 0; i < faceIds.length; i++) {
-    const faceId = faceIds[i]!;
-    const facePage = buildFacePage(layout, mazeGraph, maze, scale, faceId, { locator: LOCATOR });
+  for (let i = 0; i < sheets.length; i++) {
+    const items: PageItem[] = [];
+    for (const frame of sheets[i]!.frames) {
+      const facePage = buildFacePage(layout, mazeGraph, maze, scale, frame.faceId, {
+        area: frame.area,
+        locator: frame.locator,
+        placement: frame.placement,
+      });
+      items.push(...frameChromeItems(frame), ...facePage.items);
+    }
 
     doc.addPage();
-    paintFacePage(doc, page, {
-      title: `Face ${faceId}`,
-      subtitle: `${i + 1} of ${faceIds.length}  |  ${info}`,
+    paintFaceSheet(doc, page, {
+      info,
       footerLeft: `${params.shape}  seed=${params.seed}  n=${params.n}  k=${params.k}`,
-      footerRight: `page ${i + 2} / ${totalPages}`,
-    }, facePage.items);
+      footerRight: `sheet ${i + 1} / ${sheets.length}`,
+    }, items);
 
     onProgress?.(i + 2, totalPages);
-    // Let the UI repaint between pages; a 120-face solid takes a while.
+    // Let the UI repaint between sheets; a 120-face solid takes a while.
     if (i % 8 === 7) await new Promise(resolve => setTimeout(resolve, 0));
   }
 

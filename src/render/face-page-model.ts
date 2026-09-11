@@ -1,16 +1,19 @@
 /**
- * One-face-per-page model for large papercraft.
+ * Per-piece drawing model for large papercraft.
  *
  * Turns the unfolded net into a list of drawing primitives **in page
- * millimetres**, one page per face, so a very large model can be printed at a
- * scale the whole-net PDF could never reach (the net has to fit a single
- * sheet; a single face gets a sheet of its own).
+ * millimetres**, one piece at a time, so a very large model can be printed at
+ * a scale the whole-net PDF could never reach (the net has to fit a single
+ * sheet; a single face may have a sheet to itself). Where the pieces are
+ * actually laid down — one to a page, or several packed onto one sheet — is
+ * `face-sheet-layout.ts`'s business; this module draws into whatever rectangle
+ * it is given.
  *
  * Two properties make the output buildable and both are enforced here:
  *
- * - **One scale for every page.** `computeFacePageScale` picks the largest
+ * - **One scale for every piece.** `computeFacePageScale` picks the largest
  *   mm-per-unit factor at which *every* face still fits the printable area,
- *   and all pages then use it. Per-page fitting would produce pieces that
+ *   and every piece then uses it. Per-page fitting would produce pieces that
  *   cannot be joined.
  * - **Nothing is drawn inside the piece that must not survive cutting.** The
  *   assembly aids (edge labels naming the neighbouring face) live in a ring
@@ -70,9 +73,18 @@ export function pieceArea(page: PageGeometry): Rect {
 
 export interface FacePlacement {
   faceId: number;
-  /** Piece turned a quarter turn to fit the sheet better. */
-  rotate90: boolean;
+  /**
+   * How far the piece is turned on the paper, in radians counter-clockwise in
+   * net coordinates. The scale only ever asks for 0 or a quarter turn; a
+   * packed sheet may ask for any angle, since turning a piece to its tightest
+   * bounding box is free — the piece keeps its size, and the locator diagram
+   * is turned with it so the two still read the same way up.
+   */
+  turn: number;
 }
+
+/** A quarter turn, the only rotation the page-fitting scale considers. */
+export const QUARTER_TURN = Math.PI / 2;
 
 export interface FacePageScale {
   /** Page millimetres per net unit — identical on every page. */
@@ -102,11 +114,11 @@ export function computeFacePageScale(
   let mmPerUnit = Infinity;
 
   for (const nf of layout.faces) {
-    const [w, h] = bboxSize(nf.vertices2d, false);
+    const [w, h] = bboxSize(nf.vertices2d, 0);
     const upright = Math.min(area.w / w, area.h / h);
     const turned = Math.min(area.w / h, area.h / w);
     const rotate90 = turned > upright * TURN_GAIN_THRESHOLD;
-    placements.set(nf.faceId, { faceId: nf.faceId, rotate90 });
+    placements.set(nf.faceId, { faceId: nf.faceId, turn: rotate90 ? QUARTER_TURN : 0 });
     mmPerUnit = Math.min(mmPerUnit, rotate90 ? turned : upright);
   }
 
@@ -130,26 +142,36 @@ export function medianEdgeLength(faces: Face[]): number {
 }
 
 /**
- * Net units → page mm for one face: quarter turn if the placement asks for
- * it, uniform scale, Y flipped (net is y-up, the page is y-down), centred in
- * `rect`.
+ * Net units → page mm for one face: the placement's turn, uniform scale, Y
+ * flipped (net is y-up, the page is y-down), centred in `rect`.
  */
 export function faceToPageTransform(
   vertices2d: Vec2[], placement: FacePlacement, mmPerUnit: number, rect: Rect,
 ): (p: Vec2) => Vec2 {
-  const rotate = placement.rotate90;
-  const [w, h] = bboxSize(vertices2d, rotate);
-  const [minX, minY] = bboxMin(vertices2d, rotate);
+  const angle = placement.turn;
+  const [w, h] = bboxSize(vertices2d, angle);
+  const [minX, minY] = bboxMin(vertices2d, angle);
   const padX = (rect.w - w * mmPerUnit) / 2;
   const padY = (rect.h - h * mmPerUnit) / 2;
 
   return (p: Vec2): Vec2 => {
-    const [x, y] = turn(p, rotate);
+    const [x, y] = turn(p, angle);
     return [
       rect.x + padX + (x - minX) * mmPerUnit,
       rect.y + rect.h - padY - (y - minY) * mmPerUnit,
     ];
   };
+}
+
+/**
+ * The page millimetres a face's bounding box takes in its printed
+ * orientation — what a layout needs to reserve for the piece itself.
+ */
+export function faceFootprint(
+  vertices2d: Vec2[], placement: FacePlacement, mmPerUnit: number,
+): [number, number] {
+  const [w, h] = bboxSize(vertices2d, placement.turn);
+  return [w * mmPerUnit, h * mmPerUnit];
 }
 
 // ─── Drawing primitives (page mm, y down) ─────────────────────────
@@ -188,6 +210,8 @@ export type PageItem =
       color: RGB;
       /** Degrees counter-clockwise, as jsPDF expects. */
       angle?: number;
+      /** Centred on `at` unless told otherwise; 'left' starts the text there. */
+      align?: 'left' | 'center';
       bold?: boolean;
       /**
        * Rule under the text. Every face number carries one: a loose piece is
@@ -198,8 +222,19 @@ export type PageItem =
     };
 
 export interface FacePageOptions {
+  /**
+   * Where to draw the piece (page mm). Defaults to the full-page piece area
+   * the scale was computed from; a panel on a packed sheet passes its own,
+   * which is the same scale on less paper.
+   */
+  area?: Rect;
   /** Draw the locator diagram into this rect (page mm). */
   locator?: Rect;
+  /**
+   * Turn the piece as this says instead of as the scale chose. A packed sheet
+   * uses it to lay a piece down in its tightest orientation.
+   */
+  placement?: FacePlacement;
 }
 
 export interface FacePage {
@@ -230,8 +265,9 @@ export function buildFacePage(
   const n = mazeGraph.n;
   const grid = mazeGraph.grids.get(faceId)!;
   const edgeIndex = buildEdgeIndex(faces);
-  const placement = scale.placements.get(faceId)!;
-  const tf = faceToPageTransform(netFace.vertices2d, placement, scale.mmPerUnit, scale.area);
+  const placement = options.placement ?? scale.placements.get(faceId)!;
+  const area = options.area ?? scale.area;
+  const tf = faceToPageTransform(netFace.vertices2d, placement, scale.mmPerUnit, area);
 
   const verts2d = netFace.vertices2d;
   const pagePts = verts2d.map(tf);
@@ -365,13 +401,13 @@ export function buildLocatorItems(
   const all: Vec2[] = layout.faces.flatMap(nf => nf.vertices2d);
   if (all.length === 0) return [];
 
-  const [w, h] = bboxSize(all, placement.rotate90);
-  const [minX, minY] = bboxMin(all, placement.rotate90);
+  const [w, h] = bboxSize(all, placement.turn);
+  const [minX, minY] = bboxMin(all, placement.turn);
   const s = Math.min(rect.w / (w || 1), rect.h / (h || 1));
   const padX = (rect.w - w * s) / 2;
   const padY = (rect.h - h * s) / 2;
   const tf = (p: Vec2): Vec2 => {
-    const [x, y] = turn(p, placement.rotate90);
+    const [x, y] = turn(p, placement.turn);
     return [
       rect.x + padX + (x - minX) * s,
       rect.y + rect.h - padY - (y - minY) * s,
@@ -431,25 +467,32 @@ function markersOnFace(
   return all.filter(m => parseCell(m.cell).faceId === faceId);
 }
 
-/** Quarter turn (counter-clockwise in net coordinates) when `rotate` is set. */
-function turn(p: Vec2, rotate: boolean): Vec2 {
-  return rotate ? [-p[1], p[0]] : [p[0], p[1]];
+/** `p` turned `angle` radians counter-clockwise in net coordinates. */
+function turn(p: Vec2, angle: number): Vec2 {
+  if (angle === 0) return [p[0], p[1]];
+  const c = Math.cos(angle), s = Math.sin(angle);
+  return [p[0] * c - p[1] * s, p[0] * s + p[1] * c];
 }
 
-function bboxSize(pts: Vec2[], rotate: boolean): [number, number] {
-  const [minX, minY, maxX, maxY] = bbox(pts, rotate);
+/** Bounding box of `pts` once turned by `angle`. */
+export function turnedBBoxSize(pts: Vec2[], angle: number): [number, number] {
+  return bboxSize(pts, angle);
+}
+
+function bboxSize(pts: Vec2[], angle: number): [number, number] {
+  const [minX, minY, maxX, maxY] = bbox(pts, angle);
   return [maxX - minX, maxY - minY];
 }
 
-function bboxMin(pts: Vec2[], rotate: boolean): [number, number] {
-  const [minX, minY] = bbox(pts, rotate);
+function bboxMin(pts: Vec2[], angle: number): [number, number] {
+  const [minX, minY] = bbox(pts, angle);
   return [minX, minY];
 }
 
-function bbox(pts: Vec2[], rotate: boolean): [number, number, number, number] {
+function bbox(pts: Vec2[], angle: number): [number, number, number, number] {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of pts) {
-    const [x, y] = turn(p, rotate);
+    const [x, y] = turn(p, angle);
     if (x < minX) minX = x;
     if (x > maxX) maxX = x;
     if (y < minY) minY = y;

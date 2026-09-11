@@ -14,22 +14,23 @@ import type { SheetSize } from './pdf-chrome.ts';
 
 const MM_TO_PT = 72 / 25.4;
 
-export interface FacePageChrome {
-  /** Heading, e.g. "Face 7". */
-  title: string;
-  /** Second line: position in the set plus the maze parameters. */
-  subtitle: string;
+export interface FaceSheetChrome {
+  /** Right of the note line: the maze parameters. */
+  info: string;
   footerLeft: string;
   footerRight: string;
 }
 
-/** Draws the page chrome and every primitive of one piece onto `doc`. */
-export function paintFacePage(
-  doc: jsPDF, sheet: SheetSize, chrome: FacePageChrome, items: PageItem[],
+/**
+ * Draws the sheet chrome and every primitive of the pieces on it onto `doc`.
+ * Each piece's own title and locator come from its panel, not from here.
+ */
+export function paintFaceSheet(
+  doc: jsPDF, sheet: SheetSize, chrome: FaceSheetChrome, items: PageItem[],
 ): void {
-  drawFaceHeader(doc, chrome);
+  drawSheetNote(doc, sheet, chrome);
   paintItems(doc, items);
-  drawFaceFooter(doc, sheet, chrome);
+  drawSheetFooter(doc, sheet, chrome);
 }
 
 export function paintItems(doc: jsPDF, items: PageItem[]): void {
@@ -62,8 +63,8 @@ export function paintItems(doc: jsPDF, items: PageItem[]): void {
     doc.setFont('helvetica', item.bold ? 'bold' : 'normal');
     doc.setFontSize(item.size * MM_TO_PT);
     doc.setTextColor(...item.color);
-    drawCenteredText(
-      doc, item.text, item.at, item.size, item.angle ?? 0,
+    drawText(
+      doc, item.text, item.at, item.size, item.angle ?? 0, item.align ?? 'center',
       item.underline ? item.color : undefined,
     );
   }
@@ -72,7 +73,8 @@ export function paintItems(doc: jsPDF, items: PageItem[]): void {
 }
 
 /**
- * Draws `text` centred on `at`, rotated by `angle` degrees.
+ * Draws `text` at `at` — centred there, or starting there when `align` is
+ * 'left' — rotated by `angle` degrees.
  *
  * jsPDF cannot be asked for this directly: `align: 'center'` and
  * `baseline: 'middle'` shift the anchor along the *page* axes and only then
@@ -86,8 +88,9 @@ export function paintItems(doc: jsPDF, items: PageItem[]): void {
  * `underline` rules the text in its own frame as well, so the rule turns with
  * the label and always marks its foot — which is the whole point of it.
  */
-function drawCenteredText(
+function drawText(
   doc: jsPDF, text: string, at: readonly [number, number], size: number, angle: number,
+  align: 'left' | 'center',
   underline?: readonly [number, number, number],
 ): void {
   // Page axes are y-down and `angle` turns counter-clockwise, so the text
@@ -98,10 +101,11 @@ function drawCenteredText(
   // The rise jsPDF's own `baseline: 'middle'` uses, so labels sit at the same
   // height above their anchor whichever way they are turned.
   const rise = size * (1.5 - doc.getLineHeightFactor());
-  const half = doc.getTextWidth(text) / 2;
+  const width = doc.getTextWidth(text);
+  const back = align === 'left' ? 0 : width / 2;
 
-  const ox = at[0] - adv[0] * half - up[0] * rise;
-  const oy = at[1] - adv[1] * half - up[1] * rise;
+  const ox = at[0] - adv[0] * back - up[0] * rise;
+  const oy = at[1] - adv[1] * back - up[1] * rise;
   doc.text(text, ox, oy, { angle });
 
   if (!underline) return;
@@ -112,7 +116,7 @@ function drawCenteredText(
   doc.setLineDashPattern([], 0);
   doc.setDrawColor(...(underline as [number, number, number]));
   doc.setLineWidth(size * UNDERLINE_WIDTH);
-  doc.line(sx, sy, sx + adv[0] * half * 2, sy + adv[1] * half * 2);
+  doc.line(sx, sy, sx + adv[0] * width, sy + adv[1] * width);
 }
 
 /** Rule offset below the baseline and its weight, in ems of the text size. */
@@ -120,27 +124,20 @@ const UNDERLINE_DROP = 0.16;
 const UNDERLINE_WIDTH = 0.08;
 
 /**
- * No absolute length is printed on a face page — not an edge measurement and
- * not a ruler bar. What matters is that every page is enlarged by the *same*
+ * No absolute length is printed on a face sheet — not an edge measurement and
+ * not a ruler bar. What matters is that every sheet is enlarged by the *same*
  * factor, so printing the set on A3 to build a bigger model stays valid.
  */
-function drawFaceHeader(doc: jsPDF, chrome: FacePageChrome): void {
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text(chrome.title, 10, 17);
+function drawSheetNote(doc: jsPDF, sheet: SheetSize, chrome: FaceSheetChrome): void {
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(90);
-  doc.text(chrome.subtitle, 10, 23);
   doc.setFontSize(7.5);
-  doc.text(
-    'Print every page at the same scale — never page by page.',
-    10, 28.5,
-  );
+  doc.setTextColor(90);
+  doc.text('Print every sheet at the same scale — never sheet by sheet.', 10, 12);
+  doc.text(chrome.info, sheet.pageW - 10, 12, { align: 'right' });
   doc.setTextColor(0);
 }
 
-function drawFaceFooter(doc: jsPDF, sheet: SheetSize, chrome: FacePageChrome): void {
+function drawSheetFooter(doc: jsPDF, sheet: SheetSize, chrome: FaceSheetChrome): void {
   doc.setFontSize(6.5);
   doc.setTextColor(150);
   doc.text(chrome.footerLeft, 10, sheet.pageH - 4);

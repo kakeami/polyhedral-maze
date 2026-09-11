@@ -1,5 +1,5 @@
 /**
- * Visual constants for one-face-per-page output.
+ * Visual constants for the printed pieces and the panels that hold them.
  *
  * Unlike `svg-constants.ts` — whose widths are ratios of the net's bounding
  * box — every value here is an absolute millimetre length, because face pages
@@ -66,4 +66,56 @@ export const FACE_PAGE_STYLE = {
    * and the full-size index sheet is where you look it up instead.
    */
   locatorLabelMinSize: 1.2,
+} as const;
+
+/**
+ * Panels — several pieces to a sheet.
+ *
+ * Nothing here changes the printed size of a piece; these are the millimetres
+ * of paper around it. The rule that frames a panel is solid and light so that
+ * it reads as a page border and never as the dashed cut guide, and the gutter
+ * keeps two cut lines a comfortable distance apart even though their panels
+ * touch.
+ */
+export const FACE_SHEET_STYLE = {
+  /** Top strip for the one-line print warning. */
+  noteBand: 5,
+  /** Bottom strip for the footer line. */
+  footerBand: 7,
+  /**
+   * Gap between panels. With the label ring inside each panel this leaves
+   * ~21 mm of paper between neighbouring cut lines — enough that cutting one
+   * piece out does not endanger the next.
+   */
+  gutter: 5,
+  frameColor: [170, 170, 170] as RGB,
+  frameWidth: 0.25,
+  /** Padding between a panel's rule and what sits in its header. */
+  framePad: 2.5,
+
+  /**
+   * Header band: title on the left, locator on the right. It grows with the
+   * panel so a big piece gets a big diagram, within these bounds — the upper
+   * one matching the header of the full-page layout.
+   */
+  headerRatio: 0.14,
+  headerMax: 30,
+  /**
+   * Floors for the header, tried in this order: the packer keeps the most
+   * generous one that does not cost a sheet. A short piece would otherwise be
+   * given a header sized for its own small body, and its locator would shrink
+   * to a speck — but only the *last* row of panels on a sheet is ever short of
+   * room, so most of the time the roomier header is free.
+   */
+  headerMinChoices: [18, 16, 14, 12],
+  /** A panel narrower than this is widened so its header still holds both. */
+  minFrameW: 48,
+
+  titleColor: [34, 34, 34] as RGB,
+  titleRatio: 0.32,
+  titleMin: 2.8,
+  titleMax: 4.6,
+
+  locatorMaxW: 52,
+  locatorWidthRatio: 0.45,
 } as const;

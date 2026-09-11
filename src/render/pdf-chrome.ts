@@ -83,6 +83,8 @@ export interface IndexFacts {
   /** Rough size of the finished model in mm, likewise at A4 100%. */
   modelMm: number;
   faceCount: number;
+  /** How many sheets the pieces were packed onto. */
+  sheetCount: number;
   /** QR code as a PNG data URL, if one could be generated. */
   qrDataUrl?: string;
 }
@@ -109,7 +111,7 @@ export function drawIndexChrome(
   doc.text(facts.info, pageW / 2, 22, { align: 'center' });
   doc.setFontSize(8);
   doc.text(
-    'Every page is drawn to one shared scale — print them all with the same setting.',
+    'Every sheet is drawn to one shared scale — print them all with the same setting.',
     pageW / 2, 28, { align: 'center' },
   );
 
@@ -125,17 +127,18 @@ export function drawIndexChrome(
   doc.text('How to build', textX, 194);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
+  const sheetWord = facts.sheetCount === 1 ? 'sheet' : 'sheets';
   const lines = [
-    `${facts.faceCount} face pages follow, one piece each. On A4 at 100% the edge comes`,
-    `out ${facts.edgeMm.toFixed(0)} mm long and the model about ${(facts.modelMm / 10).toFixed(0)} cm across; enlarge every page by the`,
-    'same factor (A3 = 141%) for a proportionally bigger model.',
+    `${facts.faceCount} pieces follow on ${facts.sheetCount} ${sheetWord}, in face-number order, each in its own`,
+    `panel. On A4 at 100% the edge comes out ${facts.edgeMm.toFixed(0)} mm long and the model about`,
+    `${(facts.modelMm / 10).toFixed(0)} cm across; enlarge every sheet by the same factor (A3 = 141%).`,
     'Cut along the dashed guide — it runs along the outer edge of the black',
     'border, so the piece comes out at exactly the right size. No glue tabs.',
     'The number outside each edge is the face it joins: the edge labelled 7 on',
     'face 3 meets the edge labelled 3 on face 7. Labels fall outside the cut line.',
     'Every face number is underlined — read it with the rule at the foot (6 vs 9).',
     'A "~" after the number marks a flat seam — butt-join it, do not fold.',
-    "The shaded face in each page's locator diagram is that page's piece.",
+    "The shaded face in a panel's locator diagram is that panel's own piece.",
     'Join the pieces with tape from the inside.',
   ];
   lines.forEach((line, i) => doc.text(line, textX, 200 + i * 4.4));
