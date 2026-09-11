@@ -92,14 +92,27 @@ function sharedEdge(v1: Vec3[], v2: Vec3[]): [Vec3, Vec3] | null {
   return shared.length === 2 ? [shared[0]!, shared[1]!] : null;
 }
 
+export type MarkerKind = 'start' | 'goal' | 'warp';
+
+/**
+ * A marked cell, given as a point on the surface plus the direction that
+ * leaves it. The scene stands a pin here: the head floats clear of the maze
+ * and the stem runs down the normal to `at`, so a dense grid keeps both its
+ * walls and an unambiguous answer to "which cell exactly?".
+ */
+export interface MazeMarker {
+  kind: MarkerKind;
+  /** Centre of the marked cell, on the surface. */
+  at: Vec3;
+  /** Outward unit normal of the face the cell belongs to. */
+  normal: Vec3;
+}
+
 export interface MazeRenderData {
   walls: Vec3[];       // pairs of Vec3 (p1, p2, p1, p2, ...)
   outline: Vec3[];     // face boundary wall segments (with gaps at passages)
   solution: Vec3[];    // solution path cell centers (with boundary midpoints)
-  startPos: Vec3;
-  goalPos: Vec3;
-  warpA: Vec3 | null;
-  warpB: Vec3 | null;
+  markers: MazeMarker[];
 }
 
 /**
@@ -209,14 +222,19 @@ export function computeRenderData(
     }
   }
 
-  return {
-    walls,
-    outline,
-    solution,
-    startPos: center(maze.start),
-    goalPos: center(maze.goal),
-    warpA: maze.warp ? center(maze.warp.cellA) : null,
-    warpB: maze.warp ? center(maze.warp.cellB) : null,
-  };
+  const marker = (cell: CellKey, kind: MarkerKind): MazeMarker => ({
+    kind,
+    at: center(cell),
+    normal: faceById.get(parseCell(cell).faceId)!.normal,
+  });
+  const markers: MazeMarker[] = [
+    marker(maze.start, 'start'),
+    marker(maze.goal, 'goal'),
+  ];
+  if (maze.warp) {
+    markers.push(marker(maze.warp.cellA, 'warp'), marker(maze.warp.cellB, 'warp'));
+  }
+
+  return { walls, outline, solution, markers };
 }
 

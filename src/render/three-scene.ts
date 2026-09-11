@@ -8,7 +8,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face, Vec3 } from '../core/types.ts';
-import type { MazeRenderData } from './maze-geometry.ts';
+import type { MazeMarker, MazeRenderData } from './maze-geometry.ts';
 import { SCENE_CONFIG, MAZE_STYLE } from './scene-constants.ts';
 
 export interface SceneContext {
@@ -164,12 +164,10 @@ function buildMazeGroup(
     group.add(new Line2(lineGeo, lineMat));
   }
 
-  // 5. Start / Goal / Warp markers
-  const { markers } = MAZE_STYLE;
-  group.add(makeSphere(data.startPos, markers.startColor, markers.size * markers.sizeMultiplier));
-  group.add(makeSphere(data.goalPos, markers.goalColor, markers.size * markers.sizeMultiplier));
-  if (data.warpA) group.add(makeSphere(data.warpA, markers.warpColor, markers.size));
-  if (data.warpB) group.add(makeSphere(data.warpB, markers.warpColor, markers.size));
+  // 5. Start / Goal / Warp pins
+  for (const marker of data.markers) {
+    group.add(makePin(marker, resolution, outLineMaterials));
+  }
 
   return group;
 }
@@ -226,8 +224,50 @@ function vecPairsToFlatArray(pairs: Vec3[]): number[] {
   return arr;
 }
 
+const MARKER_COLORS: Record<MazeMarker['kind'], number> = {
+  start: MAZE_STYLE.markers.startColor,
+  goal: MAZE_STYLE.markers.goalColor,
+  warp: MAZE_STYLE.markers.warpColor,
+};
+
+/**
+ * A pin: a dot on the cell centre, a stem straight up the face normal, and the
+ * head at the top. The head is what you spot from across the solid; the foot
+ * is what you read the position from, and nothing but a hairline crosses the
+ * maze in between.
+ */
+function makePin(
+  marker: MazeMarker,
+  resolution: THREE.Vector2,
+  outLineMaterials: LineMaterial[],
+): THREE.Group {
+  const { pinLength, headRadius, warpHeadRadius, stemWidth, footRadius } = MAZE_STYLE.markers;
+  const color = MARKER_COLORS[marker.kind];
+  const radius = marker.kind === 'warp' ? warpHeadRadius : headRadius;
+
+  const foot = marker.at;
+  const head: Vec3 = [
+    foot[0] + marker.normal[0] * pinLength,
+    foot[1] + marker.normal[1] * pinLength,
+    foot[2] + marker.normal[2] * pinLength,
+  ];
+
+  const group = new THREE.Group();
+
+  const stemGeo = new LineSegmentsGeometry();
+  stemGeo.setPositions([...foot, ...head]);
+  const stemMat = new LineMaterial({ color, linewidth: stemWidth });
+  stemMat.resolution.copy(resolution);
+  outLineMaterials.push(stemMat);
+  group.add(new LineSegments2(stemGeo, stemMat));
+
+  group.add(makeSphere(foot, color, footRadius));
+  group.add(makeSphere(head, color, radius));
+  return group;
+}
+
 function makeSphere(pos: Vec3, color: number, radius: number): THREE.Mesh {
-  const geo = new THREE.SphereGeometry(radius, 8, 6);
+  const geo = new THREE.SphereGeometry(radius, 12, 8);
   const mat = new THREE.MeshBasicMaterial({ color });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(pos[0], pos[1], pos[2]);
