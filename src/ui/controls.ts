@@ -117,8 +117,31 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     input.addEventListener('change', fire);
   }
 
-  el('btn-random').addEventListener('click', () => {
-    seedInput.value = String(Math.floor(Math.random() * 1000000));
+  el('btn-shuffle-seed').addEventListener('click', () => {
+    seedInput.value = String(randomSeed());
+    fire();
+  });
+
+  // Everything the catalogue offers, in one press. Warp and Show solution are
+  // deliberately left alone: they are how you are reading the maze, not which
+  // maze it is, and one of them gives the answer away.
+  el('btn-shuffle-all').addEventListener('click', () => {
+    const shape = randomShape();
+    categorySelect.value = shape.category;
+    renderShapeOptions(shape.id);
+
+    algoSelect.selectedIndex = randomIndex(algoSelect.options.length);
+    styleSelect.selectedIndex = randomIndex(styleSelect.options.length);
+    updateStyleNote();
+
+    nSlider.value = String(randomWithinSlider(nSlider));
+    nValue.textContent = nSlider.value;
+    kSlider.value = String(randomWithinSlider(kSlider));
+    kValue.textContent = kSlider.value;
+    seedInput.value = String(randomSeed());
+
+    // The style goes straight to the scene; the rest needs a rebuild.
+    actions.get('style')?.();
     fire();
   });
   el('btn-copy-url').addEventListener('click', () => {
@@ -212,6 +235,35 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   };
 }
 
+function randomIndex(count: number): number {
+  return Math.floor(Math.random() * count);
+}
+
+function randomSeed(): number {
+  return Math.floor(Math.random() * 1000000);
+}
+
+/** A value in the slider's own range, so the bounds stay declared in one place. */
+function randomWithinSlider(slider: HTMLInputElement): number {
+  const min = Number(slider.min);
+  const max = Number(slider.max);
+  return min + randomIndex(max - min + 1);
+}
+
+/**
+ * A category first, then a shape inside it. Drawing uniformly from all shapes
+ * would land on a Johnson solid about two times in three — they are 92 of the
+ * catalogue — and the point of the button is to tour the catalogue rather than
+ * its largest family.
+ */
+function randomShape(): ShapeDescriptor {
+  const categories = availableCategories();
+  const inCategory = shapesByCategory(categories[randomIndex(categories.length)]!);
+  return inCategory.length > 0
+    ? inCategory[randomIndex(inCategory.length)]!
+    : SHAPES[randomIndex(SHAPES.length)]!;
+}
+
 function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
   const styleOptions = SCENE_PRESETS.map(s =>
     `<option value="${esc(s.id)}"${s.id === p.style ? ' selected' : ''}>${esc(s.label)}</option>`,
@@ -273,8 +325,9 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
     </div>
 
     <div class="buttons">
-      <button id="btn-random">Random</button>
-      <button id="btn-copy-url">Copy URL</button>
+      <button id="btn-shuffle-seed" title="A different maze on the same solid">Shuffle seed</button>
+      <button id="btn-shuffle-all" title="A new solid, algorithm, resolution, seed and material — everything except the Warp and Show solution switches">Shuffle all</button>
+      <button id="btn-copy-url" class="wide">Copy URL</button>
       <button id="btn-export-pdf" class="wide" title="Two pages: the whole net as a puzzle, plus the answer">Export net PDF</button>
       <button id="btn-export-faces" class="wide" title="One page per face, all at the same scale — for large papercraft">Export face pages PDF</button>
     </div>
