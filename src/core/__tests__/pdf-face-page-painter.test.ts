@@ -7,7 +7,7 @@ import { jsPDF } from 'jspdf';
 import {
   A4_PORTRAIT, buildFacePage, computeFacePageScale,
 } from '../../render/face-page-model.ts';
-import { paintFacePage } from '../../render/pdf-face-page-painter.ts';
+import { paintFacePage, paintItems } from '../../render/pdf-face-page-painter.ts';
 import { drawIndexChrome, formatInfo } from '../../render/pdf-chrome.ts';
 import { computeMetrics } from '../metrics.ts';
 import { computeNetLayout } from '../../render/net-layout.ts';
@@ -234,5 +234,69 @@ describe('edge labels', () => {
     for (const run of turned) {
       expect(gap(run)).toBeGreaterThan(Math.min(...upright.map(gap)) - 0.1);
     }
+  });
+});
+
+// ─── The rule under a face number ─────────────────────────────────
+
+/** Every `m … l … S` segment in the document, page mm, y down. */
+function strokedSegments(doc: jsPDF, pageH: number): [Vec2, Vec2][] {
+  const num = String.raw`-?[\d.]+`;
+  const re = new RegExp(String.raw`(${num}) (${num}) m\n(${num}) (${num}) l\nS`, 'g');
+  return [...doc.output().matchAll(re)].map(m => {
+    const [x1, y1, x2, y2] = m.slice(1).map(Number) as [number, number, number, number];
+    return [
+      [x1 / MM_TO_PT, pageH - y1 / MM_TO_PT],
+      [x2 / MM_TO_PT, pageH - y2 / MM_TO_PT],
+    ] as [Vec2, Vec2];
+  });
+}
+
+function paintLabel(angle: number, underline: boolean) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const at: Vec2 = [100, 100];
+  const size = 4;
+  paintItems(doc, [{
+    kind: 'text', at, text: '69', size, color: [0, 0, 0], angle, underline,
+  }]);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(size * MM_TO_PT);
+  return {
+    at, size,
+    width: doc.getTextWidth('69'),
+    rise: size * (1.5 - doc.getLineHeightFactor()),
+    segments: strokedSegments(doc, A4_PORTRAIT.pageH),
+  };
+}
+
+describe('underlined labels', () => {
+  it('draws no rule unless one is asked for', () => {
+    expect(paintLabel(0, false).segments.length).toBe(0);
+  });
+
+  it.each([0, 90, -90, -37])('at %s°: rules the foot of the text, in its own frame', angle => {
+    const { at, size, width, rise, segments } = paintLabel(angle, true);
+    expect(segments.length).toBe(1);
+
+    // The text's own frame on a y-down page, as the painter builds it.
+    const rad = (angle * Math.PI) / 180;
+    const adv: Vec2 = [Math.cos(rad), -Math.sin(rad)];
+    const down: Vec2 = [Math.sin(rad), Math.cos(rad)];
+
+    const [a, b] = segments[0]!;
+    const along: Vec2 = [b[0] - a[0], b[1] - a[1]];
+    // Parallel to the text, and exactly as long as it. Tolerances are loose
+    // by a micron: these came back out of the PDF's own rounded numbers.
+    expect(along[0] * down[0] + along[1] * down[1]).toBeCloseTo(0, 3);
+    expect(along[0] * adv[0] + along[1] * adv[1]).toBeCloseTo(width, 3);
+
+    const mid: Vec2 = [(a[0] + b[0]) / 2 - at[0], (a[1] + b[1]) / 2 - at[1]];
+    // Centred under the anchor...
+    expect(mid[0] * adv[0] + mid[1] * adv[1]).toBeCloseTo(0, 3);
+    // ...and below the baseline, but no further down than the descent box, so
+    // an underlined edge label clears the piece by as much as a bare one.
+    const belowBaseline = mid[0] * down[0] + mid[1] * down[1] - rise;
+    expect(belowBaseline).toBeGreaterThan(0);
+    expect(belowBaseline).toBeLessThan(DESCENT * size);
   });
 });

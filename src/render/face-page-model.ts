@@ -170,6 +170,14 @@ export type PageItem =
       stroke: RGB;
       width: number;
       dash?: [number, number];
+      /**
+       * Round ends the wall, as the net renderer does. At a mitred corner the
+       * two round caps meet on the bisector and fill the notch that butt ends
+       * leave — a notch as deep as half the wall, which at this weight looks
+       * like a chipped piece. The cap circle is tangent to both cut lines, so
+       * nothing spills past the outline.
+       */
+      cap?: 'round';
     }
   | {
       kind: 'text';
@@ -181,6 +189,12 @@ export type PageItem =
       /** Degrees counter-clockwise, as jsPDF expects. */
       angle?: number;
       bold?: boolean;
+      /**
+       * Rule under the text. Every face number carries one: a loose piece is
+       * turned every which way while it is being assembled, and without the
+       * rule 6 and 9 — or 16 and 91 — are the same mark.
+       */
+      underline?: boolean;
     };
 
 export interface FacePageOptions {
@@ -270,7 +284,7 @@ export function buildFacePage(
     if (!edge) continue;
     items.push({
       kind: 'line', a: tf(edge[0]), b: tf(edge[1]),
-      stroke: S.wallColor, width: S.wallWidth,
+      stroke: S.wallColor, width: S.wallWidth, cap: 'round',
     });
   }
 
@@ -278,12 +292,12 @@ export function buildFacePage(
   //    Every edge of a face page is a cut edge — including seams between
   //    coplanar faces, which the net renderer can draw as a mere grid
   //    division because there the paper stays continuous.
+  const insetPts = insetPolygon(pagePts, center, S.boundaryInset);
   for (let i = 0; i < nv; i++) {
     const adjFaceId = edgeIndex.findAdjacentFace(faceId, i);
     neighbors.push(adjFaceId);
-    const [es, ee] = offsetOutward(
-      pagePts[i]!, pagePts[(i + 1) % nv]!, center, -S.boundaryInset,
-    );
+    const es = insetPts[i]!;
+    const ee = insetPts[(i + 1) % nv]!;
 
     let boundaryCells: CellKey[];
     try {
@@ -291,7 +305,7 @@ export function buildFacePage(
     } catch {
       items.push({
         kind: 'line', a: es, b: ee,
-        stroke: S.boundaryColor, width: S.boundaryWidth,
+        stroke: S.boundaryColor, width: S.boundaryWidth, cap: 'round',
       });
       continue;
     }
@@ -306,6 +320,7 @@ export function buildFacePage(
         b: [es[0] + (j + 1) * du[0], es[1] + (j + 1) * du[1]],
         stroke: S.boundaryColor,
         width: S.boundaryWidth,
+        cap: 'round',
       });
     }
   }
@@ -328,6 +343,7 @@ export function buildFacePage(
       size: S.edgeLabelSize,
       color: S.edgeLabelColor,
       angle: readableAngle(a, b),
+      underline: true,
     });
   }
 
@@ -364,13 +380,36 @@ export function buildLocatorItems(
 
   const S = FACE_PAGE_STYLE;
   const items: PageItem[] = [];
+  const labels: PageItem[] = [];
   for (const nf of layout.faces) {
     const pts = nf.vertices2d.map(tf);
-    items.push(nf.faceId === faceId
+    const highlighted = nf.faceId === faceId;
+    items.push(highlighted
       ? { kind: 'poly', pts, fill: S.locatorHighlight, stroke: S.locatorColor, width: S.locatorWidth }
       : { kind: 'poly', pts, stroke: S.locatorColor, width: S.locatorWidth });
+
+    // Numbered, so the diagram says *which* neighbours surround the piece and
+    // not merely where it sits. A face too small to hold a legible number is
+    // left blank rather than smudged: that is what the index sheet is for.
+    const c = centroid2(pts);
+    const size = labelSize(
+      inradius(pts, c), String(nf.faceId).length,
+      S.locatorLabelScale, S.locatorLabelMaxWidthRatio,
+    );
+    if (size < S.locatorLabelMinSize) continue;
+    labels.push({
+      kind: 'text',
+      at: c,
+      text: String(nf.faceId),
+      size,
+      color: highlighted ? S.locatorLabelHighlightColor : S.locatorLabelColor,
+      bold: true,
+      underline: true,
+    });
   }
-  return items;
+  // Labels last: the highlighted face is filled, and a fill painted over its
+  // own number would erase it.
+  return [...items, ...labels];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -417,6 +456,57 @@ function bbox(pts: Vec2[], rotate: boolean): [number, number, number, number] {
     if (y > maxY) maxY = y;
   }
   return [minX, minY, maxX, maxY];
+}
+
+/**
+ * The piece outline pushed `inset` mm inward, corners mitred.
+ *
+ * Offsetting each edge on its own leaves a wedge of white at every corner as
+ * wide as the wall itself; at this line weight that reads as a chipped piece.
+ * Mitring puts the corner back on the bisector, where the wall's outer edge
+ * still meets the cut line exactly. A corner too sharp to mitre sanely (the
+ * miter point would run away up the bisector) keeps the plain offset.
+ */
+function insetPolygon(pts: Vec2[], center: Vec2, inset: number): Vec2[] {
+  const nv = pts.length;
+  const edges = pts.map((p, i) => offsetOutward(p, pts[(i + 1) % nv]!, center, -inset));
+  const limit = MITER_LIMIT * inset;
+  return pts.map((vertex, i) => {
+    const prev = edges[(i - 1 + nv) % nv]!;
+    const cur = edges[i]!;
+    const corner = lineIntersection(prev[0], prev[1], cur[0], cur[1]);
+    if (!corner) return cur[0];
+    return Math.hypot(corner[0] - vertex[0], corner[1] - vertex[1]) > limit
+      ? cur[0]
+      : corner;
+  });
+}
+
+/** How far up the bisector a mitred corner may travel, in wall insets. */
+const MITER_LIMIT = 6;
+
+/** Where the infinite lines through ab and cd meet, or null if they are parallel. */
+function lineIntersection(a: Vec2, b: Vec2, c: Vec2, d: Vec2): Vec2 | null {
+  const r: Vec2 = [b[0] - a[0], b[1] - a[1]];
+  const s: Vec2 = [d[0] - c[0], d[1] - c[1]];
+  const den = r[0] * s[1] - r[1] * s[0];
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((c[0] - a[0]) * s[1] - (c[1] - a[1]) * s[0]) / den;
+  return [a[0] + t * r[0], a[1] + t * r[1]];
+}
+
+/** Helvetica figures are tabular: every digit advances by this fraction of an em. */
+const DIGIT_ADVANCE = 0.556;
+
+/**
+ * Largest font size at which a number of `digits` digits sits inside a face's
+ * inscribed circle — height-limited for one digit, width-limited for three.
+ */
+function labelSize(
+  inr: number, digits: number, scale: number, maxWidthRatio: number,
+): number {
+  if (!Number.isFinite(inr) || inr <= 0) return 0;
+  return Math.min(inr * scale, (inr * maxWidthRatio) / (digits * DIGIT_ADVANCE));
 }
 
 /** Shift segment ab away from `from` by `dist` mm. */

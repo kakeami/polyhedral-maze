@@ -22,6 +22,7 @@ import { getShape } from '../polyhedra/registry.ts';
 import type { Polyhedron } from '../polyhedron.ts';
 import type { Face, Vec3 } from '../types.ts';
 import type { Vec2 } from '../vec2.ts';
+import type { PageItem } from '../../render/face-page-model.ts';
 
 function build(shapeId: string, n = 4, k = 2, seed = 7, warp = false) {
   const polyhedron = getShape(shapeId)!.factory();
@@ -53,6 +54,11 @@ function bboxOf(pts: Vec2[]) {
     minY = Math.min(minY, y); maxY = Math.max(maxY, y);
   }
   return { minX, minY, maxX, maxY };
+}
+
+/** The black border round the piece, told from the inner maze walls by weight. */
+function isBoundaryWall(it: PageItem): it is Extract<PageItem, { kind: 'line' }> {
+  return it.kind === 'line' && it.width === FACE_PAGE_STYLE.boundaryWidth;
 }
 
 /** Distance from `p` to segment ab. */
@@ -236,8 +242,7 @@ describe('buildFacePage', () => {
     const face = 0;
     const page = buildFacePage(layout, mg, maze, scale, face);
 
-    // Boundary segments are the widest lines on the page.
-    const boundary = page.items.filter(it => it.kind === 'line' && it.width > 0.5);
+    const boundary = page.items.filter(isBoundaryWall);
     const crossings = [...maze.tree.edges()].filter(([a, b]) => {
       const fa = Number(a.split(':')[0]), fb = Number(b.split(':')[0]);
       return (fa === face) !== (fb === face);
@@ -257,7 +262,7 @@ describe('buildFacePage', () => {
       );
       const outline = nf.vertices2d.map(tf);
 
-      const boundary = page.items.filter(it => it.kind === 'line' && it.width > 0.5);
+      const boundary = page.items.filter(isBoundaryWall);
       expect(boundary.length).toBeGreaterThan(0);
 
       const insets: number[] = [];
@@ -271,8 +276,12 @@ describe('buildFacePage', () => {
           )));
         }
       }
-      // The wall's outer edge lands exactly on the cut line.
+      // The wall's outer edge lands exactly on the cut line — all the way
+      // round, corners included: offsetting each edge on its own used to leave
+      // the corner endpoints sitting right on the neighbouring edge (inset 0),
+      // a wedge of white as wide as the wall.
       expect(Math.max(...insets)).toBeCloseTo(FACE_PAGE_STYLE.boundaryInset, 6);
+      expect(Math.min(...insets)).toBeCloseTo(FACE_PAGE_STYLE.boundaryInset, 6);
       expect(FACE_PAGE_STYLE.boundaryInset * 2).toBeCloseTo(FACE_PAGE_STYLE.boundaryWidth, 6);
     }
   });
@@ -294,22 +303,66 @@ describe('buildFacePage', () => {
 });
 
 describe('buildLocatorItems', () => {
+  const RECT = { x: 148, y: 11, w: 52, h: 32 };
+
   it('shows the whole net with exactly one face highlighted', () => {
     const { layout, scale } = build('icosahedron');
-    const rect = { x: 148, y: 11, w: 52, h: 32 };
-    const items = buildLocatorItems(layout, 5, scale.placements.get(5)!, rect);
+    const items = buildLocatorItems(layout, 5, scale.placements.get(5)!, RECT);
 
-    expect(items.length).toBe(layout.faces.length);
-    expect(items.filter(it => it.kind === 'poly' && it.fill).length).toBe(1);
+    const polys = items.filter(it => it.kind === 'poly');
+    expect(polys.length).toBe(layout.faces.length);
+    expect(polys.filter(it => it.fill).length).toBe(1);
 
     for (const item of items) {
       if (item.kind !== 'poly') continue;
       for (const [x, y] of item.pts) {
-        expect(x).toBeGreaterThanOrEqual(rect.x - 1e-6);
-        expect(x).toBeLessThanOrEqual(rect.x + rect.w + 1e-6);
-        expect(y).toBeGreaterThanOrEqual(rect.y - 1e-6);
-        expect(y).toBeLessThanOrEqual(rect.y + rect.h + 1e-6);
+        expect(x).toBeGreaterThanOrEqual(RECT.x - 1e-6);
+        expect(x).toBeLessThanOrEqual(RECT.x + RECT.w + 1e-6);
+        expect(y).toBeGreaterThanOrEqual(RECT.y - 1e-6);
+        expect(y).toBeLessThanOrEqual(RECT.y + RECT.h + 1e-6);
       }
+    }
+  });
+
+  it('numbers every face, each inside its own outline', () => {
+    const { layout, scale } = build('icosahedron');
+    const items = buildLocatorItems(layout, 5, scale.placements.get(5)!, RECT);
+
+    const labels = items.filter(it => it.kind === 'text');
+    expect(labels.map(l => l.text).sort()).toEqual(
+      layout.faces.map(nf => String(nf.faceId)).sort(),
+    );
+
+    for (const label of labels) {
+      const poly = items.find(
+        it => it.kind === 'poly' && insideConvex(it.pts, label.at),
+      );
+      expect(poly).toBeDefined();
+      // Read from any side, so the rule that separates 6 from 9 is required.
+      expect(label.underline).toBe(true);
+      expect(label.size).toBeGreaterThanOrEqual(FACE_PAGE_STYLE.locatorLabelMinSize);
+    }
+  });
+
+  it('picks out the highlighted face in white, on its dark fill', () => {
+    const { layout, scale } = build('icosahedron');
+    const items = buildLocatorItems(layout, 5, scale.placements.get(5)!, RECT);
+
+    const white = items.filter(
+      it => it.kind === 'text' && it.color === FACE_PAGE_STYLE.locatorLabelHighlightColor,
+    );
+    expect(white.map(it => (it as { text: string }).text)).toEqual(['5']);
+  });
+
+  it('leaves a face unnumbered rather than illegible', () => {
+    // 120 faces in a 52 mm diagram: there is no size at which the numbers
+    // would be anything but smudges, and page 1 is where you look them up.
+    const { layout, scale } = build('disdyakis-triacontahedron');
+    const items = buildLocatorItems(layout, 0, scale.placements.get(0)!, RECT);
+
+    expect(items.filter(it => it.kind === 'poly').length).toBe(layout.faces.length);
+    for (const label of items.filter(it => it.kind === 'text')) {
+      expect(label.size).toBeGreaterThanOrEqual(FACE_PAGE_STYLE.locatorLabelMinSize);
     }
   });
 });

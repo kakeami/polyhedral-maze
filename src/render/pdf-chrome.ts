@@ -133,6 +133,7 @@ export function drawIndexChrome(
     'border, so the piece comes out at exactly the right size. No glue tabs.',
     'The number outside each edge is the face it joins: the edge labelled 7 on',
     'face 3 meets the edge labelled 3 on face 7. Labels fall outside the cut line.',
+    'Every face number is underlined — read it with the rule at the foot (6 vs 9).',
     'A "~" after the number marks a flat seam — butt-join it, do not fold.',
     "The shaded face in each page's locator diagram is that page's piece.",
     'Join the pieces with tape from the inside.',
