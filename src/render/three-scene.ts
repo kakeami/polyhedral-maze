@@ -28,6 +28,13 @@ import type {
   ScenePreset,
 } from './scene-presets.ts';
 
+/**
+ * Camera layers. The bloom chain renders layer 1 and nothing else, so what
+ * glows is decided by which objects opt in rather than by brightness alone.
+ */
+const BASE_LAYER = 0;
+const BLOOM_LAYER = 1;
+
 export interface SceneContext {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -109,10 +116,16 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
   // It takes two chains rather than one, because the sky must not bloom. The
   // sky is HDR — the sun disc is orders of magnitude past any threshold that
   // still lets the white face outlines glow — so blooming the frame as a whole
-  // wraps the sun in a halo the size of the viewport. Instead the first chain
-  // renders the solid alone, with the sky hidden, and keeps only the bloom;
-  // the second renders the real frame and adds that glow back on top, before
-  // tone mapping.
+  // wraps the sun in a halo the size of the viewport.
+  //
+  // So the first chain renders the bloom layer alone, on black, and the second
+  // renders the real frame and adds that glow on top before tone mapping.
+  // Restricting the first chain by layer rather than by brightness matters:
+  // UnrealBloomPass returns its input *plus* the glow, so anything visible to
+  // it is composited into the frame a second time. Only the face outline opts
+  // in, which is exactly what should be glowing — alongside a black copy of
+  // the surface, which adds nothing but keeps the far side of the solid from
+  // glowing through the near side.
   let bloomComposer: EffectComposer | null = null;
   let finalComposer: EffectComposer | null = null;
   let bloomPass: UnrealBloomPass | null = null;
@@ -224,9 +237,9 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     requestAnimationFrame(animate);
     controls.update();
     if (preset.bloom && bloomComposer && finalComposer) {
-      sky.visible = false;
+      camera.layers.set(BLOOM_LAYER);
       bloomComposer.render();
-      sky.visible = true;
+      camera.layers.set(BASE_LAYER);
       finalComposer.render();
     } else {
       renderer.render(scene, camera);
@@ -280,7 +293,10 @@ function buildMazeGroup(
     const outGeo = new LineSegmentsGeometry();
     outGeo.setPositions(vecPairsToFlatArray(data.outline));
     const outMat = makeLineMaterial(lines.outlineColor, lines.outlineWidth, resolution, outLineMaterials);
-    group.add(new LineSegments2(outGeo, outMat));
+    const outline = new LineSegments2(outGeo, outMat);
+    // The one thing the bloom chain sees, when the preset has bloom at all.
+    outline.layers.enable(BLOOM_LAYER);
+    group.add(outline);
   }
 
   // 4. Solution path (fat line)
@@ -313,7 +329,7 @@ function makeLineMaterial(
   return mat;
 }
 
-/** Adds the bloom chain's glow onto the real frame, still in linear HDR. */
+/** Adds the bloom layer's glow onto the real frame, still in linear HDR. */
 function makeBloomMixPass(bloomTexture: THREE.Texture): ShaderPass {
   const material = new THREE.ShaderMaterial({
     uniforms: {
@@ -373,8 +389,33 @@ function buildFaceGroup(faces: Face[], preset: ScenePreset): THREE.Group {
 
   group.add(new THREE.Mesh(geo, makeFaceMaterial(preset.material)));
   if (preset.rim) group.add(new THREE.Mesh(geo, makeRimMaterial(preset.rim)));
+  if (preset.bloom) group.add(makeBloomOccluder(geo));
 
   return group;
+}
+
+/**
+ * A black stand-in for the surface, drawn into the bloom chain only.
+ *
+ * That chain renders the bloom layer and nothing else, so on its own the face
+ * outlines have nothing to hide behind — including the outlines on the far
+ * side of the solid, which then get added back into the frame and make the
+ * whole object look transparent. This writes the depth that stops them. Black
+ * adds nothing when the glow is composited; occluding is all it does.
+ */
+function makeBloomOccluder(geo: THREE.BufferGeometry): THREE.Mesh {
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    side: THREE.DoubleSide,
+    // Same offset as the real surface, so the outlines it is meant to occlude
+    // still win the depth test on the near side.
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  }));
+  // Layer 1 only — never drawn into the frame the viewer sees.
+  mesh.layers.set(BLOOM_LAYER);
+  return mesh;
 }
 
 function makeFaceMaterial(m: FaceMaterialSpec): THREE.Material {
@@ -423,8 +464,14 @@ function makeRimMaterial(spec: RimSpec): THREE.ShaderMaterial {
       varying vec3 vNormalView;
       varying vec3 vToEye;
       void main() {
-        float facing = abs(dot(normalize(vNormalView), normalize(vToEye)));
-        float rim = pow(1.0 - facing, uPower);
+        // Clamped on both sides on purpose. A dot product of two unit vectors
+        // lands a hair past 1.0 often enough, and pow() of a negative base is
+        // undefined in GLSL — NaN on most drivers. The NaN blends straight
+        // into the frame, and anything downstream that filters it (the bloom
+        // blur, say) spreads it into a block, so a face turned exactly
+        // head-on flashes black for the frames it takes to pass through.
+        float facing = min(abs(dot(normalize(vNormalView), normalize(vToEye))), 1.0);
+        float rim = pow(max(1.0 - facing, 0.0), uPower);
         gl_FragColor = vec4(uColor * rim * uIntensity, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

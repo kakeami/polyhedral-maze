@@ -72,8 +72,9 @@ export interface RimSpec {
 export interface BloomSpec {
   strength: number;
   radius: number;
-  /** In linear HDR, before tone mapping. Set it above the wall colour so only
-   *  the outline and the markers bloom — blooming every wall smears the maze. */
+  /** In linear HDR, before tone mapping. Only the face outline is handed to
+   *  the bloom chain, so this has to sit below the outline's own luminance —
+   *  above it, nothing glows at all. */
   threshold: number;
 }
 

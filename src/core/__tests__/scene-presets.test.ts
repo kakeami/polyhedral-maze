@@ -118,12 +118,13 @@ describe('maze legibility', () => {
     }
   });
 
-  it('sets the bloom threshold above the wall lines, so only the outline glows', () => {
+  it('sets the bloom threshold below the outline, so the lines actually glow', () => {
     for (const preset of SCENE_PRESETS) {
       if (!preset.bloom) continue;
-      // UnrealBloomPass thresholds on linear luminance, pre tone mapping.
-      expect(relativeLuminance(preset.lines.wallColor), preset.id)
-        .toBeLessThan(preset.bloom.threshold);
+      // Only the outline is rendered into the bloom chain, and UnrealBloomPass
+      // thresholds on linear luminance, pre tone mapping.
+      expect(relativeLuminance(preset.lines.outlineColor), preset.id)
+        .toBeGreaterThan(preset.bloom.threshold);
     }
   });
 });
