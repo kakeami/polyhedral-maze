@@ -262,7 +262,9 @@ export function buildStackSheets(
             });
             items.push({
               kind: 'text',
-              at: [xOf(u) + cell / 2, yOf(row) - cell / 2 + S.markerTextSize / 2],
+              // The painter already sets the middle baseline, so the anchor is
+              // the cell's centre and nothing else.
+              at: [xOf(u) + cell / 2, yOf(row) - cell / 2],
               text: index === start ? 'S' : 'G',
               size: S.markerTextSize, color: S.markerTextColor, bold: true,
             });

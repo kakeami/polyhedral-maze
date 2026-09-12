@@ -91,6 +91,34 @@ describe('stack sheets', () => {
     expect(full.length).toBe(2);
   });
 
+  it('centres the S and G letters on their cells', () => {
+    // The painter sets the middle baseline itself; adding half a cap height on
+    // top of that drops the letter to the bottom of its square.
+    const boxes = allItems.filter(
+      (i): i is Extract<PageItem, { kind: 'poly' }> =>
+        i.kind === 'poly' &&
+        (i.fill === STACK_SHEET_STYLE.startColor || i.fill === STACK_SHEET_STYLE.goalColor),
+    );
+    const letters = allItems.filter(
+      (i): i is Extract<PageItem, { kind: 'text' }> =>
+        i.kind === 'text' && (i.text === 'S' || i.text === 'G'),
+    );
+    expect(boxes.length).toBe(2);
+    expect(letters.length).toBe(2);
+    for (const box of boxes) {
+      const xs = box.pts.map(p => p[0]);
+      const ys = box.pts.map(p => p[1]);
+      const centre: Vec2 = [
+        (Math.min(...xs) + Math.max(...xs)) / 2,
+        (Math.min(...ys) + Math.max(...ys)) / 2,
+      ];
+      const letter = letters.find(
+        l => Math.hypot(l.at[0] - centre[0], l.at[1] - centre[1]) < 1e-6,
+      );
+      expect(letter).toBeDefined();
+    }
+  });
+
   it('keeps every mark inside the printable area', () => {
     const { margin, width, height } = A4_SHEET;
     const points: Vec2[] = [];
