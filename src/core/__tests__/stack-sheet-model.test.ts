@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { buildSurface } from '../kinetic/surface.ts';
-import { generateKineticMaze } from '../kinetic/maze.ts';
+import { generateKineticMaze, pickStartGoal } from '../kinetic/maze.ts';
 import { createRng } from '../prng.ts';
 import { buildStackSheets, bulkheadTabQuads } from '../../render/stack-sheet-model.ts';
 import { A4_SHEET, STACK_SHEET_STYLE } from '../../render/kinetic-sheet-constants.ts';
@@ -89,6 +89,34 @@ describe('stack sheets', () => {
     }
     const full = [...byY.values()].filter(total => Math.abs(total - 180) < 1e-6);
     expect(full.length).toBe(2);
+  });
+
+  it('sits the entrance and the exit on dead ends, in every state', () => {
+    // A marker in the middle of a corridor leaves a one-cell stub beside it.
+    // The marker is printed once and the object then turns, so the cell has to
+    // stay a dead end in all 216 configurations — which it does, because a rim
+    // cell of a ring more than one cell tall has no side that a turn can change.
+    const marked = allItems.filter(
+      (i): i is Extract<PageItem, { kind: 'text' }> =>
+        i.kind === 'text' && (i.text === 'S' || i.text === 'G'),
+    );
+    expect(marked.length).toBe(2);
+    const ends = pickStartGoal(surface, design);
+    for (const cell of [ends.start, ends.goal]) {
+      const from = surface.sideStart[cell]!;
+      const to = surface.sideStart[cell + 1]!;
+      const onRim = Array.from({ length: to - from }, (_, k) => from + k).some(
+        side => surface.classKind[surface.classOf[side]!] === 'rim',
+      );
+      expect(onRim).toBe(true);
+      for (let state = 0; state < surface.stateCount; state++) {
+        const degree = surface.adjByState[state]!.filter(
+          e => design.open.has(e.classId) && (e.a === cell || e.b === cell),
+        ).length;
+        expect(degree).toBe(1);
+      }
+    }
+    expect(ends.start).not.toBe(ends.goal);
   });
 
   it('centres the S and G letters on their cells', () => {

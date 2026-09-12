@@ -17,7 +17,7 @@ import type { PageItem } from './face-page-model.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { StackMechanism } from '../core/kinetic/mechanisms/stack.ts';
-import { treeRate } from '../core/kinetic/maze.ts';
+import { pickStartGoal, treeRate } from '../core/kinetic/maze.ts';
 import { STACK_SHEET_STYLE as S, STACK_SHEET_DEFAULTS as D, A4_SHEET } from './kinetic-sheet-constants.ts';
 
 export interface SheetBox {
@@ -144,15 +144,9 @@ export function buildStackSheets(
 
   const rate = treeRate(surface, design);
   const circumradius = cell * mech.cols / (2 * Math.sin(Math.PI / mech.sides));
-  const start = options.start ?? mech.cellIndex(0, 0, 0, Math.floor(mech.cols / 2));
-  const goal =
-    options.goal ??
-    mech.cellIndex(
-      mech.layers - 1,
-      Math.floor(mech.sides / 2),
-      mech.rows - 1,
-      Math.floor(mech.cols / 2),
-    );
+  const ends = pickStartGoal(surface, design);
+  const start = options.start ?? ends.start;
+  const goal = options.goal ?? ends.goal;
 
   const sheets: StackSheet[] = [];
   let items: PageItem[] = [];

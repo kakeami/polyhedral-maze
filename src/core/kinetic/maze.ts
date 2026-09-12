@@ -393,3 +393,83 @@ export function optimizeForStates(
     iterations,
   };
 }
+
+export interface StartGoal {
+  readonly start: number;
+  readonly goal: number;
+}
+
+/**
+ * Puts the entrance and the exit on dead ends of the free rim, as far apart as
+ * the maze allows.
+ *
+ * Dead ends are the point: a marker dropped in the middle of a corridor leaves
+ * a stub of maze hanging off it that goes nowhere. Which rim each marker lands
+ * on is left alone, so the pair is free to be the longest walk in the tree even
+ * when that means entering and leaving near the same place.
+ *
+ * The cell is printed once and the object then moves, so a dead end is only
+ * worth choosing if it stays one in every state. It does wherever a rim cell's
+ * other sides are all internal — true of the stack, whose rings are more than
+ * one cell tall. Where it is not, the choice holds for `stateIndex`.
+ */
+export function pickStartGoal(
+  surface: KineticSurface,
+  design: Pick<KineticDesign, 'open' | 'targetState'>,
+  options: { stateIndex?: number } = {},
+): StartGoal {
+  const stateIndex = options.stateIndex ?? design.targetState;
+  const adj = surface.adjByState[stateIndex];
+  if (!adj) throw new Error(`no such state: ${stateIndex}`);
+
+  const neighbours = new Map<number, number[]>();
+  for (const e of adj) {
+    if (!design.open.has(e.classId)) continue;
+    if (!neighbours.has(e.a)) neighbours.set(e.a, []);
+    if (!neighbours.has(e.b)) neighbours.set(e.b, []);
+    neighbours.get(e.a)!.push(e.b);
+    neighbours.get(e.b)!.push(e.a);
+  }
+
+  const onRim: number[] = [];
+  for (let cell = 0; cell < surface.cellCount; cell++) {
+    const from = surface.sideStart[cell]!;
+    const to = surface.sideStart[cell + 1]!;
+    for (let side = from; side < to; side++) {
+      if (surface.classKind[surface.classOf[side]!] === 'rim') {
+        onRim.push(cell);
+        break;
+      }
+    }
+  }
+
+  // Prefer leaves: a marker in the middle of a corridor leaves a stub of maze
+  // hanging off it that goes nowhere.
+  const leaves = onRim.filter(c => (neighbours.get(c)?.length ?? 0) === 1);
+  const candidates = leaves.length >= 2 ? leaves : onRim;
+  if (candidates.length < 2) throw new Error('no candidate cells to start or finish at');
+
+  let best: StartGoal | null = null;
+  let bestDistance = -1;
+  for (const from of candidates) {
+    const distance = new Map<number, number>([[from, 0]]);
+    const queue = [from];
+    for (let i = 0; i < queue.length; i++) {
+      const node = queue[i]!;
+      const d = distance.get(node)! + 1;
+      for (const next of neighbours.get(node) ?? []) {
+        if (distance.has(next)) continue;
+        distance.set(next, d);
+        queue.push(next);
+      }
+    }
+    for (const to of candidates) {
+      const d = distance.get(to);
+      if (d === undefined || d <= bestDistance) continue;
+      bestDistance = d;
+      best = { start: from, goal: to };
+    }
+  }
+  if (!best) throw new Error('no two candidates are joined in this state');
+  return best;
+}

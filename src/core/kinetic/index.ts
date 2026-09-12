@@ -12,6 +12,7 @@ export type {
   TreeRate,
   DesignSearchResult,
   MultiStateResult,
+  StartGoal,
 } from './maze.ts';
 export {
   generateKineticMaze,
@@ -21,6 +22,7 @@ export {
   searchDesign,
   optimizeForStates,
   costOverStates,
+  pickStartGoal,
 } from './maze.ts';
 
 export type { StackOptions, StackMechanism } from './mechanisms/stack.ts';
