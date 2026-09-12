@@ -11,7 +11,7 @@ import { VERTEX_EPSILON } from '../constants.ts';
  * piece of code serve every mechanism.
  */
 export class VertexWelder {
-  private readonly buckets = new Map<string, number[]>();
+  private readonly buckets = new Map<number, number[]>();
   private readonly points: Vec3[] = [];
   private readonly eps: number;
 
@@ -28,7 +28,7 @@ export class VertexWelder {
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dz = -1; dz <= 1; dz++) {
-          const bucket = this.buckets.get(`${gx + dx},${gy + dy},${gz + dz}`);
+          const bucket = this.buckets.get(hashCell(gx + dx, gy + dy, gz + dz));
           if (!bucket) continue;
           for (const id of bucket) {
             const q = this.points[id]!;
@@ -42,7 +42,7 @@ export class VertexWelder {
     }
     const id = this.points.length;
     this.points.push(p);
-    const key = `${gx},${gy},${gz}`;
+    const key = hashCell(gx, gy, gz);
     const bucket = this.buckets.get(key);
     if (bucket) bucket.push(id);
     else this.buckets.set(key, [id]);
@@ -52,4 +52,15 @@ export class VertexWelder {
   get count(): number {
     return this.points.length;
   }
+}
+
+/**
+ * Spatial hash of a bucket's integer coordinates. A hash rather than an exact
+ * key on purpose: two distant buckets colliding only means a few extra points
+ * to measure against, and the epsilon test below decides the answer either way.
+ * The string key this replaces cost a fresh allocation on each of the 27 probes
+ * per corner, which dominated the surface build.
+ */
+function hashCell(x: number, y: number, z: number): number {
+  return ((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) | 0;
 }
