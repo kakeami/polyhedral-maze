@@ -24,6 +24,16 @@ export interface ControlsContext {
   setFacePagesBusy(busy: boolean, progress?: string): void;
 }
 
+/**
+ * All three produce a perfect maze — one route between any two cells, no loops
+ * — so what the choice changes is the character of the maze, not its validity.
+ */
+const ALGORITHM_NOTES: Record<Algorithm, string> = {
+  KRUSKAL: 'Grows from everywhere at once: short branches, dead ends spread evenly.',
+  DFS: 'Follows its nose until it is stuck: long winding corridors, fewer dead ends.',
+  WILSON: 'Unbiased — every possible maze on this solid is equally likely.',
+};
+
 const ALL_CATEGORIES = '__all__';
 type CategoryScope = ShapeCategory | typeof ALL_CATEGORIES;
 
@@ -43,6 +53,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const kSlider = el<HTMLInputElement>('ctrl-k');
   const kValue = el<HTMLSpanElement>('ctrl-k-val');
   const algoSelect = el<HTMLSelectElement>('ctrl-algo');
+  const algoNote = el<HTMLDivElement>('ctrl-algo-note');
   const seedInput = el<HTMLInputElement>('ctrl-seed');
   const styleSelect = el<HTMLSelectElement>('ctrl-style');
   const styleNote = el<HTMLDivElement>('ctrl-style-note');
@@ -131,6 +142,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     renderShapeOptions(shape.id);
 
     algoSelect.selectedIndex = randomIndex(algoSelect.options.length);
+    updateAlgoNote();
     styleSelect.selectedIndex = randomIndex(styleSelect.options.length);
     updateStyleNote();
 
@@ -153,6 +165,12 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   el('btn-export-faces').addEventListener('click', () => {
     actions.get('export-face-pages')?.();
   });
+
+  function updateAlgoNote() {
+    algoNote.textContent = ALGORITHM_NOTES[algoSelect.value as Algorithm] ?? '';
+  }
+  updateAlgoNote();
+  algoSelect.addEventListener('change', updateAlgoNote);
 
   function updateStyleNote() {
     styleNote.textContent = resolvePreset(styleSelect.value).note;
@@ -184,11 +202,15 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   function setMetrics(m: MazeMetrics) {
     metricsDiv.innerHTML = `
       <div>Cells: <b>${m.totalCells}</b></div>
-      <div>Solution: <b>${m.solutionLength}</b> (${(m.solutionRatio * 100).toFixed(1)}%)</div>
-      <div>Dead ends: <b>${m.deadEndCount}</b> (${(m.deadEndDensity * 100).toFixed(1)}%)</div>
-      <div>Face crossings: <b>${m.faceCrossings}</b></div>
-      <div>Faces visited: <b>${m.faceCoverage}</b>/${m.totalFaces}</div>
-      ${m.warpUsed ? '<div>Warp: <b>used</b></div>' : ''}
+      <div>Solution: <b>${m.solutionLength}</b>
+        <span class="hint">${(m.solutionRatio * 100).toFixed(1)}% of the maze</span></div>
+      <div>Dead ends: <b>${m.deadEndCount}</b>
+        <span class="hint">${(m.deadEndDensity * 100).toFixed(1)}% of cells</span></div>
+      <div>Face crossings: <b>${m.faceCrossings}</b>
+        <span class="hint">edges the answer runs over</span></div>
+      <div>Faces visited: <b>${m.faceCoverage}</b>
+        <span class="hint">of ${m.totalFaces}</span></div>
+      ${m.warpUsed ? '<div>Warp: <b>on the answer</b></div>' : ''}
     `;
   }
 
@@ -279,6 +301,12 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
 
   return `
     <h2>Polyhedral Maze</h2>
+    <p class="blurb">
+      A maze across the whole surface of a solid, corridors running over the
+      edges from face to face. It is a perfect maze: exactly one way from the
+      green pin to the red one, and no loops anywhere. Drag to turn the solid,
+      or print it flat and build it.
+    </p>
 
     <label>Category
       <select id="ctrl-category">
@@ -298,12 +326,13 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
         <option value="WILSON"${p.algorithm === 'WILSON' ? ' selected' : ''}>Wilson</option>
       </select>
     </label>
+    <div class="shape-info" id="ctrl-algo-note"></div>
 
-    <label>n (resolution): <span id="ctrl-n-val">${p.n}</span>
+    <label>n <span class="hint">(cells along a face edge)</span>: <span id="ctrl-n-val">${p.n}</span>
       <input id="ctrl-n" type="range" min="2" max="12" value="${p.n}" />
     </label>
 
-    <label>k (passages): <span id="ctrl-k-val">${p.k}</span>
+    <label>k <span class="hint">(passages across each edge)</span>: <span id="ctrl-k-val">${p.k}</span>
       <input id="ctrl-k" type="range" min="1" max="4" value="${p.k}" />
     </label>
 
@@ -319,7 +348,7 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
     <div class="shape-info" id="ctrl-style-note"></div>
 
     <div class="checkboxes">
-      <label><input id="ctrl-warp" type="checkbox" ${p.warp ? 'checked' : ''} /> Warp</label>
+      <label title="A skewer straight through the solid, surfacing on the far side: the one passage that does not run along the surface"><input id="ctrl-warp" type="checkbox" ${p.warp ? 'checked' : ''} /> Warp</label>
       <label><input id="ctrl-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
       <label><input id="ctrl-auto-rotate" type="checkbox" checked /> Auto-rotate</label>
     </div>

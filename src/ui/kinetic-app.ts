@@ -17,9 +17,9 @@ import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign, StartGoal } from '../core/kinetic/maze.ts';
 import {
   DEFAULT_SEARCH_EFFORT,
+  createAllStatesSearch,
   expandCutClasses,
   pickStartGoal,
-  searchAllStates,
 } from '../core/kinetic/maze.ts';
 import {
   buildKineticPieces,
@@ -54,17 +54,28 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let build: Build | null = null;
   let stateIndex = 0;
+  /** Bumped by every rebuild, so an older search knows it has been overtaken. */
+  let buildToken = 0;
 
-  function buildMaze(p: KineticParams): Build {
+  function startSearch(p: KineticParams) {
     const mech = createStack({ sides: p.sides, layers: p.layers, cols: p.cols, rows: p.rows });
     const surface = buildSurface(mech, { maxStates: mech.states.length });
     const rng = createRng(p.seed);
     const openCutClasses = expandCutClasses(surface, { rng, extra: p.k });
-    const found = searchAllStates(surface, {
+    const search = createAllStatesSearch(surface, {
       rng,
       openCutClasses,
       effort: DEFAULT_SEARCH_EFFORT * p.effort,
     });
+    return { mech, surface, search };
+  }
+
+  function finishBuild(
+    mech: StackMechanism,
+    surface: KineticSurface,
+    found: ReturnType<ReturnType<typeof createAllStatesSearch>['result']>,
+    p: KineticParams,
+  ): Build {
     const ends = pickStartGoal(surface, found.design);
     const rate = found.rate;
     return {
@@ -128,17 +139,80 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
     });
   }
 
+  /**
+   * Builds the mechanism, then walks the search one round per frame.
+   *
+   * A round at a time rather than all at once because the page has one thread.
+   * Between rounds the browser gets it back, so the rings carry on turning and
+   * the bar moves — and a search that takes ten seconds looks like a search
+   * rather than like a page that has died. `token` stands in for cancellation:
+   * if anything starts a newer build, the older loop finds its token stale and
+   * drops what it was doing.
+   */
   function rebuild() {
     const p = controls.getParams();
+    const token = ++buildToken;
     controls.setParams(p);
     syncUrl(p);
-    controls.setStatus('Looking for a maze that survives every turn...');
+    controls.setStatus('Building the surface...');
+    controls.setProgress(0);
+
     // Let the browser paint that line before the thread disappears into the
-    // search; see the note at the top of the file.
+    // first round; see the note at the top of the file.
     requestAnimationFrame(() => setTimeout(() => {
+      if (token !== buildToken) return;
+      let started;
       try {
-        const next = buildMaze(p);
+        started = startSearch(p);
+      } catch (error) {
+        controls.setStatus(`Could not build that one: ${(error as Error).message}`);
+        controls.setProgress(null);
+        controls.setCanSearchHarder(false);
+        return;
+      }
+      const { mech, surface, search } = started;
+      controls.setStatus('Looking for a maze that survives every turn...');
+
+      const pump = () => {
+        if (token !== buildToken) return;
+        let done: boolean;
+        try {
+          done = search.step();
+        } catch (error) {
+          // Nothing on screen may be left mid-search: the bar would sit there
+          // sweeping away at a search that has stopped.
+          controls.setStatus(`The search gave up: ${(error as Error).message}`);
+          controls.setProgress(null);
+          controls.setCanSearchHarder(false);
+          return;
+        }
+        const progress = search.progress;
+        if (!done) {
+          // Two things are true at once: rounds are being used up, and the
+          // design is getting closer. Show whichever is further along, so the
+          // bar reflects the one that is actually moving.
+          const byRounds = progress.rounds / progress.maxRounds;
+          const byStates = progress.perfectStates / Math.max(1, progress.stateCount);
+          controls.setProgress(Math.max(byRounds, byStates * 0.9));
+          controls.setStatus(
+            `Round ${progress.rounds}: perfect in ${progress.perfectStates} of ` +
+            `${progress.stateCount} states so far...`,
+          );
+          requestAnimationFrame(pump);
+          return;
+        }
+
+        let next: Build;
+        try {
+          next = finishBuild(mech, surface, search.result(), p);
+        } catch (error) {
+          controls.setStatus(`Could not finish that one: ${(error as Error).message}`);
+          controls.setProgress(null);
+          controls.setCanSearchHarder(false);
+          return;
+        }
         show(next);
+        controls.setProgress(null);
         const short = next.perfectStates < next.surface.stateCount;
         const canTryHarder = !isMaxEffort(p.effort);
         controls.setStatus(
@@ -149,10 +223,8 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
             : '',
         );
         controls.setCanSearchHarder(short);
-      } catch (error) {
-        controls.setStatus(`Could not build that one: ${(error as Error).message}`);
-        controls.setCanSearchHarder(false);
-      }
+      };
+      requestAnimationFrame(pump);
     }, 0));
   }
 

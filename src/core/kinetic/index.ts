@@ -13,6 +13,9 @@ export type {
   DesignSearchResult,
   MultiStateResult,
   AllStatesResult,
+  AllStatesSearch,
+  AllStatesSearchOptions,
+  SearchProgress,
   StartGoal,
 } from './maze.ts';
 export {
@@ -23,6 +26,8 @@ export {
   searchDesign,
   optimizeForStates,
   searchAllStates,
+  createAllStatesSearch,
+  DEFAULT_SEARCH_EFFORT,
   expandCutClasses,
   costOverStates,
   pickStartGoal,

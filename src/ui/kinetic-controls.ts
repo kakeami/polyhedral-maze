@@ -45,6 +45,8 @@ export interface KineticControlsContext {
   setStatus(text: string): void;
   /** Shows or hides the offer to spend more time on a search that fell short. */
   setCanSearchHarder(can: boolean): void;
+  /** A fraction for the search bar, or null to take it away. */
+  setProgress(fraction: number | null): void;
   onChange(cb: () => void): void;
   onAction(action: string, cb: () => void): void;
   showToast(message: string): void;
@@ -70,6 +72,8 @@ export function createKineticControls(
   const motionCheck = el<HTMLInputElement>('kin-motion');
   const metricsDiv = el<HTMLDivElement>('kin-metrics');
   const statusDiv = el<HTMLDivElement>('kin-status');
+  const progressBar = el<HTMLDivElement>('kin-progress');
+  const progressFill = el<HTMLDivElement>('kin-progress-fill');
 
   const callbacks: (() => void)[] = [];
   const actions = new Map<string, () => void>();
@@ -227,6 +231,11 @@ export function createKineticControls(
       statusDiv.textContent = text;
       statusDiv.classList.toggle('busy', text !== '');
     },
+    setProgress(fraction) {
+      progressBar.hidden = fraction === null;
+      if (fraction === null) return;
+      progressFill.style.width = `${Math.max(4, Math.min(100, fraction * 100))}%`;
+    },
     /** Offers more patience only when more patience could change something. */
     setCanSearchHarder(can) {
       harderBtn.hidden = !can || isMaxEffort(effort);
@@ -312,6 +321,9 @@ function buildHTML(p: KineticParams): string {
       <button id="kin-harder" class="wide" hidden title="The search is a heuristic: more time is another attempt, not a better one, but it usually finds it">Search harder</button>
     </div>
 
+    <div id="kin-progress" class="progress" hidden>
+      <div id="kin-progress-fill" class="progress-fill"><span class="progress-stripe"></span></div>
+    </div>
     <div id="kin-status" class="status"></div>
     <div id="kin-metrics" class="metrics"></div>
 

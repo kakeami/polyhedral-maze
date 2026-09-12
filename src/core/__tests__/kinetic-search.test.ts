@@ -3,6 +3,7 @@ import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { buildSurface } from '../kinetic/surface.ts';
 import {
   chooseCutClasses,
+  createAllStatesSearch,
   expandCutClasses,
   generateKineticMaze,
   optimizeForStates,
@@ -112,5 +113,52 @@ describe('the effort budget', () => {
     });
     expect(result.steps).toBeGreaterThan(0);
     expect(result.steps).toBeLessThanOrEqual(500 * 2);
+  });
+});
+
+describe('stepping the search a round at a time', () => {
+  it('finds exactly what the all-at-once version finds', () => {
+    const surface = smallStack();
+    const whole = searchAllStates(surface, { rng: createRng(4242) });
+
+    const stepped = createAllStatesSearch(surface, { rng: createRng(4242) });
+    let rounds = 0;
+    while (!stepped.step()) rounds++;
+    const piecemeal = stepped.result();
+
+    expect([...piecemeal.design.open].sort()).toEqual([...whole.design.open].sort());
+    expect(piecemeal.rate.rate).toBe(whole.rate.rate);
+    expect(rounds).toBeLessThanOrEqual(whole.rounds);
+  });
+
+  it('has something to report after every round', () => {
+    const surface = buildSurface(createStack({ sides: 6, layers: 3, cols: 3, rows: 3 }));
+    const cuts = expandCutClasses(surface, { rng: createRng(3), extra: 99 });
+    const search = createAllStatesSearch(surface, { rng: createRng(1), openCutClasses: cuts });
+
+    const seen: number[] = [];
+    let done = false;
+    while (!done) {
+      done = search.step();
+      const p = search.progress;
+      expect(p.rounds).toBeGreaterThan(0);
+      expect(p.rounds).toBeLessThanOrEqual(p.maxRounds);
+      expect(p.stateCount).toBe(surface.stateCount);
+      expect(p.perfectStates).toBeLessThanOrEqual(p.stateCount);
+      expect(p.spent).toBeGreaterThan(0);
+      seen.push(p.perfectStates);
+    }
+    // Several rounds, with the sample widening each time — which is exactly
+    // the case the progress display exists for, since one round of this size
+    // is most of a second on its own.
+    expect(seen.length).toBeGreaterThan(1);
+    // The best never gets worse as the rounds go by.
+    for (let i = 1; i < seen.length; i++) expect(seen[i]!).toBeGreaterThanOrEqual(seen[i - 1]!);
+    expect(seen[seen.length - 1]).toBeGreaterThan(seen[0]!);
+  });
+
+  it('refuses to report a result before it has run', () => {
+    const search = createAllStatesSearch(smallStack(), { rng: createRng(1) });
+    expect(() => search.result()).toThrow(/has not run/);
   });
 });

@@ -579,19 +579,50 @@ const ANNEAL_ITERATIONS = 20000;
  * The exact answer is unaffected: what is returned is measured by `treeRate`
  * over every state, whatever the working set happened to be.
  */
-export function searchAllStates(
+export interface AllStatesSearchOptions {
+  rng: Rng;
+  sampleSize?: number;
+  maxRounds?: number;
+  addPerRound?: number;
+  restarts?: number;
+  openCutClasses?: readonly number[];
+  /** Cell-state units to spend; see `DEFAULT_SEARCH_EFFORT`. */
+  effort?: number;
+}
+
+export interface SearchProgress {
+  /** Rounds of anneal-then-verify finished so far. */
+  readonly rounds: number;
+  readonly maxRounds: number;
+  readonly spent: number;
+  readonly effort: number;
+  /** States that are perfect mazes under the best design found so far. */
+  readonly perfectStates: number;
+  readonly stateCount: number;
+}
+
+export interface AllStatesSearch {
+  /** Runs one round. Returns true when there is nothing left to try. */
+  step(): boolean;
+  readonly progress: SearchProgress;
+  /** The best design found so far; valid after at least one step. */
+  result(): AllStatesResult;
+}
+
+/**
+ * The same search as `searchAllStates`, one round at a time.
+ *
+ * Handed out a round at a time because a page has one thread: a search that
+ * runs to completion in a single call is a page that stops repainting, and a
+ * visitor cannot tell that from a crash. Stepping it lets the caller put the
+ * object back on screen between rounds and say how far along it is. The rounds
+ * themselves are unchanged, so what it finds is exactly what the all-at-once
+ * version finds from the same seed.
+ */
+export function createAllStatesSearch(
   surface: KineticSurface,
-  options: {
-    rng: Rng;
-    sampleSize?: number;
-    maxRounds?: number;
-    addPerRound?: number;
-    restarts?: number;
-    openCutClasses?: readonly number[];
-    /** Cell-state units to spend; see `DEFAULT_SEARCH_EFFORT`. */
-    effort?: number;
-  },
-): AllStatesResult {
+  options: AllStatesSearchOptions,
+): AllStatesSearch {
   const { rng } = options;
   const sampleSize = options.sampleSize ?? 8;
   const maxRounds = options.maxRounds ?? 8;
@@ -607,7 +638,12 @@ export function searchAllStates(
 
   let best: AllStatesResult | null = null;
   let spent = 0;
-  for (let round = 1; round <= maxRounds; round++) {
+  let round = 0;
+  let finished = false;
+
+  const step = (): boolean => {
+    if (finished) return true;
+    round++;
     // The budget buys rounds, never shorter anneals. Cutting an anneal short
     // is not a cheaper search, it is a worse one: the temperature schedule is
     // laid out over the iteration count, so halving it does not halve the work
@@ -615,7 +651,10 @@ export function searchAllStates(
     // the first attempt can elude four compressed ones. Measured, the
     // compressed version failed on half the mechanisms the full-length one
     // solved, and then spent the whole budget failing.
-    if (round > 1 && spent >= effort) break;
+    if (round > maxRounds || (round > 1 && spent >= effort)) {
+      finished = true;
+      return true;
+    }
 
     const attempt = optimizeForStates(surface, {
       rng,
@@ -637,15 +676,50 @@ export function searchAllStates(
         workingStates: working.size, exhausted: false,
       };
     }
-    if (rate.rate === 1) break;
+    if (rate.rate === 1) {
+      finished = true;
+      return true;
+    }
 
     // Feed the states it got wrong back in, so the next anneal has to answer
     // for them. Sampling rather than adding them all keeps a step cheap.
     const perfect = new Set(rate.perfectStates);
     const failed: number[] = [];
     for (let s = 0; s < surface.stateCount; s++) if (!perfect.has(s)) failed.push(s);
-    if (failed.length === 0) break;
+    if (failed.length === 0) {
+      finished = true;
+      return true;
+    }
     for (let i = 0; i < addPerRound; i++) working.add(failed[rng.nextInt(failed.length)]!);
+    return false;
+  };
+
+  return {
+    step,
+    get progress(): SearchProgress {
+      return {
+        rounds: Math.min(round, maxRounds),
+        maxRounds,
+        spent,
+        effort,
+        perfectStates: best?.rate.perfectStates.length ?? 0,
+        stateCount: surface.stateCount,
+      };
+    },
+    result(): AllStatesResult {
+      if (!best) throw new Error('the search has not run a round yet');
+      return { ...best, exhausted: best.rate.rate < 1 };
+    },
+  };
+}
+
+export function searchAllStates(
+  surface: KineticSurface,
+  options: AllStatesSearchOptions,
+): AllStatesResult {
+  const search = createAllStatesSearch(surface, options);
+  while (!search.step()) {
+    // Every round, until it finds one or runs out of budget.
   }
-  return { ...best!, exhausted: best!.rate.rate < 1 };
+  return search.result();
 }
