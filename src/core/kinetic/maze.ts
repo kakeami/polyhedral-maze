@@ -265,6 +265,8 @@ export interface MultiStateResult {
   readonly targetStates: readonly number[];
   readonly restarts: number;
   readonly iterations: number;
+  /** Annealing steps actually taken, summed over the restarts. */
+  readonly steps: number;
 }
 
 /** Sum over `states` of (components - 1) — the quantity the optimiser drives to 0. */
@@ -342,6 +344,7 @@ export function optimizeForStates(
 
   let bestList: Int32Array | null = null;
   let bestCost = Infinity;
+  let steps = 0;
 
   for (let restart = 0; restart < restarts && bestCost > 0; restart++) {
     const seed = generateKineticMaze(surface, {
@@ -361,6 +364,7 @@ export function optimizeForStates(
     const trial = new Int32Array(current.length);
 
     for (let step = 0; step < iterations && cost > 0; step++) {
+      steps++;
       const temperature = startTemperature * (1 - step / iterations) + 0.02;
       const slot = rng.nextInt(current.length);
       const leaving = current[slot]!;
@@ -391,6 +395,7 @@ export function optimizeForStates(
     targetStates: [...targetStates],
     restarts,
     iterations,
+    steps,
   };
 }
 
@@ -472,4 +477,175 @@ export function pickStartGoal(
   }
   if (!best) throw new Error('no two candidates are joined in this state');
   return best;
+}
+
+/**
+ * Opens `extra` cut classes beyond the minimum the mechanism needs.
+ *
+ * This is the stack's analogue of the polyhedral maze's `k`: how many passages
+ * cross a seam between one piece and the next. The minimum is whatever it takes
+ * to join the pieces in every state; each one above that buys another way
+ * across at the price of one more island inside a piece (corollary 4), which is
+ * what makes a bigger `k` a harder maze rather than an easier one.
+ *
+ * A candidate is only taken if the forced openings stay a forest in *every*
+ * state. Two openings that close a loop would put a cycle in the maze that no
+ * choice of walls could undo, and `generateKineticMaze` rightly refuses it.
+ */
+export function expandCutClasses(
+  surface: KineticSurface,
+  options: { rng: Rng; base?: readonly number[]; extra: number },
+): number[] {
+  const { rng, extra } = options;
+  const chosen = [...(options.base ?? chooseCutClasses(surface, rng))];
+  if (extra <= 0) return chosen;
+
+  const staysForest = (open: Set<number>): boolean => {
+    for (let s = 0; s < surface.stateCount; s++) {
+      const uf = new UnionFind<number>();
+      for (const e of surface.adjByState[s]!) {
+        if (!open.has(e.classId)) continue;
+        if (uf.connected(e.a, e.b)) return false;
+        uf.union(e.a, e.b);
+      }
+    }
+    return true;
+  };
+
+  const open = new Set(chosen);
+  const candidates = surface.cutClasses.filter(c => !open.has(c));
+  rng.shuffle(candidates);
+  let added = 0;
+  for (const c of candidates) {
+    if (added === extra) break;
+    open.add(c);
+    if (staysForest(open)) {
+      chosen.push(c);
+      added++;
+    } else {
+      open.delete(c);
+    }
+  }
+  return chosen;
+}
+
+export interface AllStatesResult {
+  readonly design: KineticDesign;
+  readonly rate: TreeRate;
+  /** How many rounds of anneal-then-verify it took. */
+  readonly rounds: number;
+  /** Size of the working set the last anneal ran against. */
+  readonly workingStates: number;
+  /** Whether the search stopped because it ran out of budget, not answers. */
+  readonly exhausted: boolean;
+}
+
+/**
+ * How much arithmetic a search may spend, counted in cell-state units — one
+ * unit is roughly what it costs to test one cell in one state.
+ *
+ * Counted rather than timed on purpose. A wall clock would make the result
+ * depend on how busy the machine was, and these designs are shared as URLs: a
+ * seed has to mean the same maze on a laptop as on a phone. A count of work is
+ * the same everywhere, and still bounds the wait, because the cost per unit is
+ * a property of the code rather than the problem.
+ *
+ * Note what it does *not* buy: a search that is going to succeed exits the
+ * moment it does, so this is only ever spent failing. Asking for a design that
+ * cannot exist — too many seam openings for the spanning-tree budget to carry
+ * — is what actually spends it all, and the point of the budget is to be told
+ * so in a couple of seconds instead of twenty.
+ */
+export const DEFAULT_SEARCH_EFFORT = 3e8;
+
+/**
+ * Iterations in one anneal. Full length or nothing, for the reason given where
+ * the budget is spent; the same default `optimizeForStates` has always used.
+ */
+const ANNEAL_ITERATIONS = 20000;
+
+/**
+ * Finds a design that is a perfect maze in every state — the gamma version.
+ *
+ * `optimizeForStates` can be pointed at all of them at once, but the cost of a
+ * single annealing step is proportional to how many states it scores, so that
+ * spends most of its time re-checking states that were never in danger. This
+ * anneals against a handful of states instead, then verifies against all of
+ * them and feeds the failures back into the working set. In practice a design
+ * that survives eight random states usually survives all of them, so the first
+ * round is normally the last, and the search comes back three to twelve times
+ * sooner.
+ *
+ * The exact answer is unaffected: what is returned is measured by `treeRate`
+ * over every state, whatever the working set happened to be.
+ */
+export function searchAllStates(
+  surface: KineticSurface,
+  options: {
+    rng: Rng;
+    sampleSize?: number;
+    maxRounds?: number;
+    addPerRound?: number;
+    restarts?: number;
+    openCutClasses?: readonly number[];
+    /** Cell-state units to spend; see `DEFAULT_SEARCH_EFFORT`. */
+    effort?: number;
+  },
+): AllStatesResult {
+  const { rng } = options;
+  const sampleSize = options.sampleSize ?? 8;
+  const maxRounds = options.maxRounds ?? 8;
+  const addPerRound = options.addPerRound ?? 4;
+  const restarts = options.restarts ?? 2;
+  const effort = options.effort ?? DEFAULT_SEARCH_EFFORT;
+  const openCutClasses = options.openCutClasses ?? chooseCutClasses(surface, rng);
+
+  const working = new Set<number>([0]);
+  while (working.size < Math.min(sampleSize, surface.stateCount)) {
+    working.add(rng.nextInt(surface.stateCount));
+  }
+
+  let best: AllStatesResult | null = null;
+  let spent = 0;
+  for (let round = 1; round <= maxRounds; round++) {
+    // The budget buys rounds, never shorter anneals. Cutting an anneal short
+    // is not a cheaper search, it is a worse one: the temperature schedule is
+    // laid out over the iteration count, so halving it does not halve the work
+    // done, it halves the cooling — and a design a full-length anneal finds on
+    // the first attempt can elude four compressed ones. Measured, the
+    // compressed version failed on half the mechanisms the full-length one
+    // solved, and then spent the whole budget failing.
+    if (round > 1 && spent >= effort) break;
+
+    const attempt = optimizeForStates(surface, {
+      rng,
+      targetStates: [...working],
+      openCutClasses,
+      restarts,
+      iterations: ANNEAL_ITERATIONS,
+    });
+    // Charged for what it did, not for what it was allowed to do. A round that
+    // satisfies its sample in five hundred steps and then fails the full check
+    // costs almost nothing, and there is no reason to stop after one of those:
+    // it is the growing working set, not the annealing, that gets there.
+    spent += attempt.steps * working.size * surface.cellCount;
+
+    const rate = treeRate(surface, attempt.design);
+    if (!best || rate.perfectStates.length > best.rate.perfectStates.length) {
+      best = {
+        design: attempt.design, rate, rounds: round,
+        workingStates: working.size, exhausted: false,
+      };
+    }
+    if (rate.rate === 1) break;
+
+    // Feed the states it got wrong back in, so the next anneal has to answer
+    // for them. Sampling rather than adding them all keeps a step cheap.
+    const perfect = new Set(rate.perfectStates);
+    const failed: number[] = [];
+    for (let s = 0; s < surface.stateCount; s++) if (!perfect.has(s)) failed.push(s);
+    if (failed.length === 0) break;
+    for (let i = 0; i < addPerRound; i++) working.add(failed[rng.nextInt(failed.length)]!);
+  }
+  return { ...best!, exhausted: best!.rate.rate < 1 };
 }

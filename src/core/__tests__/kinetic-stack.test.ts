@@ -167,3 +167,22 @@ describe('other stack sizes', () => {
     expect(() => createStack({ cols: 0 })).toThrow();
   });
 });
+
+describe('stateIndex', () => {
+  it('is the inverse of stateOffsets', () => {
+    const mech = createStack({ sides: 4, layers: 4, cols: 2, rows: 2 });
+    for (let i = 0; i < mech.states.length; i++) {
+      expect(mech.stateIndex(mech.stateOffsets(i))).toBe(i);
+    }
+  });
+
+  it('ignores the bottom ring, which is not part of the state', () => {
+    const mech = createStack({ sides: 5, layers: 3, cols: 2, rows: 2 });
+    expect(mech.stateIndex([0, 2, 1])).toBe(mech.stateIndex([3, 2, 1]));
+  });
+
+  it('takes offsets that have wandered outside one turn', () => {
+    const mech = createStack({ sides: 6, layers: 3, cols: 2, rows: 2 });
+    expect(mech.stateIndex([0, 7, -1])).toBe(mech.stateIndex([0, 1, 5]));
+  });
+});

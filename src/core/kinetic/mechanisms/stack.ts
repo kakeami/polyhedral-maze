@@ -22,6 +22,8 @@ export interface StackMechanism extends Mechanism {
   cellIndex(layer: number, face: number, row: number, col: number): number;
   /** Rotation offsets (in face steps) of each layer in a state. */
   stateOffsets(index: number): number[];
+  /** The state those offsets name — the inverse of `stateOffsets`. */
+  stateIndex(offsets: readonly number[]): number;
 }
 
 /**
@@ -113,6 +115,18 @@ export function createStack(options: StackOptions = {}): StackMechanism {
     rows,
     stateLabel: (index: number) => stateOffsets(index).join('-'),
     stateOffsets,
+    stateIndex: (offsets: readonly number[]) => {
+      // Layer 0 is not part of the state: turning the whole object is not a
+      // move, so whatever offset it is given here is ignored.
+      let index = 0;
+      let place = 1;
+      for (let layer = 1; layer < layers; layer++) {
+        const turn = ((Math.round(offsets[layer] ?? 0) % sides) + sides) % sides;
+        index += turn * place;
+        place *= sides;
+      }
+      return index;
+    },
     cellIndex: (layer, face, row, col) => {
       if (layer < 0 || layer >= layers) throw new Error(`no such layer: ${layer}`);
       if (face < 0 || face >= sides) throw new Error(`no such face: ${face}`);

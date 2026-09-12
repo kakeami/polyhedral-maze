@@ -12,6 +12,7 @@ export type {
   TreeRate,
   DesignSearchResult,
   MultiStateResult,
+  AllStatesResult,
   StartGoal,
 } from './maze.ts';
 export {
@@ -21,6 +22,8 @@ export {
   treeRate,
   searchDesign,
   optimizeForStates,
+  searchAllStates,
+  expandCutClasses,
   costOverStates,
   pickStartGoal,
 } from './maze.ts';
