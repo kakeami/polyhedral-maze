@@ -6,13 +6,21 @@ export { VertexWelder } from './weld.ts';
 export type { KineticSurface, SurfaceAdjacency, SideClassKind } from './surface.ts';
 export { buildSurface } from './surface.ts';
 
-export type { KineticDesign, StateStats, TreeRate, DesignSearchResult } from './maze.ts';
+export type {
+  KineticDesign,
+  StateStats,
+  TreeRate,
+  DesignSearchResult,
+  MultiStateResult,
+} from './maze.ts';
 export {
   generateKineticMaze,
   chooseCutClasses,
   stateStats,
   treeRate,
   searchDesign,
+  optimizeForStates,
+  costOverStates,
 } from './maze.ts';
 
 export type { StackOptions, StackMechanism } from './mechanisms/stack.ts';

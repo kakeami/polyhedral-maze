@@ -202,3 +202,194 @@ export function searchDesign(
   if (!best) throw new Error('attempts must be at least 1');
   return best;
 }
+
+/**
+ * Union-Find over a fixed cell count, reused across annealing steps.
+ *
+ * The public `UnionFind` in core/graph.ts is Map-backed and general; this one
+ * exists only because the optimiser below runs it tens of thousands of times
+ * over the same vertex set, where allocation dominates.
+ */
+class CellUnionFind {
+  private readonly parent: Int32Array;
+  private readonly rank: Uint8Array;
+  components: number;
+
+  constructor(private readonly size: number) {
+    this.parent = new Int32Array(size);
+    this.rank = new Uint8Array(size);
+    this.components = size;
+  }
+
+  reset(): void {
+    for (let i = 0; i < this.size; i++) {
+      this.parent[i] = i;
+      this.rank[i] = 0;
+    }
+    this.components = this.size;
+  }
+
+  find(x: number): number {
+    let root = x;
+    while (this.parent[root]! !== root) root = this.parent[root]!;
+    let node = x;
+    while (this.parent[node]! !== root) {
+      const next = this.parent[node]!;
+      this.parent[node] = root;
+      node = next;
+    }
+    return root;
+  }
+
+  union(a: number, b: number): boolean {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra === rb) return false;
+    const rankA = this.rank[ra]!;
+    const rankB = this.rank[rb]!;
+    if (rankA < rankB) this.parent[ra] = rb;
+    else if (rankA > rankB) this.parent[rb] = ra;
+    else {
+      this.parent[rb] = ra;
+      this.rank[ra] = rankA + 1;
+    }
+    this.components--;
+    return true;
+  }
+}
+
+export interface MultiStateResult {
+  readonly design: KineticDesign;
+  /** Sum over the target states of (components - 1). Zero means all are perfect. */
+  readonly cost: number;
+  readonly targetStates: readonly number[];
+  readonly restarts: number;
+  readonly iterations: number;
+}
+
+/** Sum over `states` of (components - 1) — the quantity the optimiser drives to 0. */
+export function costOverStates(
+  surface: KineticSurface,
+  design: Pick<KineticDesign, 'open'>,
+  states: readonly number[],
+): number {
+  let cost = 0;
+  for (const s of states) cost += stateStats(surface, design, s).components - 1;
+  return cost;
+}
+
+/**
+ * Looks for a design that is a perfect maze in *several* states at once.
+ *
+ * Opening a wall somewhere always closes one elsewhere, because the passage
+ * count is pinned at N-1; so this swaps one open internal class for a closed
+ * one and anneals on how far the target states are from being connected. The
+ * cut classes are left alone — changing them would change the budget.
+ *
+ * A mechanism with few states (a hinged ring, a kaleidocycle) can plausibly be
+ * made perfect in *every* state this way, which is the strongest form of the
+ * idea: an object that is a finished maze however you fold it.
+ */
+export function optimizeForStates(
+  surface: KineticSurface,
+  options: {
+    rng: Rng;
+    targetStates: readonly number[];
+    openCutClasses?: readonly number[];
+    iterations?: number;
+    restarts?: number;
+    startTemperature?: number;
+  },
+): MultiStateResult {
+  const { rng, targetStates } = options;
+  const iterations = options.iterations ?? 20000;
+  const restarts = options.restarts ?? 4;
+  const startTemperature = options.startTemperature ?? 2.5;
+  if (targetStates.length === 0) throw new Error('targetStates must not be empty');
+  for (const s of targetStates) {
+    if (s < 0 || s >= surface.stateCount) throw new Error(`no such state: ${s}`);
+  }
+
+  const openCutClasses = options.openCutClasses ?? chooseCutClasses(surface, rng);
+  const cutSet = new Set(openCutClasses);
+
+  // Flatten the parts of the graph the inner loop touches.
+  const internal = surface.internalEdges;
+  const internalA = Int32Array.from(internal, e => e.a);
+  const internalB = Int32Array.from(internal, e => e.b);
+  const cutPairs = targetStates.map(s => {
+    const pairs: number[] = [];
+    for (const e of surface.adjByState[s]!) {
+      if (cutSet.has(e.classId)) pairs.push(e.a, e.b);
+    }
+    return Int32Array.from(pairs);
+  });
+
+  const uf = new CellUnionFind(surface.cellCount);
+  const classIndexOf = new Map<number, number>();
+  internal.forEach((e, i) => classIndexOf.set(e.classId, i));
+
+  const evaluate = (openList: Int32Array): number => {
+    let cost = 0;
+    for (const pairs of cutPairs) {
+      uf.reset();
+      for (let i = 0; i < pairs.length; i += 2) uf.union(pairs[i]!, pairs[i + 1]!);
+      for (const e of openList) uf.union(internalA[e]!, internalB[e]!);
+      cost += uf.components - 1;
+    }
+    return cost;
+  };
+
+  let bestList: Int32Array | null = null;
+  let bestCost = Infinity;
+
+  for (let restart = 0; restart < restarts && bestCost > 0; restart++) {
+    const seed = generateKineticMaze(surface, {
+      rng,
+      targetState: targetStates[0]!,
+      openCutClasses,
+    });
+    const openIndices: number[] = [];
+    for (const classId of seed.open) {
+      const index = classIndexOf.get(classId);
+      if (index !== undefined) openIndices.push(index);
+    }
+    let current = Int32Array.from(openIndices);
+    const isOpen = new Uint8Array(internal.length);
+    for (const i of current) isOpen[i] = 1;
+    let cost = evaluate(current);
+    const trial = new Int32Array(current.length);
+
+    for (let step = 0; step < iterations && cost > 0; step++) {
+      const temperature = startTemperature * (1 - step / iterations) + 0.02;
+      const slot = rng.nextInt(current.length);
+      const leaving = current[slot]!;
+      const entering = rng.nextInt(internal.length);
+      if (isOpen[entering]) continue;
+      trial.set(current);
+      trial[slot] = entering;
+      const next = evaluate(trial);
+      if (next <= cost || rng.next() < Math.exp((cost - next) / temperature)) {
+        isOpen[leaving] = 0;
+        isOpen[entering] = 1;
+        current.set(trial);
+        cost = next;
+      }
+    }
+
+    if (cost < bestCost) {
+      bestCost = cost;
+      bestList = Int32Array.from(current);
+    }
+  }
+
+  const open = new Set<number>(openCutClasses);
+  for (const i of bestList ?? []) open.add(internal[i]!.classId);
+  return {
+    design: { open, openCutClasses: [...openCutClasses], targetState: targetStates[0]! },
+    cost: bestCost,
+    targetStates: [...targetStates],
+    restarts,
+    iterations,
+  };
+}
