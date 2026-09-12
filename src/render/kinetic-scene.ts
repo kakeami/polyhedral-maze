@@ -55,6 +55,10 @@ export interface KineticSceneContext {
   setSolution(path: readonly Vec3[] | null): void;
   setPreset(id: PresetId): void;
   setMotion(running: boolean): void;
+  /** Whether the view drifts around the object. The rings are a separate
+   *  question — a hand on a ring stops both, and only for as long as it is
+   *  there. */
+  setAutoRotate(on: boolean): void;
   /** Called when the rings start moving and again when they come to rest. */
   onState(cb: (offsets: number[], atRest: boolean) => void): void;
   resize(): void;
@@ -141,6 +145,7 @@ export function createKineticScene(
   let solutionMaterial: LineMaterial | null = null;
   let solutionPath: readonly Vec3[] | null = null;
   let motionRunning = true;
+  let autoRotating = true;
   let stateCallback: ((offsets: number[], atRest: boolean) => void) | null = null;
 
   const resolution = () => new THREE.Vector2(container.clientWidth, container.clientHeight);
@@ -384,6 +389,7 @@ export function createKineticScene(
     }
     dragRing = -1;
     controls.enabled = true;
+    controls.autoRotate = autoRotating;
     renderer.domElement.style.cursor = 'grab';
     if (renderer.domElement.hasPointerCapture(event.pointerId)) {
       renderer.domElement.releasePointerCapture(event.pointerId);
@@ -476,6 +482,10 @@ export function createKineticScene(
     setMotion(on) {
       motionRunning = on;
       driver?.setAuto(on);
+    },
+    setAutoRotate(on) {
+      autoRotating = on;
+      controls.autoRotate = on;
     },
     onState(cb) {
       stateCallback = cb;

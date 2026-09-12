@@ -30,9 +30,23 @@ describe('kinetic params in a URL', () => {
   });
 
   it('keeps the switches that default to on', () => {
-    const off = { ...DEFAULT_KINETIC_PARAMS, showSolution: false, motion: false };
-    expect(encodeKineticParams(off)).toContain('solution=0');
-    expect(decodeKineticParams(encodeKineticParams(off))).toEqual(off);
+    const off = {
+      ...DEFAULT_KINETIC_PARAMS, showSolution: false, motion: false, autoRotate: false,
+    };
+    const encoded = encodeKineticParams(off);
+    expect(encoded).toContain('solution=0');
+    expect(encoded).toContain('motion=0');
+    expect(encoded).toContain('rotate=0');
+    expect(decodeKineticParams(encoded)).toEqual(off);
+  });
+
+  it('tells the view drift apart from the mechanism turning', () => {
+    const still = decodeKineticParams('?rotate=0');
+    expect(still.autoRotate).toBe(false);
+    expect(still.motion).toBe(true);
+    const held = decodeKineticParams('?motion=0');
+    expect(held.motion).toBe(false);
+    expect(held.autoRotate).toBe(true);
   });
 
   it('falls back on nonsense rather than building nothing', () => {

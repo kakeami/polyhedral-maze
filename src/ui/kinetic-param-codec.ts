@@ -27,6 +27,8 @@ export interface KineticParams {
   showSolution: boolean;
   /** Whether the rings turn on their own. */
   motion: boolean;
+  /** Whether the view drifts around the object. */
+  autoRotate: boolean;
   /**
    * How hard to look for a design that is perfect in every state, as a
    * multiple of the default budget. Part of the URL because it is part of the
@@ -73,6 +75,7 @@ export const DEFAULT_KINETIC_PARAMS: KineticParams = {
   seed: 42,
   showSolution: true,
   motion: true,
+  autoRotate: true,
   effort: 1,
   style: DEFAULT_PRESET_ID,
 };
@@ -158,6 +161,7 @@ export function clampKineticParams(p: KineticParams): KineticParams {
     seed: clamp(Math.round(p.seed), KINETIC_LIMITS.seed.min, KINETIC_LIMITS.seed.max),
     showSolution: p.showSolution,
     motion: p.motion,
+    autoRotate: p.autoRotate,
     effort: nearestEffort(p.effort),
     style: resolvePreset(p.style).id,
   };
@@ -192,6 +196,7 @@ export function encodeKineticParams(params: KineticParams): string {
   if (params.seed !== d.seed) p.set('seed', String(params.seed));
   if (params.showSolution !== d.showSolution) p.set('solution', params.showSolution ? '1' : '0');
   if (params.motion !== d.motion) p.set('motion', params.motion ? '1' : '0');
+  if (params.autoRotate !== d.autoRotate) p.set('rotate', params.autoRotate ? '1' : '0');
   if (params.effort !== d.effort) p.set('effort', String(params.effort));
   if (params.style !== d.style) p.set('style', params.style);
   const qs = p.toString();
@@ -210,6 +215,7 @@ export function decodeKineticParams(search: string): KineticParams {
     seed: number(p.get('seed'), d.seed),
     showSolution: flag(p.get('solution'), d.showSolution),
     motion: flag(p.get('motion'), d.motion),
+    autoRotate: flag(p.get('rotate'), d.autoRotate),
     effort: number(p.get('effort'), d.effort),
     style: resolvePreset(p.get('style')).id,
   });

@@ -70,6 +70,7 @@ export function createKineticControls(
   const styleNote = el<HTMLDivElement>('kin-style-note');
   const solutionCheck = el<HTMLInputElement>('kin-solution');
   const motionCheck = el<HTMLInputElement>('kin-motion');
+  const autoRotateCheck = el<HTMLInputElement>('kin-autorotate');
   const metricsDiv = el<HTMLDivElement>('kin-metrics');
   const statusDiv = el<HTMLDivElement>('kin-status');
   const progressBar = el<HTMLDivElement>('kin-progress');
@@ -96,6 +97,7 @@ export function createKineticControls(
       seed: Number(seedInput.value),
       showSolution: solutionCheck.checked,
       motion: motionCheck.checked,
+      autoRotate: autoRotateCheck.checked,
       effort,
       style: styleSelect.value as PresetId,
     });
@@ -146,6 +148,7 @@ export function createKineticControls(
   });
   solutionCheck.addEventListener('change', () => actions.get('solution')?.());
   motionCheck.addEventListener('change', () => actions.get('motion')?.());
+  autoRotateCheck.addEventListener('change', () => actions.get('auto-rotate')?.());
 
   function updateStyleNote() {
     styleNote.textContent = resolvePreset(styleSelect.value).note;
@@ -211,6 +214,7 @@ export function createKineticControls(
       seedInput.value = String(params.seed);
       solutionCheck.checked = params.showSolution;
       motionCheck.checked = params.motion;
+      autoRotateCheck.checked = params.autoRotate;
       styleSelect.value = params.style;
       updateStyleNote();
       syncBounds();
@@ -310,7 +314,8 @@ function buildHTML(p: KineticParams): string {
 
     <div class="checkboxes">
       <label><input id="kin-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
-      <label><input id="kin-motion" type="checkbox" ${p.motion ? 'checked' : ''} /> Rings turn</label>
+      <label title="The rings click round on their own. Off, they stay put until you turn one by hand"><input id="kin-motion" type="checkbox" ${p.motion ? 'checked' : ''} /> Rings turn</label>
+      <label title="The view drifts around the object. This turns the camera, not the mechanism"><input id="kin-autorotate" type="checkbox" ${p.autoRotate ? 'checked' : ''} /> Auto-rotate</label>
     </div>
 
     <div class="buttons">

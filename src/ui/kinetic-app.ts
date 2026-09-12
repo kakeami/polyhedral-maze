@@ -50,6 +50,9 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
   const params = decodeKineticParams(window.location.search);
   const scene = createKineticScene(viewportEl, params.style);
   const controls = createKineticControls(controlsEl, params);
+  // Before the first search returns there is nothing to show, but a link that
+  // asked for a still view should not spend that second drifting.
+  scene.setAutoRotate(params.autoRotate);
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let build: Build | null = null;
@@ -108,6 +111,7 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
       seed: next.params.seed,
     });
     scene.setMotion(next.params.motion);
+    scene.setAutoRotate(next.params.autoRotate);
     refreshState(stateIndex);
   }
 
@@ -259,6 +263,12 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
   controls.onAction('motion', () => {
     const p = controls.getParams();
     scene.setMotion(p.motion);
+    syncUrl(p);
+  });
+
+  controls.onAction('auto-rotate', () => {
+    const p = controls.getParams();
+    scene.setAutoRotate(p.autoRotate);
     syncUrl(p);
   });
 
