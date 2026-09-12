@@ -32,9 +32,12 @@ interactive 3D viewer.
 - **PDF export**: download unfolded net diagrams (puzzle + answer) for paper craft — nets are guaranteed overlap-free with glue tabs and cut guides, even for toroidal shapes
 - **Face pages export**: for large models, an index sheet plus the pieces themselves, every piece at the same scale so they still fit together. Each piece gets its own framed panel with its own locator diagram, and panels are packed several to a sheet wherever they fit. No glue tabs; each edge is labelled with the face it joins, outside the cut line. Print the set bigger (A3, say) and the model scales with it
 
+- **Moving maze** (`/kinetic/`): a maze printed on a stack of rings that turn on a dowel. Every one of the hundreds of ways to turn them is a different maze, and the design is searched so that *every one of them is a perfect maze*. Drag a ring to turn it, watch the solution re-route each time the rings click into place, and export the printable rings as PDF
+
 ## Demo
 
-[https://kakeami.github.io/polyhedral-maze/](https://kakeami.github.io/polyhedral-maze/)
+- Polyhedra: [https://kakeami.github.io/polyhedral-maze/](https://kakeami.github.io/polyhedral-maze/)
+- Moving maze: [https://kakeami.github.io/polyhedral-maze/kinetic/](https://kakeami.github.io/polyhedral-maze/kinetic/)
 
 ## Development
 

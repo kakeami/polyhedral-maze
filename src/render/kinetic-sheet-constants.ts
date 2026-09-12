@@ -46,6 +46,13 @@ export const STACK_SHEET_STYLE = {
 export const STACK_SHEET_DEFAULTS = {
   /** One maze cell. 10 mm puts a 6-gon of 3 columns a face at a 60 mm barrel. */
   cellMm: 10,
+  /**
+   * Smallest cell worth printing. Below this the walls are closer together
+   * than a craft knife is wide, and the band cannot be cut by hand at all —
+   * which is the only way these are made. A barrel that needs cells smaller
+   * than this does not get a smaller drawing, it gets turned down.
+   */
+  minCellMm: 5,
   /** A 6 mm wooden dowel is the common hardware-shop size. */
   dowelMm: 6,
   /** Slack so the layers turn freely rather than binding on the dowel. */

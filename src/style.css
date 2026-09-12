@@ -198,6 +198,45 @@ html, body {
   margin-top: 16px;
 }
 
+.nav-links a {
+  color: #555;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.nav-links a:hover {
+  color: #111;
+}
+
+/* The moving maze: a line of explanation above the controls, and a status
+   line that only says anything while the search is running or fell short. */
+.blurb {
+  margin: -4px 0 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #666;
+}
+
+.status {
+  font-size: 12px;
+  color: #888;
+  min-height: 1.4em;
+  margin-bottom: 8px;
+}
+
+.status.busy {
+  color: #2e8bd9;
+}
+
+.metrics .good b {
+  color: #1a8a3a;
+}
+
+.metrics .warn b {
+  color: #b06000;
+}
+
 .github-link {
   display: inline-flex;
   align-items: center;
