@@ -10,6 +10,7 @@ import {
   cellNormal,
   kineticSolutionPath,
   modelBounds,
+  solutionCells,
   solutionLength,
 } from '../../render/kinetic-geometry.ts';
 
@@ -129,7 +130,11 @@ describe('kineticSolutionPath', () => {
       );
       expect(path[0]![0]).toBeCloseTo(expectedStart[0], 9);
       expect(path[0]![2]).toBeCloseTo(expectedStart[2], 9);
-      expect(solutionLength(mech, surface, design, s, ends)).toBe(path.length - 1);
+      // Steps are cells walked, not points drawn: the line carries two more
+      // points at every doorway so it stays on the surface.
+      const steps = solutionLength(surface, design, s, ends);
+      expect(steps).toBeGreaterThan(0);
+      expect(path.length).toBeGreaterThanOrEqual(steps + 1);
     }
   });
 
@@ -137,7 +142,7 @@ describe('kineticSolutionPath', () => {
     const { mech, surface, design, ends } = fixture();
     const lengths = new Set<number>();
     for (let s = 0; s < surface.stateCount; s++) {
-      lengths.add(solutionLength(mech, surface, design, s, ends));
+      lengths.add(solutionLength(surface, design, s, ends));
     }
     // If turning the rings left the answer alone, the object would be a static
     // maze wearing a mechanism.
@@ -170,8 +175,6 @@ describe('the gap between the rings', () => {
     const gap = 0.1;
     const pieces = buildKineticPieces(mech, surface, design, ends, { axialGap: gap });
     const path = kineticSolutionPath(mech, surface, design, 0, ends, { axialGap: gap });
-    const plain = kineticSolutionPath(mech, surface, design, 0, ends);
-    expect(path).toHaveLength(plain.length);
 
     // Every point of the route is inside the height of the ring it crosses.
     const half = Math.max(...pieces.map(p => p.bounds.zMax));
@@ -180,5 +183,93 @@ describe('the gap between the rings', () => {
       const nearest = Math.min(...pieceZ.map(z => Math.abs(point[2] - z)));
       expect(nearest).toBeLessThanOrEqual(half + 1e-9);
     }
+  });
+});
+
+describe('the route around a corner', () => {
+  it('never cuts inside the barrel', () => {
+    // A chord between two cell centres on neighbouring faces passes inside the
+    // solid, and the surface then hides the answer wherever it turns a corner.
+    const { mech, surface, design, ends } = fixture();
+    const inradius = Math.cos(Math.PI / mech.sides);
+    // How far out a point is, measured against the nearest face rather than
+    // the axis. Distance from the axis will not do: a chord cutting the corner
+    // between two faces stays *further* from the axis than the faces' own
+    // middles do, and is buried in the solid all the same.
+    const reach = (x: number, y: number): number => {
+      let best = -Infinity;
+      for (let face = 0; face < mech.sides; face++) {
+        const angle = ((face + 0.5) * 2 * Math.PI) / mech.sides;
+        best = Math.max(best, x * Math.cos(angle) + y * Math.sin(angle));
+      }
+      return best;
+    };
+
+    for (let s = 0; s < surface.stateCount; s++) {
+      const path = kineticSolutionPath(mech, surface, design, s, ends);
+      for (let i = 1; i < path.length; i++) {
+        const a = path[i - 1]!;
+        const b = path[i]!;
+        for (let t = 0; t <= 1; t += 0.1) {
+          const x = a[0] + (b[0] - a[0]) * t;
+          const y = a[1] + (b[1] - a[1]) * t;
+          expect(reach(x, y)).toBeGreaterThanOrEqual(inradius - 1e-9);
+        }
+      }
+    }
+  });
+
+  it('steps through the doorway on the way out and the way in', () => {
+    const { mech, surface, design, ends } = fixture();
+    const { cells } = solutionCells(surface, design, 0, ends);
+    const path = kineticSolutionPath(mech, surface, design, 0, ends);
+    // One point per cell, plus a doorway point either side of each crossing
+    // that needs one — so the line is longer than the walk, and starts and
+    // ends on the cells the markers stand on.
+    expect(path.length).toBeGreaterThan(cells.length);
+    const start = mech.cells[ends.start]!;
+    const first = applyPlacement(mech.states[0]![start.piece]!, cellCentre(start));
+    expect(path[0]![0]).toBeCloseTo(first[0], 9);
+    expect(path[0]![1]).toBeCloseTo(first[1], 9);
+  });
+});
+
+describe('the closed ends of a ring', () => {
+  it('fills both ends of every piece', () => {
+    const { mech, surface, design } = fixture();
+    const open = buildKineticPieces(mech, surface, design);
+    const closed = buildKineticPieces(mech, surface, design, null, { caps: true });
+
+    for (let i = 0; i < mech.pieceCount; i++) {
+      const added = (closed[i]!.positions.length - open[i]!.positions.length) / 9;
+      // A fan around each end: one triangle per side of the cross-section,
+      // twice over. Corners shared by two cells are counted once.
+      expect(added).toBe(2 * mech.sides * mech.cols);
+      expect(closed[i]!.normals.length).toBe(closed[i]!.positions.length);
+    }
+  });
+
+  it('points the ends away from the ring, flat along the axis', () => {
+    const { mech, surface, design } = fixture();
+    const [piece] = buildKineticPieces(mech, surface, design, null, { caps: true });
+    const n = piece!.normals;
+    const capNormals = n.slice(n.length - 2 * mech.sides * mech.cols * 9);
+    const ups = [];
+    for (let i = 0; i < capNormals.length; i += 3) {
+      expect(capNormals[i]).toBe(0);
+      expect(capNormals[i + 1]).toBe(0);
+      ups.push(capNormals[i + 2]);
+    }
+    expect(new Set(ups)).toEqual(new Set([1, -1]));
+  });
+
+  it('leaves the walls and the rim alone', () => {
+    const { mech, surface, design } = fixture();
+    const open = buildKineticPieces(mech, surface, design);
+    const closed = buildKineticPieces(mech, surface, design, null, { caps: true });
+    // The maze is on the sides; closing the ends must not draw a line across a
+    // seam passage or move a wall.
+    expect(closed.map(p => p.walls.length)).toEqual(open.map(p => p.walls.length));
+    expect(closed.map(p => p.rim.length)).toEqual(open.map(p => p.rim.length));
   });
 });

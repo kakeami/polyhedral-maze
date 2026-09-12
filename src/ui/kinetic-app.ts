@@ -25,6 +25,7 @@ import {
   buildKineticPieces,
   kineticSolutionPath,
   modelBounds,
+  solutionLength,
 } from '../render/kinetic-geometry.ts';
 import { createKineticScene } from '../render/kinetic-scene.ts';
 import { KINETIC_SCENE } from '../render/kinetic-scene-constants.ts';
@@ -84,7 +85,10 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
     const { mech, surface, design, ends } = next;
     const bounds = modelBounds(mech);
     scene.setModel({
-      pieces: buildKineticPieces(mech, surface, design, ends, { axialGap: KINETIC_SCENE.ringGap }),
+      pieces: buildKineticPieces(mech, surface, design, ends, {
+        axialGap: KINETIC_SCENE.ringGap,
+        caps: true,
+      }),
       pieceZ: mech.states[0]!.map(placement => placement.offset[2]),
       sides: mech.sides,
       radius: bounds.radius,
@@ -100,11 +104,17 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
   function refreshState(index: number) {
     if (!build) return;
     stateIndex = index;
-    const { mech, surface, design, ends, params: p } = build;
-    const path = kineticSolutionPath(mech, surface, design, index, ends, {
-      axialGap: KINETIC_SCENE.ringGap,
-    });
-    scene.setSolution(p.showSolution ? path : null);
+    const { mech, surface, design, ends } = build;
+    // Read from the panel, not from the build: whether the answer is on screen
+    // is a switch the visitor holds, and the rings settle long after the maze
+    // was made.
+    const wanted = controls.getParams().showSolution;
+    const path = wanted
+      ? kineticSolutionPath(mech, surface, design, index, ends, {
+          axialGap: KINETIC_SCENE.ringGap,
+        })
+      : null;
+    scene.setSolution(path);
     controls.setMetrics({
       cells: surface.cellCount,
       states: surface.stateCount,
@@ -114,7 +124,7 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
       seamClasses: surface.cutClasses.length,
       stateLabel: mech.stateLabel(index),
       stateIndex: index,
-      solutionLength: Math.max(0, path.length - 1),
+      solutionLength: solutionLength(surface, design, index, ends),
     });
   }
 

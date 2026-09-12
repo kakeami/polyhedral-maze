@@ -1,5 +1,5 @@
 /**
- * The 3D view of a kinetic maze: a stack of rings turning on a dowel.
+ * The 3D view of a kinetic maze: a stack of rings, each free to turn.
  *
  * It is a different scene from `three-scene.ts` rather than a mode of it,
  * because the objects come from somewhere else entirely — a mechanism's pieces,
@@ -222,7 +222,6 @@ export function createKineticScene(
       barrel.add(group);
     }
 
-    barrel.add(buildDowel(model));
     driver = new RingDriver({
       rings: pieceCount,
       sides: model.sides,
@@ -231,21 +230,6 @@ export function createKineticScene(
     driver.setAuto(motionRunning);
     applyRingAngles();
     rebuildSolution();
-  }
-
-  /** The dowel the rings are threaded on — the reason the bottom one is fixed. */
-  function buildDowel(m: KineticModel): THREE.Mesh {
-    const radius = m.radius * KINETIC_SCENE.dowelRadiusRatio;
-    const length = (m.zMax - m.zMin) * KINETIC_SCENE.dowelOverhang;
-    const geo = new THREE.CylinderGeometry(radius, radius, length, 16);
-    geo.rotateX(Math.PI / 2); // cylinders stand in y; the axis here is z
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: KINETIC_SCENE.dowelColor,
-      roughness: KINETIC_SCENE.dowelRoughness,
-      metalness: 0,
-    }));
-    mesh.position.z = (m.zMax + m.zMin) / 2;
-    return mesh;
   }
 
   function applyRingAngles() {
