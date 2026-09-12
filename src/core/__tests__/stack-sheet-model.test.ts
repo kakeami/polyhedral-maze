@@ -233,3 +233,37 @@ describe('bulkhead tabs', () => {
     }
   });
 });
+
+describe('the order the rings are printed in', () => {
+  it('puts the bottom ring at the bottom, the way the object stands', () => {
+    const plan = buildStackSheets(mech, surface, design);
+    const labels: { text: string; sheet: number; y: number }[] = [];
+    plan.sheets.forEach((sheet, index) => {
+      for (const item of sheet.items) {
+        if (item.kind === 'text' && item.text.startsWith('Ring ')) {
+          labels.push({ text: item.text, sheet: index, y: item.at[1] });
+        }
+      }
+    });
+
+    // Down the page, and on through the sheets: top ring first, bottom last.
+    const order = [...labels].sort((a, b) => a.sheet - b.sheet || a.y - b.y);
+    expect(order.map(l => l.text)).toEqual([
+      `Ring ${mech.layers} (top)`,
+      ...Array.from({ length: mech.layers - 2 }, (_, i) =>
+        `Ring ${mech.layers - 1 - i} (${mech.layers - 1 - i} from bottom)`),
+      'Ring 1 (bottom)',
+    ]);
+  });
+
+  it('still labels each ring by where it sits, not by where it is printed', () => {
+    const plan = buildStackSheets(mech, surface, design);
+    const labels = plan.sheets
+      .flatMap(s => s.items)
+      .filter(i => i.kind === 'text' && i.text.startsWith('Ring '))
+      .map(i => (i as { text: string }).text);
+    expect(labels).toContain('Ring 1 (bottom)');
+    expect(labels).toContain(`Ring ${mech.layers} (top)`);
+    expect(labels).toHaveLength(mech.layers);
+  });
+});

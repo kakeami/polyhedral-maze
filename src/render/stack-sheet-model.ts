@@ -192,7 +192,11 @@ export function buildStackSheets(
   cursorY += gap;
 
   // ---- Bands --------------------------------------------------------------
-  for (let layer = 0; layer < mech.layers; layer++) {
+  //
+  // Top ring first, so the bottom one comes out at the bottom of the page and
+  // the sheet stands the same way up as the finished object.
+  for (let printed = 0; printed < mech.layers; printed++) {
+    const layer = mech.layers - 1 - printed;
     const blockHeight = bandHeight + S.labelSize + 2.5;
     ensure(blockHeight + gap);
     const x0 = sheet.margin;
