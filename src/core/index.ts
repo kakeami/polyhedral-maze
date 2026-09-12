@@ -11,6 +11,8 @@ export { BOUNDARY_TOLERANCE, VERTEX_EPSILON, OPPOSITE_FACE_EPSILON } from './con
 
 export { Graph, UnionFind, bfsShortestPath, bfsSingleSourceLengths } from './graph.ts';
 
+export * as kinetic from './kinetic/index.ts';
+
 export type { FaceGrid } from './face-grid.ts';
 export type { Polyhedron } from './polyhedron.ts';
 export { sharedEdgeVertices, oppositeFace, buildFaceAdjacency } from './polyhedron.ts';
