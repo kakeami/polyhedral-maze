@@ -6,34 +6,29 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import type { Polyhedron } from '../core/polyhedron.ts';
-import type { Face, Vec3 } from '../core/types.ts';
-import type { MazeMarker, MazeRenderData } from './maze-geometry.ts';
-import { SCENE_CONFIG, MAZE_STYLE } from './scene-constants.ts';
+import type { Face } from '../core/types.ts';
+import type { MazeRenderData } from './maze-geometry.ts';
+import { SCENE_CONFIG } from './scene-constants.ts';
+import { BLOOM_LAYER, BloomChain } from './scene-bloom.ts';
+import {
+  disposeObject,
+  makeFaceMaterial,
+  makeLineMaterial,
+  makePin,
+  makeRimMaterial,
+  vecPairsToFlatArray,
+} from './scene-objects.ts';
 import {
   DEFAULT_PRESET_ID,
   faceColorHex,
   resolvePreset,
 } from './scene-presets.ts';
 import type {
-  FaceMaterialSpec,
   GroundSpec,
   PresetId,
-  RimSpec,
   ScenePreset,
 } from './scene-presets.ts';
-
-/**
- * Tag for the objects allowed to glow. While the bloom chain renders,
- * everything else in the scene is masked to black rather than left out, so
- * what glows is decided by opting in rather than by brightness alone.
- */
-const BLOOM_LAYER = 1;
 
 export interface SceneContext {
   renderer: THREE.WebGLRenderer;
@@ -112,101 +107,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
 
   // Bloom needs a post-processing chain; the presets that do without it keep
   // rendering straight to the canvas, so they pay nothing for it.
-  //
-  // It takes two chains rather than one, because the sky must not bloom. The
-  // sky is HDR — the sun disc is orders of magnitude past any threshold that
-  // still lets the white face outlines glow — so blooming the frame as a whole
-  // wraps the sun in a halo the size of the viewport.
-  //
-  // So the first chain renders the solid with everything but the glowing
-  // edges masked to black, and the second renders the real frame and adds
-  // that glow on top before tone mapping. Masking rather than omitting
-  // matters twice over: UnrealBloomPass returns its input *plus* the glow, so
-  // anything left visible is composited into the frame a second time, and
-  // anything left out stops occluding — see `maskForBloom`.
-  let bloomComposer: EffectComposer | null = null;
-  let finalComposer: EffectComposer | null = null;
-  let bloomPass: UnrealBloomPass | null = null;
-
-  function ensureComposers(): UnrealBloomPass {
-    if (bloomPass) return bloomPass;
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    const pr = renderer.getPixelRatio();
-
-    // Glow only — no antialiasing needed on something this blurry.
-    const bloomTarget = new THREE.WebGLRenderTarget(w * pr, h * pr, {
-      type: THREE.HalfFloatType,
-    });
-    bloomComposer = new EffectComposer(renderer, bloomTarget);
-    bloomComposer.setSize(w, h);
-    bloomComposer.renderToScreen = false;
-    bloomComposer.addPass(new RenderPass(scene, camera));
-    bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0, 0.5, 0.85);
-    bloomComposer.addPass(bloomPass);
-
-    // MSAA on the visible chain: the default composer target has none, and
-    // losing antialiasing on a maze made of hairlines is very visible.
-    const baseTarget = new THREE.WebGLRenderTarget(w * pr, h * pr, {
-      type: THREE.HalfFloatType,
-      samples: 4,
-    });
-    finalComposer = new EffectComposer(renderer, baseTarget);
-    finalComposer.setSize(w, h);
-    finalComposer.addPass(new RenderPass(scene, camera));
-    finalComposer.addPass(makeBloomMixPass(bloomComposer.renderTarget2.texture));
-    finalComposer.addPass(new OutputPass());
-    return bloomPass;
-  }
-
-  // Masking for the bloom chain. Everything not tagged to glow is drawn black
-  // instead of being skipped, because the chain still needs the scene's depth:
-  // without it the outlines on the far side of the solid, and the ones behind
-  // a marker pin, are composited into the frame no matter what stands in
-  // front of them. Black adds nothing when the glow goes back on; occluding is
-  // the whole job. Transparent overlays write no depth, so they are hidden
-  // instead — which also stops them being composited twice.
-  const bloomMask = new THREE.MeshBasicMaterial({
-    color: 0x000000,
-    side: THREE.DoubleSide,
-    // Matches the surface, so the lines lying on it still win the depth test.
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
-  });
-  const maskedMeshes: { mesh: THREE.Mesh; material: THREE.Material | THREE.Material[] }[] = [];
-  const maskedLines: { material: LineMaterial; color: number }[] = [];
-  const maskedHidden: THREE.Object3D[] = [];
-
-  function maskForBloom() {
-    mazeGroup?.traverse((obj) => {
-      if (obj.layers.isEnabled(BLOOM_LAYER)) return;
-      const mesh = obj as THREE.Mesh;
-      const material = mesh.material;
-      if (!material || Array.isArray(material)) return;
-
-      if (material.transparent) {
-        obj.visible = false;
-        maskedHidden.push(obj);
-      } else if ((material as LineMaterial).isLineMaterial) {
-        const line = material as LineMaterial;
-        maskedLines.push({ material: line, color: line.color.getHex() });
-        line.color.setHex(0x000000);
-      } else {
-        maskedMeshes.push({ mesh, material });
-        mesh.material = bloomMask;
-      }
-    });
-  }
-
-  function unmaskAfterBloom() {
-    for (const { mesh, material } of maskedMeshes) mesh.material = material;
-    for (const { material, color } of maskedLines) material.color.setHex(color);
-    for (const obj of maskedHidden) obj.visible = true;
-    maskedMeshes.length = 0;
-    maskedLines.length = 0;
-    maskedHidden.length = 0;
-  }
+  const bloom = new BloomChain(renderer, scene, camera, container);
 
   let mazeGroup: THREE.Group | null = null;
   let ground: THREE.Mesh | null = null;
@@ -219,12 +120,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     ambient.intensity = preset.lighting.ambientIntensity;
     dir.intensity = preset.lighting.directionalIntensity;
 
-    if (preset.bloom) {
-      const pass = ensureComposers();
-      pass.strength = preset.bloom.strength;
-      pass.radius = preset.bloom.radius;
-      pass.threshold = preset.bloom.threshold;
-    }
+    bloom.setSpec(preset.bloom);
 
     if (ground) {
       scene.remove(ground);
@@ -268,8 +164,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
-    bloomComposer?.setSize(w, h);
-    finalComposer?.setSize(w, h);
+    bloom.setSize(w, h);
     for (const mat of lineMaterials) {
       mat.resolution.set(w, h);
     }
@@ -283,14 +178,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     if (!running) return;
     requestAnimationFrame(animate);
     controls.update();
-    if (preset.bloom && bloomComposer && finalComposer) {
-      sky.visible = false;
-      maskForBloom();
-      bloomComposer.render();
-      unmaskAfterBloom();
-      sky.visible = true;
-      finalComposer.render();
-    } else {
+    if (!bloom.render(mazeGroup, sky)) {
       renderer.render(scene, camera);
     }
   }
@@ -300,9 +188,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     running = false;
     if (mazeGroup) disposeObject(mazeGroup);
     if (ground) disposeObject(ground);
-    bloomComposer?.dispose();
-    finalComposer?.dispose();
-    bloomMask.dispose();
+    bloom.dispose();
     envTarget.dispose();
     sky.geometry.dispose();
     sky.material.dispose();
@@ -367,49 +253,6 @@ function buildMazeGroup(
   return group;
 }
 
-function makeLineMaterial(
-  color: number,
-  linewidth: number,
-  resolution: THREE.Vector2,
-  outLineMaterials: LineMaterial[],
-): LineMaterial {
-  const mat = new LineMaterial({ color, linewidth });
-  mat.resolution.copy(resolution);
-  outLineMaterials.push(mat);
-  return mat;
-}
-
-/** Adds the bloom layer's glow onto the real frame, still in linear HDR. */
-function makeBloomMixPass(bloomTexture: THREE.Texture): ShaderPass {
-  const material = new THREE.ShaderMaterial({
-    uniforms: {
-      baseTexture: { value: null },
-      bloomTexture: { value: bloomTexture },
-    },
-    vertexShader: /* glsl */`
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */`
-      uniform sampler2D baseTexture;
-      uniform sampler2D bloomTexture;
-      varying vec2 vUv;
-      void main() {
-        gl_FragColor = texture2D(baseTexture, vUv) + texture2D(bloomTexture, vUv);
-      }
-    `,
-  });
-  return new ShaderPass(material, 'baseTexture');
-}
-
-/**
- * All faces in one geometry, tinted per face through vertex colours. One draw
- * call instead of one per face — which matters at 120 faces, and lets the rim
- * glow reuse the same buffers instead of doubling them.
- */
 function buildFaceGroup(faces: Face[], preset: ScenePreset): THREE.Group {
   const group = new THREE.Group();
   const total = faces.length;
@@ -443,81 +286,6 @@ function buildFaceGroup(faces: Face[], preset: ScenePreset): THREE.Group {
   return group;
 }
 
-function makeFaceMaterial(m: FaceMaterialSpec): THREE.Material {
-  return new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    side: THREE.DoubleSide,
-    flatShading: true,
-    // Pushes the surface back so the wall lines sitting on it stay in front.
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
-    metalness: m.metalness,
-    roughness: m.roughness,
-    envMapIntensity: m.envMapIntensity,
-  });
-}
-
-/**
- * Fresnel rim, drawn as an additive shell over the same geometry. On a
- * faceted solid this lights the faces you see edge-on — the ones whose maze
- * you cannot read anyway — and leaves the faces turned towards you untouched.
- * It shares the face's polygon offset, so the wall lines still win the depth
- * test and the glow never washes over them.
- */
-function makeRimMaterial(spec: RimSpec): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uColor: { value: new THREE.Color(spec.color) },
-      uIntensity: { value: spec.intensity },
-      uPower: { value: spec.power },
-    },
-    vertexShader: /* glsl */`
-      varying vec3 vNormalView;
-      varying vec3 vToEye;
-      void main() {
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vNormalView = normalize(normalMatrix * normal);
-        vToEye = -mv.xyz;
-        gl_Position = projectionMatrix * mv;
-      }
-    `,
-    fragmentShader: /* glsl */`
-      uniform vec3 uColor;
-      uniform float uIntensity;
-      uniform float uPower;
-      varying vec3 vNormalView;
-      varying vec3 vToEye;
-      void main() {
-        // Clamped on both sides on purpose. A dot product of two unit vectors
-        // lands a hair past 1.0 often enough, and pow() of a negative base is
-        // undefined in GLSL — NaN on most drivers. The NaN blends straight
-        // into the frame, and anything downstream that filters it (the bloom
-        // blur, say) spreads it into a block, so a face turned exactly
-        // head-on flashes black for the frames it takes to pass through.
-        float facing = min(abs(dot(normalize(vNormalView), normalize(vToEye))), 1.0);
-        float rim = pow(max(1.0 - facing, 0.0), uPower);
-        gl_FragColor = vec4(uColor * rim * uIntensity, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
-  });
-}
-
-/**
- * Soft dark disc below the solid, to give it somewhere to stand. It is a
- * painted shadow, not a cast one: the sun sits 3° above the horizon, so a real
- * shadow would be stretched past the horizon and read as nothing at all.
- * Unlit and double-sided so orbiting under the solid shows the same disc.
- */
 function buildGround(spec: GroundSpec): THREE.Mesh {
   const geo = new THREE.RingGeometry(1e-4, spec.radius, 64, 24);
   geo.rotateX(-Math.PI / 2);
@@ -543,73 +311,4 @@ function buildGround(spec: GroundSpec): THREE.Mesh {
   mesh.position.y = -spec.drop;
   mesh.renderOrder = -1;
   return mesh;
-}
-
-function vecPairsToFlatArray(pairs: Vec3[]): number[] {
-  const arr: number[] = [];
-  for (const v of pairs) {
-    arr.push(v[0], v[1], v[2]);
-  }
-  return arr;
-}
-
-const MARKER_COLORS: Record<MazeMarker['kind'], number> = {
-  start: MAZE_STYLE.markers.startColor,
-  goal: MAZE_STYLE.markers.goalColor,
-  warp: MAZE_STYLE.markers.warpColor,
-};
-
-/**
- * A pin: a dot on the cell centre, a stem straight up the face normal, and the
- * head at the top. The head is what you spot from across the solid; the foot
- * is what you read the position from, and nothing but a hairline crosses the
- * maze in between.
- */
-function makePin(
-  marker: MazeMarker,
-  resolution: THREE.Vector2,
-  outLineMaterials: LineMaterial[],
-): THREE.Group {
-  const { pinLength, headRadius, warpHeadRadius, stemWidth, footRadius } = MAZE_STYLE.markers;
-  const color = MARKER_COLORS[marker.kind];
-  const radius = marker.kind === 'warp' ? warpHeadRadius : headRadius;
-
-  const foot = marker.at;
-  const head: Vec3 = [
-    foot[0] + marker.normal[0] * pinLength,
-    foot[1] + marker.normal[1] * pinLength,
-    foot[2] + marker.normal[2] * pinLength,
-  ];
-
-  const group = new THREE.Group();
-
-  const stemGeo = new LineSegmentsGeometry();
-  stemGeo.setPositions([...foot, ...head]);
-  const stemMat = makeLineMaterial(color, stemWidth, resolution, outLineMaterials);
-  group.add(new LineSegments2(stemGeo, stemMat));
-
-  group.add(makeSphere(foot, color, footRadius));
-  group.add(makeSphere(head, color, radius));
-  return group;
-}
-
-function makeSphere(pos: Vec3, color: number, radius: number): THREE.Mesh {
-  const geo = new THREE.SphereGeometry(radius, 12, 8);
-  const mat = new THREE.MeshBasicMaterial({ color });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(pos[0], pos[1], pos[2]);
-  return mesh;
-}
-
-function disposeObject(obj: THREE.Object3D) {
-  obj.traverse((child) => {
-    if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments || child instanceof THREE.Line) {
-      child.geometry.dispose();
-      if (Array.isArray(child.material)) {
-        child.material.forEach(m => m.dispose());
-      } else {
-        child.material.dispose();
-      }
-    }
-  });
 }
