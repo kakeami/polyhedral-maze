@@ -257,6 +257,30 @@ describe('the taping it ships with', () => {
     expect(a.point[2]).toBe(b.point[2]); // and both on the same face of it
   });
 
+  it('gives each seam to both of its cubes, as one edge', () => {
+    // What the pattern needs: a hinge is a line in the lattice the plank is
+    // laid out in, and a cube is printed and cut out long before the plank
+    // exists. So the seam is handed over in each cube's own frame, and the two
+    // have to be the same edge once the cubes are put back where they belong.
+    const seams = mech.tapeSeams();
+    expect(seams.length).toBe(mech.pieceCount);
+    const plank = mech.states[mech.states.findIndex((_state, index) =>
+      mech.stateLabel(index) === '00000000')]!;
+    expect(plank).toBeDefined();
+    for (const seam of seams) {
+      expect(seam.pieces[1]).toBe((seam.pieces[0] + 1) % mech.pieceCount);
+      const placed = seam.ends.map((edge, side) =>
+        edge.map(point => applyPlacement(plank[seam.pieces[side]!]!, point))
+          .map(v => v.map(x => x.toFixed(6)).join(',')).sort().join('|'));
+      expect(placed[0]).toBe(placed[1]);
+      // And it is an edge of the unit cube, not a diagonal across it.
+      for (const edge of seam.ends) {
+        const [a, b] = edge;
+        expect(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])).toBeCloseTo(1, 9);
+      }
+    }
+  });
+
   it('folds through all six poses, two of them cubes', () => {
     const shapes = mech.states.map(state =>
       [0, 1, 2].map(axis => new Set(state.map(p => p.offset[axis]!.toFixed(1))).size)

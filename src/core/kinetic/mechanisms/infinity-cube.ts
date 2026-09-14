@@ -33,8 +33,51 @@ export interface InfinityCubeMechanism extends Mechanism {
    * asks, and enumerating is a walk over four to the eighth.
    */
   closures(): readonly KineticState[];
+  /** Where the tape goes, seam by seam, in the body frame of each cube. */
+  tapeSeams(): readonly TapeSeam[];
   /** Half-extents of each piece about its own origin: these pieces are cubes. */
   readonly pieceHalfExtents: readonly Vec3[];
+}
+
+/**
+ * One strip of tape: the edge two cubes are hinged on, as each of them sees it.
+ *
+ * The hinge is a line in the lattice the plank is laid out on, which is no use
+ * to anyone printing a cube: a pattern is drawn in the cube's own frame and
+ * cut out before the ring exists. So the same edge is given twice over, once
+ * in each cube's frame, and it is the *same* edge — laid out as a plank the
+ * two coincide, which is what fixes that this is a hinge and not two marks
+ * that happen to be near each other.
+ */
+export interface TapeSeam {
+  readonly seam: number;
+  /** The cubes it joins, in ring order. */
+  readonly pieces: readonly [number, number];
+  /** The taped edge in the body frame of `pieces[0]`, then of `pieces[1]`. */
+  readonly ends: readonly [readonly [Vec3, Vec3], readonly [Vec3, Vec3]];
+}
+
+export function tapeSeamsOf(
+  ring: readonly Lattice[],
+  hinges: readonly number[],
+): TapeSeam[] {
+  return ring.map((from, seam) => {
+    const next = (seam + 1) % ring.length;
+    const to = ring[next]!;
+    const { point, axis } = hingeLine(from, to, hinges[seam]!);
+    const along: Vec3 = [0, 0, 0];
+    along[axis] = 1;
+    const inFrameOf = (cell: Lattice): readonly [Vec3, Vec3] => {
+      const centre = centreOf(cell);
+      const a: Vec3 = [point[0] - centre[0], point[1] - centre[1], point[2] - centre[2]];
+      return [a, [a[0] + along[0], a[1] + along[1], a[2] + along[2]]];
+    };
+    return {
+      seam,
+      pieces: [seam, next] as const,
+      ends: [inFrameOf(from), inFrameOf(to)] as const,
+    };
+  });
 }
 
 /**
@@ -431,6 +474,7 @@ export function createInfinityCube(options: InfinityCubeOptions = {}): InfinityC
     stateTurns: index => turns[index] ?? [],
     cellIndex: (piece, face, row, col) => piece * perPiece + face * perFace + row * cells + col,
     stateLabel: index => (turns[index] ?? []).join(''),
+    tapeSeams: () => tapeSeamsOf(ring, hinges),
     closures: () => {
       if (!everyClosure) {
         everyClosure = enumerateClosures(ring, hinges, { maxStates: 1e6, shut: false }).states;

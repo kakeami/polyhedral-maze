@@ -65,6 +65,8 @@ export interface FoldControlsContext {
   isAutoRotating(): boolean;
   isAutoFolding(): boolean;
   isShowingSolution(): boolean;
+  showToast(message: string): void;
+  setExportBusy(busy: boolean): void;
 }
 
 export function createFoldControls(container: HTMLElement): FoldControlsContext {
@@ -83,6 +85,8 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
   const autoRotate = el<HTMLInputElement>('fold-autorotate');
   const autoFold = el<HTMLInputElement>('fold-autofold');
   const solution = el<HTMLInputElement>('fold-solution');
+  const exportBtn = el<HTMLButtonElement>('fold-export-pdf');
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   const actions = new Map<string, () => void>();
   let rulings: readonly number[] = [];
@@ -110,6 +114,7 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
   solution.addEventListener('change', () => actions.get('solution')?.());
   autoRotate.addEventListener('change', () => actions.get('auto-rotate')?.());
   autoFold.addEventListener('change', () => actions.get('auto-fold')?.());
+  exportBtn.addEventListener('click', () => actions.get('export-pdf')?.());
 
   return {
     setRulings(next, current) {
@@ -187,6 +192,22 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
     isShowingSolution() {
       return solution.checked;
     },
+    showToast(message) {
+      let toast = document.querySelector<HTMLDivElement>('.toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = message;
+      toast.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast?.classList.remove('show'), 2600);
+    },
+    setExportBusy(busy) {
+      exportBtn.disabled = busy;
+      exportBtn.textContent = busy ? 'Exporting...' : 'Export cubes PDF';
+    },
   };
 }
 
@@ -216,6 +237,10 @@ function buildHTML(): string {
       <label title="The way from the entrance to the exit in the pose on show. It is a different way in every pose"><input id="fold-solution" type="checkbox" /> Show solution</label>
       <label title="It goes from pose to pose on its own, a fold at a time, and keeps out of your way for a few seconds after you have asked for something. Off, it stays where it is put"><input id="fold-autofold" type="checkbox" checked /> Cubes fold</label>
       <label title="The view drifts around the object. This turns the camera, not the object"><input id="fold-autorotate" type="checkbox" checked /> Auto-rotate</label>
+    </div>
+
+    <div class="buttons">
+      <button id="fold-export-pdf" class="wide" title="Nine sheets: how the eight cubes go together, then one cube each, to print, cut and tape">Export cubes PDF</button>
     </div>
 
     <div class="progress" id="fold-progress" hidden>

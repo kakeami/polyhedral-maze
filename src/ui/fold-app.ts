@@ -44,6 +44,7 @@ import type { FoldGraph } from '../core/kinetic/fold-path.ts';
 import {
   buildKineticPieces, kineticSolutionPath, solutionLength,
 } from '../render/kinetic-geometry.ts';
+import { exportFoldPDF } from '../render/pdf-fold-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
@@ -292,6 +293,27 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   });
 
   controls.onAction('solution', () => refreshPose());
+
+  // The pattern is nine sheets and takes a moment to draw, so the button says
+  // so before the work starts rather than after it.
+  controls.onAction('export-pdf', () => {
+    if (!build) return;
+    const { mech, surface, design, ends, maze } = build;
+    controls.setExportBusy(true);
+    setTimeout(() => {
+      try {
+        const plan = exportFoldPDF(mech, surface, design, maze, { ends });
+        controls.showToast(
+          `${plan.sheets.length} sheets — eight cubes ${plan.edgeMm.toFixed(0)} mm on a side, ` +
+          `folding into a ${plan.cubeMm.toFixed(0)} mm cube`,
+        );
+      } catch (error) {
+        controls.showToast(`Export failed: ${(error as Error).message}`);
+      } finally {
+        controls.setExportBusy(false);
+      }
+    }, 0);
+  });
 
   controls.onAction('auto-rotate', () => scene.setAutoRotate(controls.isAutoRotating()));
 
