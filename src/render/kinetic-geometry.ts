@@ -203,10 +203,16 @@ export function buildKineticPieces(
   });
 
   if (options.caps) {
-    for (const piece of pieces) {
-      addCap(piece, piece.zMax, 1);
-      addCap(piece, piece.zMin, -1);
-    }
+    // Only the open ends. A ring is open at both, but a solid glued to another
+    // at one face is closed at the far end by a face of its own, and a cap laid
+    // over that would fight it for the same pixels.
+    const covered = coveredPlanes(mech, shrink);
+    pieces.forEach((piece, index) => {
+      const flat = covered.get(index);
+      const alreadyThere = (z: number) => flat?.some(at => Math.abs(at - z) < 1e-9) ?? false;
+      if (!alreadyThere(piece.zMax)) addCap(piece, piece.zMax, 1);
+      if (!alreadyThere(piece.zMin)) addCap(piece, piece.zMin, -1);
+    });
   }
 
   return pieces.map((p, piece) => ({
@@ -231,6 +237,33 @@ export function buildKineticPieces(
  * next position: the walls are printed and never move, but which way round
  * them leads anywhere is different in each of the mechanism's states.
  */
+/**
+ * Heights at which a piece already carries a face of its own, lying flat.
+ *
+ * A cell whose corners are all at one height *is* the end of the piece there,
+ * so that end is closed and wants no cap.
+ */
+function coveredPlanes(
+  mech: Mechanism,
+  shrink: (v: Vec3, piece: number) => Vec3,
+): Map<number, number[]> {
+  const planes = new Map<number, number[]>();
+  for (const cell of mech.cells) {
+    let low = Infinity;
+    let high = -Infinity;
+    for (const corner of cell.corners) {
+      const z = shrink(corner, cell.piece)[2];
+      low = Math.min(low, z);
+      high = Math.max(high, z);
+    }
+    if (high - low > 1e-9) continue;
+    const found = planes.get(cell.piece) ?? [];
+    if (!found.some(at => Math.abs(at - low) < 1e-9)) found.push(low);
+    planes.set(cell.piece, found);
+  }
+  return planes;
+}
+
 /**
  * Fills in the flat end of a piece, as a fan of triangles around its middle.
  *
