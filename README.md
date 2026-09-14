@@ -34,10 +34,13 @@ interactive 3D viewer.
 
 - **Kinetic maze** (`/kinetic/`): a maze on an object that turns, in either of two mechanisms — a stack of rings threaded on a dowel, or two identical solids glued at a face and free to turn against each other. Every way of turning it is a different maze, and the design is searched so that *every one of them is a perfect maze*. Drag a piece to turn it, watch the solution re-route each time it clicks into place, and export the printable pieces as PDF
 
+- **Folding maze** (`/fold/`): a maze on eight cubes taped into a ring — the fidget toy that folds forever. Folded shut, two cubes press together and half the maze goes *inside the object*, so each of its six shapes shows a different number of cells; one printed design is a perfect maze in all six. Switch between the shapes to see it. First cut: the fold itself is not animated yet, and there is no start or finish marker
+
 ## Demo
 
 - Polyhedra: [https://kakeami.github.io/polyhedral-maze/](https://kakeami.github.io/polyhedral-maze/)
 - Kinetic maze: [https://kakeami.github.io/polyhedral-maze/kinetic/](https://kakeami.github.io/polyhedral-maze/kinetic/)
+- Folding maze: [https://kakeami.github.io/polyhedral-maze/fold/](https://kakeami.github.io/polyhedral-maze/fold/)
 
 ## Development
 

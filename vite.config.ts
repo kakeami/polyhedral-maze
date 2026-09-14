@@ -5,12 +5,13 @@ export default defineConfig({
   base: '/polyhedral-maze/',
   build: {
     rollupOptions: {
-      // Two pages, one deployment: the solids at the root and the kinetic maze
-      // at /kinetic/. They share `core/` and most of `render/`, so a second
-      // entry costs a page, not a second app.
+      // Three pages, one deployment: the solids at the root, the kinetic maze
+      // at /kinetic/, and the folding one at /fold/. They share `core/` and
+      // most of `render/`, so another entry costs a page, not another app.
       input: {
         main: resolve(__dirname, 'index.html'),
         kinetic: resolve(__dirname, 'kinetic/index.html'),
+        fold: resolve(__dirname, 'fold/index.html'),
       },
     },
   },
