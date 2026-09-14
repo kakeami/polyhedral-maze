@@ -1,5 +1,5 @@
 import type { Vec3 } from '../../types.ts';
-import type { KineticCell, KineticState, Mechanism, Placement } from '../types.ts';
+import type { KineticCell, KineticState, Placement, TurnableMechanism } from '../types.ts';
 import { rotZ } from '../types.ts';
 
 export interface StackOptions {
@@ -13,7 +13,7 @@ export interface StackOptions {
   rows?: number;
 }
 
-export interface StackMechanism extends Mechanism {
+export interface StackMechanism extends TurnableMechanism {
   readonly sides: number;
   readonly layers: number;
   readonly cols: number;
@@ -113,6 +113,7 @@ export function createStack(options: StackOptions = {}): StackMechanism {
     layers,
     cols,
     rows,
+    turnSteps: sides,
     stateLabel: (index: number) => stateOffsets(index).join('-'),
     stateOffsets,
     stateIndex: (offsets: readonly number[]) => {

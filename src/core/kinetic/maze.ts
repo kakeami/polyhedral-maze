@@ -417,6 +417,11 @@ export interface StartGoal {
  * worth choosing if it stays one in every state. It does wherever a rim cell's
  * other sides are all internal — true of the stack, whose rings are more than
  * one cell tall. Where it is not, the choice holds for `stateIndex`.
+ *
+ * A closed object has no rim at all: two solids glued at a face, or one cut
+ * open and turned, is a sphere with no edge to enter by. There the dead ends
+ * themselves are the candidates, and only those that stay dead ends in every
+ * state, since the markers are printed before the object is ever turned.
  */
 export function pickStartGoal(
   surface: KineticSurface,
@@ -451,7 +456,9 @@ export function pickStartGoal(
   // Prefer leaves: a marker in the middle of a corridor leaves a stub of maze
   // hanging off it that goes nowhere.
   const leaves = onRim.filter(c => (neighbours.get(c)?.length ?? 0) === 1);
-  const candidates = leaves.length >= 2 ? leaves : onRim;
+  const candidates = leaves.length >= 2 ? leaves
+    : onRim.length >= 2 ? onRim
+    : deadEndsInEveryState(surface, design);
   if (candidates.length < 2) throw new Error('no candidate cells to start or finish at');
 
   let best: StartGoal | null = null;
@@ -477,6 +484,38 @@ export function pickStartGoal(
   }
   if (!best) throw new Error('no two candidates are joined in this state');
   return best;
+}
+
+/**
+ * Cells that are a dead end whichever way the object is turned.
+ *
+ * Whether a side is open is a property of its class rather than of a state, so
+ * on most mechanisms a cell's degree never changes and this is just "the leaves
+ * of the tree". It is worked out per state anyway, because a class that goes
+ * unpaired in some states — a side that meets nothing there — would otherwise
+ * put a marker on a cell that is a dead end in one configuration and a corridor
+ * in the next, and the marker is printed only once.
+ */
+function deadEndsInEveryState(
+  surface: KineticSurface,
+  design: Pick<KineticDesign, 'open'>,
+): number[] {
+  const stillLeaf = new Uint8Array(surface.cellCount).fill(1);
+  const degree = new Int32Array(surface.cellCount);
+  for (const adj of surface.adjByState) {
+    degree.fill(0);
+    for (const e of adj) {
+      if (!design.open.has(e.classId)) continue;
+      degree[e.a]!++;
+      degree[e.b]!++;
+    }
+    for (let cell = 0; cell < surface.cellCount; cell++) {
+      if (degree[cell] !== 1) stillLeaf[cell] = 0;
+    }
+  }
+  const found: number[] = [];
+  for (let cell = 0; cell < surface.cellCount; cell++) if (stillLeaf[cell]) found.push(cell);
+  return found;
 }
 
 /**

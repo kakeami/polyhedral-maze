@@ -37,6 +37,20 @@ export interface Mechanism {
   stateLabel(index: number): string;
 }
 
+/**
+ * A mechanism whose pieces all turn about one axis, in whole steps.
+ *
+ * Both mechanisms built so far are of this kind — rings threaded on a dowel,
+ * and two solids glued at a face — and it is all the 3D view needs to know to
+ * drive either: how big a step is, and which state a set of steps names.
+ */
+export interface TurnableMechanism extends Mechanism {
+  /** One step turns a piece by 2*pi / turnSteps. */
+  readonly turnSteps: number;
+  /** The state those per-piece step counts name. */
+  stateIndex(offsets: readonly number[]): number;
+}
+
 export function applyPlacement(p: Placement, v: Vec3): Vec3 {
   const { rot, offset } = p;
   return [

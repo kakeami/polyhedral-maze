@@ -1,4 +1,6 @@
-export type { Mat3, Placement, KineticState, KineticCell, Mechanism } from './types.ts';
+export type {
+  Mat3, Placement, KineticState, KineticCell, Mechanism, TurnableMechanism,
+} from './types.ts';
 export { applyPlacement, rotZ, IDENTITY } from './types.ts';
 
 export { VertexWelder } from './weld.ts';
@@ -35,3 +37,18 @@ export {
 
 export type { StackOptions, StackMechanism } from './mechanisms/stack.ts';
 export { createStack } from './mechanisms/stack.ts';
+
+export type {
+  JoinedPairOptions,
+  JoinedPairMechanism,
+  JoinedPairChoice,
+  CellSource,
+} from './mechanisms/joined.ts';
+export {
+  createJoinedPair,
+  joinedPairCellCount,
+  joinedPairById,
+  creaseAngle,
+  JOINED_PAIRS,
+  DEFAULT_JOINED_PAIR,
+} from './mechanisms/joined.ts';
