@@ -11,8 +11,18 @@
 
 import { DEFAULT_PRESET_ID, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
+import {
+  DEFAULT_JOINED_PAIR,
+  joinedPairById,
+  joinedPairCellCount,
+} from '../core/kinetic/mechanisms/joined.ts';
+
+/** Which mechanism the page is showing. */
+export type MechanismId = 'stack' | 'pair';
 
 export interface KineticParams {
+  /** Rings on a dowel, or two solids glued at a face. */
+  mechanism: MechanismId;
   /** Faces of the prism. */
   sides: number;
   /** Rings threaded on the dowel. */
@@ -21,6 +31,10 @@ export interface KineticParams {
   cols: number;
   /** Maze cells up one ring. */
   rows: number;
+  /** Which pair of solids to glue, when the mechanism is the pair. */
+  pair: string;
+  /** Cells along one edge of a face, when the mechanism is the pair. */
+  pairN: number;
   /** Passages across a seam, over the minimum the mechanism needs. */
   k: number;
   seed: number;
@@ -53,6 +67,8 @@ export const KINETIC_LIMITS = {
   maxStates: 1296,
   /** Past this the cells are too small to read on screen anyway. */
   maxCells: 720,
+  /** Cells along a face edge of a glued pair. */
+  pairN: { min: 1, max: 6 },
   /**
    * The real limit, and the reason the sliders bound each other.
    *
@@ -67,6 +83,9 @@ export const KINETIC_LIMITS = {
 } as const;
 
 export const DEFAULT_KINETIC_PARAMS: KineticParams = {
+  mechanism: 'stack',
+  pair: DEFAULT_JOINED_PAIR.id,
+  pairN: 3,
   sides: 6,
   layers: 4,
   cols: 3,
@@ -141,6 +160,44 @@ export function maxUsableLayers(sides: number): number {
 }
 
 /**
+ * Cells a glued pair would carry, cached because the sliders ask repeatedly
+ * and the answer means building the solid and ruling all of its faces.
+ */
+const pairCells = new Map<string, number>();
+export function pairCellCount(pairId: string, n: number): number {
+  const key = `${pairId}:${n}`;
+  const known = pairCells.get(key);
+  if (known !== undefined) return known;
+  const choice = joinedPairById(pairId) ?? DEFAULT_JOINED_PAIR;
+  const count = joinedPairCellCount({ shape: choice.shape, gon: choice.gon, n });
+  pairCells.set(key, count);
+  return count;
+}
+
+export function pairStateCount(pairId: string): number {
+  return (joinedPairById(pairId) ?? DEFAULT_JOINED_PAIR).gon;
+}
+
+/**
+ * How finely a pair may be ruled before the search stops being instant.
+ *
+ * The same budget the stack obeys: what a rebuild costs is states times cells,
+ * and a joint with ten positions can afford a third of the grid one with three
+ * positions can.
+ */
+export function maxPairN(pairId: string): number {
+  const states = pairStateCount(pairId);
+  let best: number = KINETIC_LIMITS.pairN.min;
+  for (let n = KINETIC_LIMITS.pairN.min + 1; n <= KINETIC_LIMITS.pairN.max; n++) {
+    const cells = pairCellCount(pairId, n);
+    if (cells > KINETIC_LIMITS.maxCells) break;
+    if (cells * states > KINETIC_LIMITS.maxWork) break;
+    best = n;
+  }
+  return best;
+}
+
+/**
  * Brings a set of parameters inside the limits.
  *
  * Rings give way to sides and the grid gives way to both, because that is the
@@ -148,16 +205,25 @@ export function maxUsableLayers(sides: number): number {
  * is what the mechanism *is*, while the grid is how finely it is ruled.
  */
 export function clampKineticParams(p: KineticParams): KineticParams {
+  const mechanism: MechanismId = p.mechanism === 'pair' ? 'pair' : 'stack';
   const sides = clamp(Math.round(p.sides), KINETIC_LIMITS.sides.min, KINETIC_LIMITS.sides.max);
   const layers = clamp(Math.round(p.layers), KINETIC_LIMITS.layers.min, maxUsableLayers(sides));
   const rows = clamp(Math.round(p.rows), KINETIC_LIMITS.rows.min, KINETIC_LIMITS.rows.max);
   const cols = clamp(Math.round(p.cols), KINETIC_LIMITS.cols.min, maxCols({ sides, layers, rows }));
+  const pair = (joinedPairById(p.pair) ?? DEFAULT_JOINED_PAIR).id;
+  const pairN = clamp(Math.round(p.pairN), KINETIC_LIMITS.pairN.min, maxPairN(pair));
+  // A pair has one seam, ruled into `pairN` classes, and one of them has to be
+  // spent joining the halves; the stack's ceiling is a matter of taste.
+  const maxK = mechanism === 'pair' ? pairN - 1 : KINETIC_LIMITS.k.max;
   return {
+    mechanism,
+    pair,
+    pairN,
     sides,
     layers,
     cols,
     rows: clamp(rows, KINETIC_LIMITS.rows.min, maxRows({ sides, layers, cols })),
-    k: clamp(Math.round(p.k), KINETIC_LIMITS.k.min, KINETIC_LIMITS.k.max),
+    k: clamp(Math.round(p.k), KINETIC_LIMITS.k.min, maxK),
     seed: clamp(Math.round(p.seed), KINETIC_LIMITS.seed.min, KINETIC_LIMITS.seed.max),
     showSolution: p.showSolution,
     motion: p.motion,
@@ -188,6 +254,9 @@ function nearestEffort(value: number): number {
 export function encodeKineticParams(params: KineticParams): string {
   const d = DEFAULT_KINETIC_PARAMS;
   const p = new URLSearchParams();
+  if (params.mechanism !== d.mechanism) p.set('mech', params.mechanism);
+  if (params.pair !== d.pair) p.set('pair', params.pair);
+  if (params.pairN !== d.pairN) p.set('n', String(params.pairN));
   if (params.sides !== d.sides) p.set('sides', String(params.sides));
   if (params.layers !== d.layers) p.set('rings', String(params.layers));
   if (params.cols !== d.cols) p.set('cols', String(params.cols));
@@ -207,6 +276,9 @@ export function decodeKineticParams(search: string): KineticParams {
   const p = new URLSearchParams(search);
   const d = DEFAULT_KINETIC_PARAMS;
   return clampKineticParams({
+    mechanism: p.get('mech') === 'pair' ? 'pair' : 'stack',
+    pair: p.get('pair') ?? d.pair,
+    pairN: number(p.get('n'), d.pairN),
     sides: number(p.get('sides'), d.sides),
     layers: number(p.get('rings'), d.layers),
     cols: number(p.get('cols'), d.cols),

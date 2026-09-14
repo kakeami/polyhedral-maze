@@ -13,6 +13,10 @@ import { createRng } from '../core/prng.ts';
 import { buildSurface } from '../core/kinetic/surface.ts';
 import { createStack } from '../core/kinetic/mechanisms/stack.ts';
 import type { StackMechanism } from '../core/kinetic/mechanisms/stack.ts';
+import { createJoinedPair, joinedPairById, DEFAULT_JOINED_PAIR }
+  from '../core/kinetic/mechanisms/joined.ts';
+import type { JoinedPairMechanism } from '../core/kinetic/mechanisms/joined.ts';
+import type { TurnableMechanism } from '../core/kinetic/types.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign, StartGoal } from '../core/kinetic/maze.ts';
 import {
@@ -30,13 +34,14 @@ import {
 import { createKineticScene } from '../render/kinetic-scene.ts';
 import { KINETIC_SCENE } from '../render/kinetic-scene-constants.ts';
 import { exportStackPDF } from '../render/pdf-stack-sheets.ts';
+import { exportPairPDF } from '../render/pdf-pair-sheets.ts';
 import { A4_SHEET, STACK_SHEET_DEFAULTS } from '../render/kinetic-sheet-constants.ts';
 import { createKineticControls } from './kinetic-controls.ts';
 import { decodeKineticParams, encodeKineticParams, isMaxEffort } from './kinetic-param-codec.ts';
 import type { KineticParams } from './kinetic-param-codec.ts';
 
 interface Build {
-  mech: StackMechanism;
+  mech: TurnableMechanism;
   surface: KineticSurface;
   design: KineticDesign;
   ends: StartGoal;
@@ -60,8 +65,16 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
   /** Bumped by every rebuild, so an older search knows it has been overtaken. */
   let buildToken = 0;
 
+  function buildMechanism(p: KineticParams): TurnableMechanism {
+    if (p.mechanism === 'pair') {
+      const choice = joinedPairById(p.pair) ?? DEFAULT_JOINED_PAIR;
+      return createJoinedPair({ shape: choice.shape, gon: choice.gon, n: p.pairN });
+    }
+    return createStack({ sides: p.sides, layers: p.layers, cols: p.cols, rows: p.rows });
+  }
+
   function startSearch(p: KineticParams) {
-    const mech = createStack({ sides: p.sides, layers: p.layers, cols: p.cols, rows: p.rows });
+    const mech = buildMechanism(p);
     const surface = buildSurface(mech, { maxStates: mech.states.length });
     const rng = createRng(p.seed);
     const openCutClasses = expandCutClasses(surface, { rng, extra: p.k });
@@ -74,7 +87,7 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
   }
 
   function finishBuild(
-    mech: StackMechanism,
+    mech: TurnableMechanism,
     surface: KineticSurface,
     found: ReturnType<ReturnType<typeof createAllStatesSearch>['result']>,
     p: KineticParams,
@@ -104,7 +117,7 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
         caps: true,
       }),
       pieceZ: mech.states[0]!.map(placement => placement.offset[2]),
-      sides: mech.sides,
+      sides: mech.turnSteps,
       radius: bounds.radius,
       zMin: bounds.zMin,
       zMax: bounds.zMax,
@@ -283,7 +296,12 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
 
   controls.onAction('export-pdf', () => {
     if (!build) return;
-    const { mech, surface, design, params: p } = build;
+    if (build.params.mechanism === 'pair') {
+      exportPair(build);
+      return;
+    }
+    const { mech: turnable, surface, design, params: p } = build;
+    const mech = turnable as StackMechanism;
     // A cell is printed at a fixed size, so a wide barrel has to be drawn
     // smaller or the band would not fit across the sheet — down to a point.
     // Past that the object stops being something anyone can cut out, and
@@ -314,6 +332,27 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
       }
     }, 0);
   });
+
+  /** The two halves and their bulkheads, at whatever scale the sheet allows. */
+  function exportPair(current: Build) {
+    const mech = current.mech as JoinedPairMechanism;
+    controls.setExportBusy(true);
+    setTimeout(() => {
+      try {
+        const plan = exportPairPDF(
+          mech, current.surface, current.design, current.params.seed,
+        );
+        controls.showToast(
+          `${plan.sheets.length} sheets — a ${plan.jointWidthMm.toFixed(0)} mm joint, ` +
+          `${plan.edgeMm.toFixed(0)} mm to an edge, on a ${STACK_SHEET_DEFAULTS.dowelMm} mm dowel`,
+        );
+      } catch (error) {
+        controls.showToast(`Export failed: ${(error as Error).message}`);
+      } finally {
+        controls.setExportBusy(false);
+      }
+    }, 0);
+  }
 
   window.addEventListener('resize', () => scene.resize());
   rebuild();

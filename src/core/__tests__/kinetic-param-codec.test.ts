@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { JOINED_PAIRS } from '../kinetic/mechanisms/joined.ts';
 import {
   DEFAULT_KINETIC_PARAMS,
+  maxPairN,
+  pairCellCount,
+  pairStateCount,
   KINETIC_LIMITS,
   cellCount,
   clampKineticParams,
@@ -125,5 +129,51 @@ describe('search effort', () => {
     expect(decodeKineticParams('?effort=3').effort).toBe(2);
     expect(decodeKineticParams('?effort=999').effort).toBe(8);
     expect(decodeKineticParams('?effort=nonsense').effort).toBe(1);
+  });
+});
+
+
+describe('the glued pair on the same page', () => {
+  it('stays out of the URL until it is chosen', () => {
+    expect(encodeKineticParams(DEFAULT_KINETIC_PARAMS)).toBe('');
+    const url = encodeKineticParams({
+      ...DEFAULT_KINETIC_PARAMS, mechanism: 'pair', pair: 'j4@8', pairN: 2,
+    });
+    expect(url).toContain('mech=pair');
+    expect(url).toContain('pair=j4%408');
+    expect(url).toContain('n=2');
+    expect(decodeKineticParams(url).mechanism).toBe('pair');
+    expect(decodeKineticParams(url).pair).toBe('j4@8');
+    expect(decodeKineticParams(url).pairN).toBe(2);
+  });
+
+  it('falls back on a joint that does not exist', () => {
+    const p = decodeKineticParams('?mech=pair&pair=nonsense');
+    expect(p.pair).toBe(DEFAULT_KINETIC_PARAMS.pair);
+    expect(p.mechanism).toBe('pair');
+    expect(decodeKineticParams('?mech=sideways').mechanism).toBe('stack');
+  });
+
+  it('spends one seam class joining the halves, so k stops one short', () => {
+    const p = clampKineticParams({
+      ...DEFAULT_KINETIC_PARAMS, mechanism: 'pair', pair: 'j3@6', pairN: 3, k: 4,
+    });
+    expect(p.k).toBe(2);
+    const coarse = clampKineticParams({
+      ...DEFAULT_KINETIC_PARAMS, mechanism: 'pair', pair: 'j3@6', pairN: 1, k: 2,
+    });
+    expect(coarse.k).toBe(0);
+  });
+
+  it('never lets a joint run past the work budget', () => {
+    for (const choice of JOINED_PAIRS) {
+      const n = maxPairN(choice.id);
+      const cells = pairCellCount(choice.id, n);
+      expect(cells).toBeLessThanOrEqual(KINETIC_LIMITS.maxCells);
+      expect(cells * pairStateCount(choice.id)).toBeLessThanOrEqual(KINETIC_LIMITS.maxWork);
+      expect(clampKineticParams({
+        ...DEFAULT_KINETIC_PARAMS, mechanism: 'pair', pair: choice.id, pairN: 99,
+      }).pairN).toBe(n);
+    }
   });
 });

@@ -15,11 +15,15 @@ import {
   harderEffort,
   isMaxEffort,
   maxCols,
+  maxPairN,
   maxRows,
   maxUsableLayers,
+  pairCellCount,
+  pairStateCount,
   stateCount,
 } from './kinetic-param-codec.ts';
-import type { KineticParams } from './kinetic-param-codec.ts';
+import type { KineticParams, MechanismId } from './kinetic-param-codec.ts';
+import { JOINED_PAIRS, joinedPairById, DEFAULT_JOINED_PAIR } from '../core/kinetic/mechanisms/joined.ts';
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
 
@@ -60,6 +64,12 @@ export function createKineticControls(
   container.innerHTML = buildHTML(initial);
   const el = <T extends HTMLElement>(id: string) => container.querySelector<T>(`#${id}`)!;
 
+  const mechSelect = el<HTMLSelectElement>('kin-mech');
+  const pairSelect = el<HTMLSelectElement>('kin-pair');
+  const pairNSlider = el<HTMLInputElement>('kin-pair-n');
+  const stackGroup = el<HTMLDivElement>('kin-stack-group');
+  const pairGroup = el<HTMLDivElement>('kin-pair-group');
+  const blurb = el<HTMLParagraphElement>('kin-blurb');
   const sidesSlider = el<HTMLInputElement>('kin-sides');
   const layersSlider = el<HTMLInputElement>('kin-layers');
   const colsSlider = el<HTMLInputElement>('kin-cols');
@@ -71,6 +81,7 @@ export function createKineticControls(
   const solutionCheck = el<HTMLInputElement>('kin-solution');
   const motionCheck = el<HTMLInputElement>('kin-motion');
   const autoRotateCheck = el<HTMLInputElement>('kin-autorotate');
+  const motionLabel = el<HTMLSpanElement>('kin-motion-label');
   const metricsDiv = el<HTMLDivElement>('kin-metrics');
   const statusDiv = el<HTMLDivElement>('kin-status');
   const progressBar = el<HTMLDivElement>('kin-progress');
@@ -89,6 +100,9 @@ export function createKineticControls(
 
   function readParams(): KineticParams {
     return clampKineticParams({
+      mechanism: mechSelect.value as MechanismId,
+      pair: pairSelect.value,
+      pairN: Number(pairNSlider.value),
       sides: Number(sidesSlider.value),
       layers: Number(layersSlider.value),
       cols: Number(colsSlider.value),
@@ -111,6 +125,12 @@ export function createKineticControls(
    */
   function syncBounds() {
     const p = readParams();
+    const pair = p.mechanism === 'pair';
+    stackGroup.hidden = pair;
+    pairGroup.hidden = !pair;
+    mechSelect.value = p.mechanism;
+    blurb.textContent = pair ? PAIR_BLURB : STACK_BLURB;
+
     layersSlider.max = String(maxUsableLayers(p.sides));
     colsSlider.max = String(maxCols(p));
     rowsSlider.max = String(maxRows(p));
@@ -118,19 +138,33 @@ export function createKineticControls(
     layersSlider.value = String(p.layers);
     colsSlider.value = String(p.cols);
     rowsSlider.value = String(p.rows);
+    pairSelect.value = p.pair;
+    pairNSlider.max = String(maxPairN(p.pair));
+    pairNSlider.value = String(p.pairN);
+    kSlider.max = String(pair ? Math.max(0, p.pairN - 1) : KINETIC_LIMITS.k.max);
     kSlider.value = String(p.k);
+    kSlider.disabled = pair && p.pairN < 2;
+    motionLabel.textContent = pair ? ' Halves turn' : ' Rings turn';
+    if (!exportBtn.disabled) {
+      exportBtn.textContent = pair ? 'Export pieces PDF' : 'Export rings PDF';
+    }
 
     el('kin-sides-val').textContent = String(p.sides);
     el('kin-layers-val').textContent = String(p.layers);
     el('kin-cols-val').textContent = String(p.cols);
     el('kin-rows-val').textContent = String(p.rows);
+    el('kin-pair-n-val').textContent = String(p.pairN);
     el('kin-k-val').textContent = p.k === 0 ? 'fewest' : `+${p.k}`;
-    el('kin-shape-info').textContent =
-      `${p.sides}-gon · ${p.layers} rings · ${p.sides * p.layers * p.cols * p.rows} cells · ` +
-      `${stateCount(p.sides, p.layers)} states`;
+
+    const choice = joinedPairById(p.pair) ?? DEFAULT_JOINED_PAIR;
+    el('kin-shape-info').textContent = pair
+      ? `${choice.gon}-gon joint · ${pairCellCount(p.pair, p.pairN)} cells · ` +
+        `${pairStateCount(p.pair)} states · ${choice.becomes}`
+      : `${p.sides}-gon · ${p.layers} rings · ${p.sides * p.layers * p.cols * p.rows} cells · ` +
+        `${stateCount(p.sides, p.layers)} states`;
   }
 
-  for (const slider of [sidesSlider, layersSlider, colsSlider, rowsSlider, kSlider]) {
+  for (const slider of [sidesSlider, layersSlider, colsSlider, rowsSlider, pairNSlider, kSlider]) {
     slider.addEventListener('input', () => {
       effort = 1;
       syncBounds();
@@ -141,6 +175,13 @@ export function createKineticControls(
     effort = 1;
     fire();
   });
+  for (const select of [mechSelect, pairSelect]) {
+    select.addEventListener('change', () => {
+      effort = 1;
+      syncBounds();
+      fire();
+    });
+  }
 
   harderBtn.addEventListener('click', () => {
     effort = harderEffort(effort);
@@ -170,13 +211,20 @@ export function createKineticControls(
   // which maze it is.
   el('kin-shuffle-all').addEventListener('click', () => {
     effort = 1;
-    sidesSlider.value = String(randomInRange(sidesSlider));
+    if (mechSelect.value === 'pair') {
+      pairSelect.selectedIndex = Math.floor(Math.random() * pairSelect.options.length);
+      syncBounds();
+      pairNSlider.value = String(randomInRange(pairNSlider));
+    } else {
+      sidesSlider.value = String(randomInRange(sidesSlider));
+      syncBounds();
+      layersSlider.value = String(randomInRange(layersSlider));
+      syncBounds();
+      colsSlider.value = String(randomInRange(colsSlider));
+      syncBounds();
+      rowsSlider.value = String(randomInRange(rowsSlider));
+    }
     syncBounds();
-    layersSlider.value = String(randomInRange(layersSlider));
-    syncBounds();
-    colsSlider.value = String(randomInRange(colsSlider));
-    syncBounds();
-    rowsSlider.value = String(randomInRange(rowsSlider));
     kSlider.value = String(randomInRange(kSlider));
     seedInput.value = String(randomSeed());
     syncBounds();
@@ -206,6 +254,9 @@ export function createKineticControls(
   return {
     getParams: readParams,
     setParams(params) {
+      mechSelect.value = params.mechanism;
+      pairSelect.value = params.pair;
+      pairNSlider.value = String(params.pairN);
       sidesSlider.value = String(params.sides);
       layersSlider.value = String(params.layers);
       colsSlider.value = String(params.cols);
@@ -250,7 +301,8 @@ export function createKineticControls(
     showToast,
     setExportBusy(busy) {
       exportBtn.disabled = busy;
-      exportBtn.textContent = busy ? 'Exporting...' : 'Export rings PDF';
+      exportBtn.textContent = busy ? 'Exporting...'
+        : mechSelect.value === 'pair' ? 'Export pieces PDF' : 'Export rings PDF';
     },
   };
 }
@@ -266,35 +318,68 @@ function randomInRange(slider: HTMLInputElement): number {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
+const STACK_BLURB =
+  'A maze on a stack of rings, free to turn on a dowel. Every way of turning ' +
+  'them is a different maze — and every one of them is solvable. Drag a ring ' +
+  'to turn it; drag the bottom one to turn the whole object.';
+
+const PAIR_BLURB =
+  'A maze on two identical solids, glued at one face and free to turn against ' +
+  'each other on a dowel. The face they are glued at is inside the object, so ' +
+  'the seam is the ring of edges around it. Drag the top half to turn it.';
+
 function buildHTML(p: KineticParams): string {
   const styleOptions = SCENE_PRESETS.map(s =>
     `<option value="${esc(s.id)}"${s.id === p.style ? ' selected' : ''}>${esc(s.label)}</option>`,
+  ).join('');
+  const pairOptions = JOINED_PAIRS.map(j =>
+    `<option value="${esc(j.id)}"${j.id === p.pair ? ' selected' : ''}>` +
+    `${esc(j.label)} (${j.gon}-gon)</option>`,
   ).join('');
   const L = KINETIC_LIMITS;
 
   return `
     <h2>Moving Maze</h2>
-    <p class="blurb">
-      A maze on a stack of rings, free to turn on a dowel. Every way of turning
-      them is a different maze — and every one of them is solvable. Drag a ring
-      to turn it; drag the bottom one to turn the whole object.
+    <p class="blurb" id="kin-blurb">
+      ${esc(p.mechanism === 'pair' ? PAIR_BLURB : STACK_BLURB)}
     </p>
 
-    <label>Rings: <span id="kin-layers-val">${p.layers}</span>
-      <input id="kin-layers" type="range" min="${L.layers.min}" max="${L.layers.max}" value="${p.layers}" />
+    <label>Mechanism
+      <select id="kin-mech">
+        <option value="stack"${p.mechanism === 'stack' ? ' selected' : ''}>Rings on a dowel</option>
+        <option value="pair"${p.mechanism === 'pair' ? ' selected' : ''}>Two solids glued at a face</option>
+      </select>
     </label>
 
-    <label>Sides: <span id="kin-sides-val">${p.sides}</span>
-      <input id="kin-sides" type="range" min="${L.sides.min}" max="${L.sides.max}" value="${p.sides}" />
-    </label>
+    <div id="kin-stack-group"${p.mechanism === 'pair' ? ' hidden' : ''}>
+      <label>Rings: <span id="kin-layers-val">${p.layers}</span>
+        <input id="kin-layers" type="range" min="${L.layers.min}" max="${L.layers.max}" value="${p.layers}" />
+      </label>
 
-    <label>n across a face: <span id="kin-cols-val">${p.cols}</span>
-      <input id="kin-cols" type="range" min="${L.cols.min}" max="${L.cols.max}" value="${p.cols}" />
-    </label>
+      <label>Sides: <span id="kin-sides-val">${p.sides}</span>
+        <input id="kin-sides" type="range" min="${L.sides.min}" max="${L.sides.max}" value="${p.sides}" />
+      </label>
 
-    <label>n up a ring: <span id="kin-rows-val">${p.rows}</span>
-      <input id="kin-rows" type="range" min="${L.rows.min}" max="${L.rows.max}" value="${p.rows}" />
-    </label>
+      <label>n across a face: <span id="kin-cols-val">${p.cols}</span>
+        <input id="kin-cols" type="range" min="${L.cols.min}" max="${L.cols.max}" value="${p.cols}" />
+      </label>
+
+      <label>n up a ring: <span id="kin-rows-val">${p.rows}</span>
+        <input id="kin-rows" type="range" min="${L.rows.min}" max="${L.rows.max}" value="${p.rows}" />
+      </label>
+    </div>
+
+    <div id="kin-pair-group"${p.mechanism === 'pair' ? '' : ' hidden'}>
+      <label>Solids <span class="hint">(two of them, glued)</span>
+        <select id="kin-pair">
+          ${pairOptions}
+        </select>
+      </label>
+
+      <label>n along a face edge: <span id="kin-pair-n-val">${p.pairN}</span>
+        <input id="kin-pair-n" type="range" min="${L.pairN.min}" max="${L.pairN.max}" value="${p.pairN}" />
+      </label>
+    </div>
 
     <label>k (seam passages): <span id="kin-k-val">${p.k}</span>
       <input id="kin-k" type="range" min="${L.k.min}" max="${L.k.max}" value="${p.k}" />
@@ -314,7 +399,7 @@ function buildHTML(p: KineticParams): string {
 
     <div class="checkboxes">
       <label><input id="kin-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
-      <label title="The rings click round on their own. Off, they stay put until you turn one by hand"><input id="kin-motion" type="checkbox" ${p.motion ? 'checked' : ''} /> Rings turn</label>
+      <label title="The pieces click round on their own. Off, they stay put until you turn one by hand"><input id="kin-motion" type="checkbox" ${p.motion ? 'checked' : ''} /><span id="kin-motion-label">${p.mechanism === 'pair' ? ' Halves turn' : ' Rings turn'}</span></label>
       <label title="The view drifts around the object. This turns the camera, not the mechanism"><input id="kin-autorotate" type="checkbox" ${p.autoRotate ? 'checked' : ''} /> Auto-rotate</label>
     </div>
 
@@ -322,7 +407,7 @@ function buildHTML(p: KineticParams): string {
       <button id="kin-shuffle-seed" title="A different maze on the same mechanism">Shuffle seed</button>
       <button id="kin-shuffle-all" title="A different mechanism as well: sides, rings, ruling, seams and seed">Shuffle all</button>
       <button id="kin-copy-url" class="wide">Copy URL</button>
-      <button id="kin-export-pdf" class="wide" title="The rings and their bulkheads, to print, cut and thread on a 6 mm dowel">Export rings PDF</button>
+      <button id="kin-export-pdf" class="wide" title="The pieces and their bulkheads, to print, cut and thread on a 6 mm dowel">${p.mechanism === 'pair' ? 'Export pieces PDF' : 'Export rings PDF'}</button>
       <button id="kin-harder" class="wide" hidden title="The search is a heuristic: more time is another attempt, not a better one, but it usually finds it">Search harder</button>
     </div>
 
