@@ -19,6 +19,7 @@ export type {
   AllStatesSearchOptions,
   SearchProgress,
   StartGoal,
+  PrintedEnds,
 } from './maze.ts';
 export {
   generateKineticMaze,
@@ -33,6 +34,7 @@ export {
   expandCutClasses,
   costOverStates,
   pickStartGoal,
+  pickPrintedEnds,
 } from './maze.ts';
 
 export type { StackOptions, StackMechanism } from './mechanisms/stack.ts';

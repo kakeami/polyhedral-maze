@@ -18,8 +18,8 @@ import type { Vec3 } from '../core/types.ts';
 import type { Mechanism, KineticCell } from '../core/kinetic/types.ts';
 import { applyPlacement } from '../core/kinetic/types.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
-import type { KineticDesign, StartGoal } from '../core/kinetic/maze.ts';
-import type { MazeMarker } from './maze-geometry.ts';
+import type { KineticDesign, PrintedEnds, StartGoal } from '../core/kinetic/maze.ts';
+import type { MarkerKind, MazeMarker } from './maze-geometry.ts';
 
 export interface PieceBounds {
   /** Largest distance from the turning axis, in the body frame. */
@@ -132,9 +132,10 @@ export function buildKineticPieces(
   mech: Mechanism,
   surface: KineticSurface,
   design: Pick<KineticDesign, 'open'>,
-  ends?: StartGoal | null,
+  ends?: StartGoal | PrintedEnds | null,
   options: KineticGeometryOptions = {},
 ): KineticPieceGeometry[] {
+  const marked = markedCells(ends);
   const shrink = axialShrink(mech, options.axialGap ?? 0);
   const pieces: {
     positions: number[];
@@ -193,12 +194,9 @@ export function buildKineticPieces(
       }
     }
 
-    if (ends && (index === ends.start || index === ends.goal)) {
-      piece.markers.push({
-        kind: index === ends.start ? 'start' : 'goal',
-        at: shrink(cellCentre(cell), cell.piece),
-        normal,
-      });
+    const marker = marked.get(index);
+    if (marker) {
+      piece.markers.push({ kind: marker, at: shrink(cellCentre(cell), cell.piece), normal });
     }
   });
 
@@ -228,6 +226,26 @@ export function buildKineticPieces(
       zMax: p.zMax === -Infinity ? 0 : p.zMax,
     },
   }));
+}
+
+/**
+ * Which cells carry a pin, and which pin.
+ *
+ * Both shapes an answer to "where does the maze start" can take. On an object
+ * that hides part of itself there is nowhere to print a marker that is always
+ * on show, so each one is printed on a pair of cells that are on show one at a
+ * time (`pickPrintedEnds`), and both of the pair are drawn: the buried one is
+ * inside the object, under the cube pressed against it, and comes back out
+ * with the rest of that face when the object is unfolded.
+ */
+function markedCells(ends?: StartGoal | PrintedEnds | null): Map<number, MarkerKind> {
+  const marked = new Map<number, MarkerKind>();
+  if (!ends) return marked;
+  const cellsOf = (at: number | readonly number[]): readonly number[] =>
+    typeof at === 'number' ? [at] : at;
+  for (const cell of cellsOf(ends.start)) marked.set(cell, 'start');
+  for (const cell of cellsOf(ends.goal)) marked.set(cell, 'goal');
+  return marked;
 }
 
 /**

@@ -40,6 +40,8 @@ export interface FoldMetrics {
   readonly poseIndex: number;
   readonly perfectPoses: number;
   readonly cellsPerFace: number;
+  /** Steps from the entrance to the exit in the pose on show. */
+  readonly solutionLength: number;
   /** Set when the maze on show was searched for rather than read off the shelf. */
   readonly searched?: boolean;
 }
@@ -62,6 +64,7 @@ export interface FoldControlsContext {
   onAction(action: string, cb: () => void): void;
   isAutoRotating(): boolean;
   isAutoFolding(): boolean;
+  isShowingSolution(): boolean;
 }
 
 export function createFoldControls(container: HTMLElement): FoldControlsContext {
@@ -79,6 +82,7 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
   const progressFill = el<HTMLDivElement>('fold-progress-fill');
   const autoRotate = el<HTMLInputElement>('fold-autorotate');
   const autoFold = el<HTMLInputElement>('fold-autofold');
+  const solution = el<HTMLInputElement>('fold-solution');
 
   const actions = new Map<string, () => void>();
   let rulings: readonly number[] = [];
@@ -103,6 +107,7 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
 
   poseSelect.addEventListener('change', () => poseCallback?.(Number(poseSelect.value)));
 
+  solution.addEventListener('change', () => actions.get('solution')?.());
   autoRotate.addEventListener('change', () => actions.get('auto-rotate')?.());
   autoFold.addEventListener('change', () => actions.get('auto-fold')?.());
 
@@ -140,6 +145,7 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
         ['Cells on show', pose ? String(pose.cells) : '—'],
         ['Passages here', pose ? String(pose.passages) : '—'],
         ['Longest walk here', pose ? String(pose.longestWalk) : '—'],
+        ['Solution here', `${m.solutionLength} steps`],
         ['Perfect in', `${m.perfectPoses} of ${m.poses.length} poses`],
         ['Squares to a cube', `${m.cellsPerFace * m.cellsPerFace * 6}`],
       ].map(([k, v]) => `<div><span>${esc(k!)}</span><span>${esc(v!)}</span></div>`).join('');
@@ -178,6 +184,9 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
     isAutoFolding() {
       return autoFold.checked;
     },
+    isShowingSolution() {
+      return solution.checked;
+    },
   };
 }
 
@@ -204,6 +213,7 @@ function buildHTML(): string {
     </label>
 
     <div class="checkboxes">
+      <label title="The way from the entrance to the exit in the pose on show. It is a different way in every pose"><input id="fold-solution" type="checkbox" /> Show solution</label>
       <label title="It goes from pose to pose on its own, a fold at a time, and keeps out of your way for a few seconds after you have asked for something. Off, it stays where it is put"><input id="fold-autofold" type="checkbox" checked /> Cubes fold</label>
       <label title="The view drifts around the object. This turns the camera, not the object"><input id="fold-autorotate" type="checkbox" checked /> Auto-rotate</label>
     </div>

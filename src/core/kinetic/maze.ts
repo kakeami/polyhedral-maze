@@ -825,6 +825,177 @@ export function pickStartGoal(
 }
 
 /**
+ * Where the entrance and the exit are printed, and which one is out in each
+ * state.
+ *
+ * `pickStartGoal` needs one cell that is on show however the object is moved,
+ * and a mechanism that folds shut has none: every square of a ring of cubes is
+ * buried in some pose. So a marker goes on *more than one* cell — as many as
+ * it takes for exactly one of them to be on the outside in every state — and
+ * the walk runs between whichever pair is showing.
+ *
+ * Two cells is always enough here, and never fewer: cells whose visibility is
+ * complementary come in thousands on the folding ring, and a set of three
+ * would show two of its marks in some pose. What is *not* true is the guess
+ * that the pair is a cube's two opposite faces — on the ring, a cube's
+ * opposite faces are both on show in some pose, and the pairs that work join
+ * two faces that meet at an edge, or two different cubes entirely
+ * (`.dev/probe-fold-marks.ts`). Which is why this asks the surface rather than
+ * the mechanism: the rule is complementary visibility, and where the geometry
+ * puts that is the geometry's business.
+ */
+export interface PrintedEnds {
+  /** Cells the entrance is printed on: exactly one is on show in any state. */
+  readonly start: readonly number[];
+  readonly goal: readonly number[];
+  /** The pair the walk runs between, one per state. */
+  readonly byState: readonly StartGoal[];
+}
+
+export function pickPrintedEnds(
+  surface: KineticSurface,
+  design: Pick<KineticDesign, 'open' | 'targetState'>,
+): PrintedEnds {
+  // Nothing is ever hidden: one cell each, and `pickStartGoal` knows more
+  // about where to put them — it keeps them on a free rim, which is the
+  // difference between an entrance and a hole in the middle of a wall.
+  if (!surface.hidesCells) {
+    const ends = pickStartGoal(surface, design);
+    return { start: [ends.start], goal: [ends.goal], byState: surface.adjByState.map(() => ends) };
+  }
+
+  const states = surface.stateCount;
+  const neighbours: number[][][] = [];
+  const degree: Int32Array[] = [];
+  for (let state = 0; state < states; state++) {
+    const near: number[][] = Array.from({ length: surface.cellCount }, () => []);
+    const count = new Int32Array(surface.cellCount);
+    for (const e of surface.adjByState[state]!) {
+      if (!design.open.has(e.classId)) continue;
+      near[e.a]!.push(e.b);
+      near[e.b]!.push(e.a);
+      count[e.a]!++;
+      count[e.b]!++;
+    }
+    neighbours.push(near);
+    degree.push(count);
+  }
+
+  /** Which states a cell is on show in, as text, so any number of them fits. */
+  const showsIn = (cell: number): string => {
+    let bits = '';
+    for (let state = 0; state < states; state++) bits += surface.visibleByState[state]![cell] ? '1' : '0';
+    return bits;
+  };
+  const complement = (bits: string): string => [...bits].map(b => (b === '1' ? '0' : '1')).join('');
+
+  const leaves = markerPairs(surface, degree, showsIn, complement, true);
+  const pairs = leaves.length > 1 ? leaves : markerPairs(surface, degree, showsIn, complement, false);
+  if (pairs.length < 2) throw new Error('no pair of cells is on show one at a time');
+
+  const walks = new Map<number, Int32Array[]>();
+  const walksFrom = (cell: number): Int32Array[] => {
+    const had = walks.get(cell);
+    if (had) return had;
+    const made = Array.from({ length: states }, (_unused, state) =>
+      (surface.visibleByState[state]![cell] ? distancesFrom(neighbours[state]!, cell) : EMPTY));
+    walks.set(cell, made);
+    return made;
+  };
+
+  // Every pair of pairs, judged by the walk in the state where it is shortest
+  // — the same measure the shipped designs are ranked by. Quadratic in the
+  // number of dead ends, which is what keeps it cheap: it is a fraction of the
+  // cells, and the moment a combination is worse than the best one so far in
+  // any single state the rest of the states are not looked at.
+  let best: PrintedEnds | null = null;
+  let bestWalk = -Infinity;
+  for (let i = 0; i < pairs.length; i++) {
+    const s = pairs[i]!;
+    const fromStart = [walksFrom(s[0]), walksFrom(s[1])];
+    for (let j = i + 1; j < pairs.length; j++) {
+      const g = pairs[j]!;
+      if (g[0] === s[0] || g[0] === s[1] || g[1] === s[0] || g[1] === s[1]) continue;
+      const byState: StartGoal[] = [];
+      let worst = Infinity;
+      for (let state = 0; state < states; state++) {
+        const start = surface.visibleByState[state]![s[0]] ? s[0] : s[1];
+        const goal = surface.visibleByState[state]![g[0]] ? g[0] : g[1];
+        byState.push({ start, goal });
+        worst = Math.min(worst, fromStart[start === s[0] ? 0 : 1]![state]![goal] ?? -1);
+        if (worst <= bestWalk) break;
+      }
+      if (worst <= bestWalk) continue;
+      bestWalk = worst;
+      best = { start: [...s], goal: [...g], byState };
+    }
+  }
+  if (!best) throw new Error('no two pairs of cells can hold an entrance and an exit');
+  return best;
+}
+
+const EMPTY = new Int32Array(0);
+
+/**
+ * Cells that are on show one at a time, taken two at a time.
+ *
+ * With `leavesOnly`, both cells must also be a dead end in every state they
+ * are on show in — a marker in the middle of a corridor leaves a stub of maze
+ * hanging off it, exactly as on a fixed object. It is asked for first and
+ * dropped if it turns out to be impossible, since it is a preference and being
+ * able to print the thing at all is not.
+ */
+function markerPairs(
+  surface: KineticSurface,
+  degree: readonly Int32Array[],
+  showsIn: (cell: number) => string,
+  complement: (bits: string) => string,
+  leavesOnly: boolean,
+): [number, number][] {
+  const byPattern = new Map<string, number[]>();
+  for (let cell = 0; cell < surface.cellCount; cell++) {
+    let anywhere = false;
+    let leaf = true;
+    for (let state = 0; state < surface.stateCount; state++) {
+      if (!surface.visibleByState[state]![cell]) continue;
+      anywhere = true;
+      if (degree[state]![cell] !== 1) leaf = false;
+    }
+    if (!anywhere || (leavesOnly && !leaf)) continue;
+    const bits = showsIn(cell);
+    const found = byPattern.get(bits);
+    if (found) found.push(cell);
+    else byPattern.set(bits, [cell]);
+  }
+
+  const pairs: [number, number][] = [];
+  for (const [bits, cells] of byPattern) {
+    const other = complement(bits);
+    // Each pattern and its complement, once between them.
+    if (other <= bits) continue;
+    for (const partner of byPattern.get(other) ?? []) {
+      for (const cell of cells) pairs.push([cell, partner]);
+    }
+  }
+  return pairs;
+}
+
+function distancesFrom(neighbours: readonly number[][], from: number): Int32Array {
+  const distance = new Int32Array(neighbours.length).fill(-1);
+  distance[from] = 0;
+  const queue = [from];
+  for (let head = 0; head < queue.length; head++) {
+    const at = queue[head]!;
+    for (const next of neighbours[at]!) {
+      if (distance[next] !== -1) continue;
+      distance[next] = distance[at]! + 1;
+      queue.push(next);
+    }
+  }
+  return distance;
+}
+
+/**
  * Cells that are a dead end whichever way the object is turned.
  *
  * Whether a side is open is a property of its class rather than of a state, so

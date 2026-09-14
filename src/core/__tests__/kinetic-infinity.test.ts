@@ -15,7 +15,7 @@ import {
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
 import { applyPlacement, type KineticCell, type Placement } from '../kinetic/types.ts';
 import {
-  longestWalk, pickStartGoal, searchAllStates, type KineticDesign,
+  longestWalk, pickPrintedEnds, pickStartGoal, searchAllStates, type KineticDesign,
 } from '../kinetic/maze.ts';
 import { UnionFind } from '../graph.ts';
 import { createRng } from '../prng.ts';
@@ -163,6 +163,75 @@ describe('gamma on the infinity cube', () => {
   it('is deterministic for a fixed seed', () => {
     const again = searchAllStates(surface, { rng: createRng(2) });
     expect([...again.design.open].sort()).toEqual([...result.design.open].sort());
+  });
+});
+
+describe('printing an entrance on something that hides itself', () => {
+  const design = searchAllStates(surface, { rng: createRng(2) }).design;
+  const ends = pickPrintedEnds(surface, design);
+
+  /** Which cells of the maze are on the outside in one pose. */
+  const showing = (cells: readonly number[], state: number) =>
+    cells.filter(cell => surface.visibleByState[state]![cell]);
+
+  it('prints each marker twice, and shows exactly one of each in every pose', () => {
+    expect(ends.start.length).toBe(2);
+    expect(ends.goal.length).toBe(2);
+    expect(new Set([...ends.start, ...ends.goal]).size).toBe(4);
+    for (let state = 0; state < surface.stateCount; state++) {
+      expect(showing(ends.start, state).length).toBe(1);
+      expect(showing(ends.goal, state).length).toBe(1);
+    }
+  });
+
+  it('walks between the two that are on show', () => {
+    expect(ends.byState.length).toBe(surface.stateCount);
+    ends.byState.forEach((pair, state) => {
+      expect(showing(ends.start, state)).toEqual([pair.start]);
+      expect(showing(ends.goal, state)).toEqual([pair.goal]);
+    });
+  });
+
+  it('puts them on dead ends, wherever they are on show', () => {
+    for (let state = 0; state < surface.stateCount; state++) {
+      const degree = new Map<number, number>();
+      for (const e of surface.adjByState[state]!) {
+        if (!design.open.has(e.classId)) continue;
+        degree.set(e.a, (degree.get(e.a) ?? 0) + 1);
+        degree.set(e.b, (degree.get(e.b) ?? 0) + 1);
+      }
+      for (const cell of [...ends.start, ...ends.goal]) {
+        if (!surface.visibleByState[state]![cell]) continue;
+        expect(degree.get(cell)).toBe(1);
+      }
+    }
+  });
+
+  it('does not go on a cube\'s opposite pair of faces, as was first supposed', () => {
+    // The guess this replaced: put the marker on both ends of one axis of one
+    // cube, since a cube in a block is pressed against a neighbour on one side
+    // and open on the other. It is wrong — in the plank, a cube in the middle
+    // of a row has neighbours on *both* sides along it — and the two faces are
+    // both on show in some pose besides. What the pairs actually are is a
+    // question for the geometry, which is why nothing here names a face.
+    for (let piece = 0; piece < mech.pieceCount; piece++) {
+      for (let axis = 0; axis < 3; axis++) {
+        const front = mech.cellIndex(piece, axis * 2, 0, 0);
+        const back = mech.cellIndex(piece, axis * 2 + 1, 0, 0);
+        const together = surface.visibleByState.filter(v => v[front] && v[back]);
+        expect(together.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('falls back to one cell each where nothing is ever hidden', () => {
+    const stack = buildSurface(createStack({ sides: 4, layers: 2, cols: 2, rows: 2 }));
+    const found = searchAllStates(stack, { rng: createRng(1) }).design;
+    const one = pickPrintedEnds(stack, found);
+    const same = pickStartGoal(stack, found);
+    expect(one.start).toEqual([same.start]);
+    expect(one.goal).toEqual([same.goal]);
+    expect(one.byState).toEqual(stack.adjByState.map(() => same));
   });
 });
 

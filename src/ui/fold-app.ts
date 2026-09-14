@@ -16,9 +16,13 @@
  * fresh one — and if a design ever fails that, the page searches for one
  * instead of drawing something it cannot vouch for.
  *
- * This is the second cut: poses fold into one another now. There is still no
- * start or finish marker; that is next, and it is a question about where a
- * marker can go on an object that hides half of itself, not about this file.
+ * The markers are the one thing this page cannot lift from the other two.
+ * There is nowhere on a ring of cubes to print an entrance that is on show
+ * however the thing is folded, so each marker goes on a *pair* of cells that
+ * are on show one at a time (`pickPrintedEnds`): one entrance and one exit are
+ * visible in every pose, and which two they are changes as it folds. The route
+ * between them is redrawn on arrival, and only then — mid-fold it would be a
+ * route through a shape the object is only passing through.
  */
 
 import { createRng } from '../core/prng.ts';
@@ -30,13 +34,16 @@ import {
   INFINITY_CUBE_RULINGS, infinityCubeDesigns,
 } from '../core/kinetic/mechanisms/infinity-cube-designs.ts';
 import { decodeOpenClasses } from '../core/kinetic/stored-design.ts';
-import type { KineticDesign } from '../core/kinetic/maze.ts';
+import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
 import {
-  DEFAULT_SEARCH_EFFORT, createAllStatesSearch, longestWalk, stateStats, treeRate,
+  DEFAULT_SEARCH_EFFORT, createAllStatesSearch, longestWalk, pickPrintedEnds, stateStats,
+  treeRate,
 } from '../core/kinetic/maze.ts';
 import { buildFoldGraph } from '../core/kinetic/fold-path.ts';
 import type { FoldGraph } from '../core/kinetic/fold-path.ts';
-import { buildKineticPieces } from '../render/kinetic-geometry.ts';
+import {
+  buildKineticPieces, kineticSolutionPath, solutionLength,
+} from '../render/kinetic-geometry.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
@@ -62,6 +69,8 @@ interface Build {
   surface: KineticSurface;
   graph: FoldGraph;
   design: KineticDesign;
+  /** Where the two markers are printed, and which of each is out per pose. */
+  ends: PrintedEnds;
   poses: FoldPose[];
   perfectPoses: number;
   /** Which of the stored mazes this is, counting from one; 0 when searched for. */
@@ -128,7 +137,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     const pose = keepPose ? Math.min(poseIndex, next.mech.states.length - 1) : 0;
     poseIndex = pose;
     scene.setModel({
-      pieces: buildKineticPieces(next.mech, next.surface, next.design),
+      pieces: buildKineticPieces(next.mech, next.surface, next.design, next.ends),
       states: next.mech.states,
       graph: next.graph,
     });
@@ -142,13 +151,24 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     refreshPose();
   }
 
+  /** The route and the numbers for whichever pose the object has landed in. */
   function refreshPose() {
     if (!build) return;
+    const { mech, surface, design, ends } = build;
+    const here = ends.byState[poseIndex] ?? ends.byState[0]!;
+    // Read from the panel rather than from the build: whether the answer is on
+    // screen is a switch the visitor holds, and it outlives any one pose.
+    scene.setSolution(
+      controls.isShowingSolution()
+        ? kineticSolutionPath(mech, surface, design, poseIndex, here)
+        : null,
+    );
     controls.setMetrics({
       poses: build.poses,
       poseIndex,
       perfectPoses: build.perfectPoses,
-      cellsPerFace: build.mech.cellsPerFace,
+      cellsPerFace: mech.cellsPerFace,
+      solutionLength: solutionLength(surface, design, poseIndex, here),
       searched: build.maze === 0,
     });
   }
@@ -160,6 +180,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       surface: ruling.surface,
       graph: ruling.graph,
       design,
+      ends: pickPrintedEnds(ruling.surface, design),
       poses: describePoses(ruling.mech, ruling.surface, design),
       perfectPoses: rate.perfectStates.length,
       maze: index,
@@ -269,6 +290,8 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     rebuild(true);
     scene.holdAutoFold();
   });
+
+  controls.onAction('solution', () => refreshPose());
 
   controls.onAction('auto-rotate', () => scene.setAutoRotate(controls.isAutoRotating()));
 
