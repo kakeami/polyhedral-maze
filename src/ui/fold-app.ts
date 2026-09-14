@@ -32,7 +32,7 @@ import {
 import { decodeOpenClasses } from '../core/kinetic/stored-design.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import {
-  DEFAULT_SEARCH_EFFORT, createAllStatesSearch, stateStats, treeRate,
+  DEFAULT_SEARCH_EFFORT, createAllStatesSearch, longestWalk, stateStats, treeRate,
 } from '../core/kinetic/maze.ts';
 import { buildFoldGraph } from '../core/kinetic/fold-path.ts';
 import type { FoldGraph } from '../core/kinetic/fold-path.ts';
@@ -137,6 +137,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.setPose(pose);
     scene.setAutoRotate(controls.isAutoRotating());
     controls.setPoses(next.poses, pose);
+    controls.setMazes(next.mazes, next.maze);
     refreshPose();
   }
 
@@ -146,8 +147,6 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       poses: build.poses,
       poseIndex,
       perfectPoses: build.perfectPoses,
-      maze: build.maze,
-      mazes: build.mazes,
       cellsPerFace: build.mech.cellsPerFace,
       searched: build.maze === 0,
     });
@@ -251,12 +250,16 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   controls.onRuling(next => {
     if (next === cells) return;
     cells = next;
-    maze = 0;
+    // The mazes at one ruling have nothing to do with those at another, so
+    // there is no sense in which the third maze here is the third one there;
+    // what carries over is the position in the list, and only because moving
+    // the ruling should not also feel like changing the maze.
+    maze = Math.min(maze, Math.max(0, infinityCubeDesigns(next).length - 1));
     rebuild(true);
   });
 
-  controls.onAction('another', () => {
-    maze++;
+  controls.onMaze(next => {
+    maze = Math.max(0, next - 1);
     rebuild(true);
   });
 
@@ -267,6 +270,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // through.
   scene.onArrive(index => {
     poseIndex = index;
+    controls.setPose(index);
     refreshPose();
   });
 
@@ -301,6 +305,7 @@ function describePoses(
       label,
       cells: surface.visibleCount[index] ?? 0,
       passages: stats.edges,
+      longestWalk: longestWalk(surface, design, index),
       perfect: stats.perfect,
     };
   });

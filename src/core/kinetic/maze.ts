@@ -55,6 +55,55 @@ export function stateStats(
 }
 
 /**
+ * The longest walk through one state of a design: the maze's own diameter.
+ *
+ * Two sweeps from anywhere — the far end of the first is an end of some
+ * longest walk, and the far end of the second is the other. That only holds on
+ * a tree, which is what a design is meant to be here; on one that is not, this
+ * still comes back with a walk, just not the longest, which is the right way
+ * for a number shown beside a maze to fail.
+ *
+ * It is a poor measure of how hard a maze is and a good measure of whether it
+ * is one: a design that is perfect in every pose and a straight run in one of
+ * them is a maze on a plank that also folds, rather than a maze on a folding
+ * object.
+ */
+export function longestWalk(
+  surface: KineticSurface,
+  design: Pick<KineticDesign, 'open'>,
+  stateIndex: number,
+): number {
+  const near = new Map<number, number[]>();
+  for (const e of openAdjacencies(surface, design, stateIndex)) {
+    (near.get(e.a) ?? near.set(e.a, []).get(e.a)!).push(e.b);
+    (near.get(e.b) ?? near.set(e.b, []).get(e.b)!).push(e.a);
+  }
+  const sweep = (from: number): { far: number; distance: number } => {
+    const seen = new Map<number, number>([[from, 0]]);
+    const queue = [from];
+    let far = from;
+    let distance = 0;
+    for (let head = 0; head < queue.length; head++) {
+      const at = queue[head]!;
+      for (const next of near.get(at) ?? []) {
+        if (seen.has(next)) continue;
+        const step = seen.get(at)! + 1;
+        seen.set(next, step);
+        queue.push(next);
+        if (step > distance) {
+          distance = step;
+          far = next;
+        }
+      }
+    }
+    return { far, distance };
+  };
+  const start = near.keys().next();
+  if (start.done) return 0;
+  return sweep(sweep(start.value).far).distance;
+}
+
+/**
  * Whether the seam openings alone stay a forest in every state.
  *
  * Two of them that close a loop would put a cycle in the maze that no choice

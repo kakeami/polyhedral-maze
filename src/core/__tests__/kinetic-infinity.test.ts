@@ -14,7 +14,9 @@ import {
 } from '../kinetic/mechanisms/infinity-cube.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
 import { applyPlacement, type KineticCell, type Placement } from '../kinetic/types.ts';
-import { pickStartGoal, searchAllStates, type KineticDesign } from '../kinetic/maze.ts';
+import {
+  longestWalk, pickStartGoal, searchAllStates, type KineticDesign,
+} from '../kinetic/maze.ts';
 import { UnionFind } from '../graph.ts';
 import { createRng } from '../prng.ts';
 import type { Vec3 } from '../types.ts';
@@ -192,5 +194,54 @@ describe('the taping it ships with', () => {
         .sort((x, y) => x - y).join('x'));
     expect(shapes.filter(s => s === '2x2x2').length).toBe(2);
     expect(shapes.length).toBe(6);
+  });
+});
+
+describe('the longest walk through a pose', () => {
+  // Double sweep against brute force. The shortcut — walk from anywhere, then
+  // from the furthest thing you found — is only valid on a tree, and this is
+  // the one place where it is worth showing that the design really is one.
+  const result = searchAllStates(surface, { rng: createRng(2) });
+
+  function byBruteForce(state: number): number {
+    const near = new Map<number, number[]>();
+    for (const e of surface.adjByState[state]!) {
+      if (!result.design.open.has(e.classId)) continue;
+      (near.get(e.a) ?? near.set(e.a, []).get(e.a)!).push(e.b);
+      (near.get(e.b) ?? near.set(e.b, []).get(e.b)!).push(e.a);
+    }
+    let worst = 0;
+    for (const from of near.keys()) {
+      const seen = new Map<number, number>([[from, 0]]);
+      const queue = [from];
+      for (let head = 0; head < queue.length; head++) {
+        for (const next of near.get(queue[head]!) ?? []) {
+          if (seen.has(next)) continue;
+          const step = seen.get(queue[head]!)! + 1;
+          seen.set(next, step);
+          queue.push(next);
+          if (step > worst) worst = step;
+        }
+      }
+    }
+    return worst;
+  }
+
+  it('is what walking every pair of cells would find', () => {
+    for (let state = 0; state < surface.stateCount; state++) {
+      expect(longestWalk(surface, result.design, state)).toBe(byBruteForce(state));
+    }
+  });
+
+  it('is shorter than the maze and longer than a corridor', () => {
+    for (let state = 0; state < surface.stateCount; state++) {
+      const walk = longestWalk(surface, result.design, state);
+      expect(walk).toBeGreaterThan(10);
+      expect(walk).toBeLessThan(surface.visibleCount[state]!);
+    }
+  });
+
+  it('is nothing at all where nothing is open', () => {
+    expect(longestWalk(surface, { open: new Set() }, 0)).toBe(0);
   });
 });
