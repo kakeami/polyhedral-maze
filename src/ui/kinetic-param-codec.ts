@@ -70,15 +70,16 @@ export const KINETIC_LIMITS = {
   /** Cells along a face edge of a glued pair. */
   pairN: { min: 1, max: 12 },
   /**
-   * Cells a glued pair may carry.
+   * Cells a glued pair may carry, as a backstop.
    *
-   * Its own number rather than `maxCells` because the two mechanisms are not
-   * costly in the same way. A stack has hundreds of states and a handful of
-   * cells each; a pair has a handful of states and all of its cost in the
-   * cells, so `states x cells` — which bounds the stack — never comes near
-   * binding here. Measured on this code, a pair of this many cells rebuilds in
-   * about a second and a half at worst, and still prints at 7 mm a cell, which
-   * is the other thing that has to hold.
+   * What actually bounds a pair is `maxN` on the joint itself, measured per
+   * joint because nothing simpler predicts it. This is here for a joint added
+   * to the catalogue before anyone has measured one: a rebuild of this many
+   * cells still comes back in about a second and a half, and still prints at
+   * 7 mm a cell. Its own number rather than `maxCells` because the two
+   * mechanisms are not costly in the same way — a stack has hundreds of states
+   * and a few cells each, a pair has a few states and all of its cost in the
+   * cells, so `states x cells` never comes near binding here.
    */
   pairCells: 1250,
   /**
@@ -193,20 +194,20 @@ export function pairStateCount(pairId: string): number {
 /**
  * How finely a pair may be ruled.
  *
- * Bounded by the cells rather than by `states x cells`, for the reason given at
- * `pairCells`. Note what this does *not* promise: that a design perfect in
- * every state will be found at the top of the range. Whether one is found is a
- * matter of how long the search is given, which is what the effort ladder is
- * for, and the page says plainly when it fell short. A ruling the search
- * sometimes has to be asked twice about is still a ruling worth offering.
+ * The joint's own measured ceiling first, then the cost guards. Stopping where
+ * the search stops succeeding rather than where the arithmetic stops being
+ * quick is the difference between a slider that offers a maze and one that
+ * offers a search that usually fails; the effort ladder is still there for
+ * anyone who wants to push past it by hand.
  */
 export function maxPairN(pairId: string): number {
-  const states = pairStateCount(pairId);
+  const choice = joinedPairById(pairId) ?? DEFAULT_JOINED_PAIR;
+  const ceiling = Math.min(KINETIC_LIMITS.pairN.max, choice.maxN);
   let best: number = KINETIC_LIMITS.pairN.min;
-  for (let n = KINETIC_LIMITS.pairN.min + 1; n <= KINETIC_LIMITS.pairN.max; n++) {
+  for (let n = KINETIC_LIMITS.pairN.min + 1; n <= ceiling; n++) {
     const cells = pairCellCount(pairId, n);
     if (cells > KINETIC_LIMITS.pairCells) break;
-    if (cells * states > KINETIC_LIMITS.maxWork) break;
+    if (cells * choice.gon > KINETIC_LIMITS.maxWork) break;
     best = n;
   }
   return best;

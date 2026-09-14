@@ -186,6 +186,20 @@ describe('the joints on offer', () => {
       expect(found.rate.perfectStates).toHaveLength(closed.stateCount);
     }
   });
+
+  it('still finds one at the finest ruling each joint claims', () => {
+    // What `maxN` is for. It was arrived at with a larger sample of seeds than
+    // a test suite should sit through; two is enough to catch a search that has
+    // got worse, which is the thing that would make the number a lie.
+    for (const choice of JOINED_PAIRS) {
+      const built = createJoinedPair({ shape: choice.shape, gon: choice.gon, n: choice.maxN });
+      const closed = buildSurface(built);
+      for (const seed of [42, 7]) {
+        const found = searchAllStates(closed, { rng: createRng(seed) });
+        expect(found.rate.perfectStates).toHaveLength(closed.stateCount);
+      }
+    }
+  });
 });
 
 describe('the pair in the 3D view', () => {

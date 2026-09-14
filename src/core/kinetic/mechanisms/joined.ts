@@ -66,6 +66,12 @@ export interface JoinedPairChoice {
   readonly label: string;
   /** What the object is at each turn, for the page to say out loud. */
   readonly becomes: string;
+  /**
+   * Finest ruling the default search can be relied on to satisfy.
+   *
+   * A measurement, not a formula. See the note on the list below.
+   */
+  readonly maxN: number;
 }
 
 /**
@@ -76,24 +82,35 @@ export interface JoinedPairChoice {
  * read a maze out of: the more faces a solid has the closer its dihedral angle
  * runs to a straight angle, and the crease opens through `360 - 2 * dihedral`.
  * These are the ones where that angle stays generous — see `creaseAngle`.
+ *
+ * `maxN` is the largest ruling at which a design perfect in *every* state was
+ * found on every seed of a sample, at the default search effort. It is measured
+ * rather than derived, because the boundary moves by a whole grid step between
+ * joints of much the same size: what makes one hard is not how many cells it
+ * has but how many states one wall has to satisfy at once. Two rotundas, ten
+ * states over sixteen faces a half, run out at two cells to an edge; two
+ * tetrahedra, three states over three faces, are still comfortable at eleven.
+ * Past `maxN` a design usually still exists and the search often still finds
+ * it — that is what the effort ladder is for — but a slider should not put
+ * anyone there without being asked.
  */
 export const JOINED_PAIRS: readonly JoinedPairChoice[] = [
   { id: 'j3@6', shape: 'j3', gon: 6, label: 'Triangular cupolas',
-    becomes: 'a cuboctahedron and J27, turn about' },
+    becomes: 'a cuboctahedron and J27, turn about', maxN: 6 },
   { id: 'j4@8', shape: 'j4', gon: 8, label: 'Square cupolas',
-    becomes: 'J28 and J29, turn about' },
+    becomes: 'J28 and J29, turn about', maxN: 6 },
   { id: 'j5@10', shape: 'j5', gon: 10, label: 'Pentagonal cupolas',
-    becomes: 'J30 and J31, turn about' },
+    becomes: 'J30 and J31, turn about', maxN: 4 },
   { id: 'j6@10', shape: 'j6', gon: 10, label: 'Pentagonal rotundas',
-    becomes: 'an icosidodecahedron and J42, turn about' },
+    becomes: 'an icosidodecahedron and J42, turn about', maxN: 2 },
   { id: 'tetrahedron@3', shape: 'tetrahedron', gon: 3, label: 'Tetrahedra',
-    becomes: 'a triangular bipyramid, whatever the turn' },
+    becomes: 'a triangular bipyramid, whatever the turn', maxN: 11 },
   { id: 'j1@4', shape: 'j1', gon: 4, label: 'Square pyramids',
-    becomes: 'an octahedron, whatever the turn' },
+    becomes: 'an octahedron, whatever the turn', maxN: 9 },
   { id: 'j2@5', shape: 'j2', gon: 5, label: 'Pentagonal pyramids',
-    becomes: 'a pentagonal bipyramid, whatever the turn' },
+    becomes: 'a pentagonal bipyramid, whatever the turn', maxN: 9 },
   { id: 'octahedron@3', shape: 'octahedron', gon: 3, label: 'Octahedra',
-    becomes: 'the same pair of octahedra, whatever the turn' },
+    becomes: 'the same pair of octahedra, whatever the turn', maxN: 9 },
 ];
 
 export const DEFAULT_JOINED_PAIR = JOINED_PAIRS[0]!;
