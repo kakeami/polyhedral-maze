@@ -39,6 +39,20 @@ export type { StackOptions, StackMechanism } from './mechanisms/stack.ts';
 export { createStack } from './mechanisms/stack.ts';
 
 export type {
+  InfinityCubeOptions,
+  InfinityCubeMechanism,
+  Lattice,
+} from './mechanisms/infinity-cube.ts';
+export {
+  createInfinityCube,
+  DEFAULT_RING,
+  DEFAULT_HINGES,
+  PLANK_RING,
+  CUBE_RING,
+  CUBE_RING_HINGES,
+} from './mechanisms/infinity-cube.ts';
+
+export type {
   JoinedPairOptions,
   JoinedPairMechanism,
   JoinedPairChoice,

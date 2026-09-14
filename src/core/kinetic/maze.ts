@@ -35,11 +35,15 @@ export function stateStats(
   design: Pick<KineticDesign, 'open'>,
   stateIndex: number,
 ): StateStats {
+  const open = openAdjacencies(surface, design, stateIndex);
   const uf = new UnionFind<number>();
-  let components = surface.cellCount;
+  // Only what is on the outside counts. A cell buried inside a folded object
+  // carries no maze in this state, and counting it would leave every design
+  // looking disconnected by exactly the number of cells it had folded away.
+  let components = surface.visibleCount[stateIndex]!;
   let cycles = 0;
   let edges = 0;
-  for (const e of openAdjacencies(surface, design, stateIndex)) {
+  for (const e of open) {
     edges++;
     if (uf.connected(e.a, e.b)) cycles++;
     else {
@@ -51,25 +55,47 @@ export function stateStats(
 }
 
 /**
- * Picks cut classes to open, greedily, until every state has all pieces joined.
+ * Whether the seam openings alone stay a forest in every state.
+ *
+ * Two of them that close a loop would put a cycle in the maze that no choice
+ * of walls could undo, because a seam opening is forced: it is there in every
+ * state whether the design wants it or not.
+ */
+function staysForest(surface: KineticSurface, open: ReadonlySet<number>): boolean {
+  for (let s = 0; s < surface.stateCount; s++) {
+    const uf = new UnionFind<number>();
+    for (const e of surface.adjByState[s]!) {
+      if (!open.has(e.classId)) continue;
+      if (uf.connected(e.a, e.b)) return false;
+      uf.union(e.a, e.b);
+    }
+  }
+  return true;
+}
+
+/**
+ * Picks cut classes to open, greedily, until every state *could* be one maze —
+ * that is, until opening every free wall as well would join the whole visible
+ * surface into a single piece.
  * Fewer is better: every opening spends one unit of the spanning-tree budget,
  * so the pieces have to be internally split that much more (corollary 4).
+ *
+ * What is counted is the surface, not the pieces. One piece can carry two
+ * patches of surface that meet nowhere on it — the outer and the inner wall of
+ * a ring — and counting pieces would call such a state joined while half of
+ * its maze was still stranded. On a mechanism whose pieces each carry one
+ * patch the two counts agree, so this picks what it always picked.
  */
 export function chooseCutClasses(surface: KineticSurface, rng: Rng): number[] {
-  const pieceOf = surface.mechanism.cells.map(c => c.piece);
-  const pieceCount = surface.mechanism.pieceCount;
-
-  const pieceComponents = (open: Set<number>): number => {
+  const patchComponents = (open: Set<number>): number => {
     let total = 0;
     for (let s = 0; s < surface.stateCount; s++) {
       const uf = new UnionFind<number>();
-      let comps = pieceCount;
+      let comps = surface.visibleCount[s]!;
       for (const e of surface.adjByState[s]!) {
-        if (e.intra || !open.has(e.classId)) continue;
-        const pa = pieceOf[e.a]!;
-        const pb = pieceOf[e.b]!;
-        if (!uf.connected(pa, pb)) {
-          uf.union(pa, pb);
+        if (surface.classKind[e.classId] !== 'internal' && !open.has(e.classId)) continue;
+        if (!uf.connected(e.a, e.b)) {
+          uf.union(e.a, e.b);
           comps--;
         }
       }
@@ -81,12 +107,15 @@ export function chooseCutClasses(surface: KineticSurface, rng: Rng): number[] {
   const candidates = [...surface.cutClasses];
   rng.shuffle(candidates);
   const chosen = new Set<number>();
-  let best = pieceComponents(chosen);
-  const target = surface.stateCount; // every state down to a single piece-component
+  let best = patchComponents(chosen);
+  const target = surface.stateCount; // every state down to a single patch
   for (const c of candidates) {
     if (best === target) break;
     chosen.add(c);
-    const next = pieceComponents(chosen);
+    // A class can carry many sides at once on a mechanism that folds, so the
+    // one that joins the most surface is quite capable of closing a loop while
+    // it does it. Such a class is no use at any price: the loop is forced.
+    const next = staysForest(surface, chosen) ? patchComponents(chosen) : best;
     if (next < best) best = next;
     else chosen.delete(c);
   }
@@ -123,7 +152,15 @@ export function generateKineticMaze(
     uf.union(e.a, e.b);
   }
 
-  const walls = [...surface.internalEdges];
+  // A wall that is buried in the target state is no wall there: opening it
+  // would spend a passage the state cannot see. The order of the rest is the
+  // order they were found in, so a mechanism that never buries anything gets
+  // exactly the list it always got.
+  const present = new Set<number>();
+  for (const e of surface.adjByState[targetState] ?? []) {
+    if (surface.classKind[e.classId] === 'internal') present.add(e.classId);
+  }
+  const walls = surface.internalEdges.filter(e => present.has(e.classId));
   rng.shuffle(walls);
   for (const e of walls) {
     if (uf.connected(e.a, e.b)) continue;
@@ -211,11 +248,16 @@ export function searchDesign(
  * over the same vertex set, where allocation dominates.
  */
 class CellUnionFind {
+  private readonly size: number;
   private readonly parent: Int32Array;
   private readonly rank: Uint8Array;
   components: number;
 
-  constructor(private readonly size: number) {
+  // Written out rather than declared in the parameter list, so that the whole
+  // of core/ still loads in a plain `node file.ts` — which is how the probes
+  // in .dev/ run it.
+  constructor(size: number) {
+    this.size = size;
     this.parent = new Int32Array(size);
     this.rank = new Uint8Array(size);
     this.components = size;
@@ -260,7 +302,7 @@ class CellUnionFind {
 
 export interface MultiStateResult {
   readonly design: KineticDesign;
-  /** Sum over the target states of (components - 1). Zero means all are perfect. */
+  /** `costOverStates` for the target states. Zero means all are perfect. */
   readonly cost: number;
   readonly targetStates: readonly number[];
   readonly restarts: number;
@@ -269,24 +311,43 @@ export interface MultiStateResult {
   readonly steps: number;
 }
 
-/** Sum over `states` of (components - 1) — the quantity the optimiser drives to 0. */
+/**
+ * Sum over `states` of (components - 1) + cycles — what the optimiser drives to 0.
+ *
+ * Both ends of the same gap are charged for. Where the passage count is pinned
+ * at N-1 the two terms are always equal, so this is twice the old measure and
+ * the search is unchanged but for its scale; where a state can bury cells, the
+ * count is no longer pinned and a design may be connected *and* looped, which
+ * only the second term can see.
+ */
 export function costOverStates(
   surface: KineticSurface,
   design: Pick<KineticDesign, 'open'>,
   states: readonly number[],
 ): number {
   let cost = 0;
-  for (const s of states) cost += stateStats(surface, design, s).components - 1;
+  for (const s of states) {
+    const stats = stateStats(surface, design, s);
+    cost += stats.components - 1 + stats.cycles;
+  }
   return cost;
 }
 
 /**
  * Looks for a design that is a perfect maze in *several* states at once.
  *
- * Opening a wall somewhere always closes one elsewhere, because the passage
- * count is pinned at N-1; so this swaps one open internal class for a closed
- * one and anneals on how far the target states are from being connected. The
- * cut classes are left alone — changing them would change the budget.
+ * Where no cell is ever buried, opening a wall somewhere always closes one
+ * elsewhere, because the passage count is pinned at N-1; so this swaps one
+ * open internal class for a closed one and anneals on how far the target
+ * states are from being a tree. The cut classes are left alone — changing them
+ * would change the budget.
+ *
+ * A mechanism that folds shut has no such budget. The same wall counts in one
+ * state and is buried in the next, so the number of open classes is not the
+ * number of passages, and a swap can no longer reach every design: the search
+ * must be free to open one more wall than it closes. It is given that freedom
+ * only where it is needed, so a mechanism that hides nothing takes exactly the
+ * moves it always took, in the same order, from the same seed.
  *
  * A mechanism with few states (a hinged ring, a kaleidocycle) can plausibly be
  * made perfect in *every* state this way, which is the strongest form of the
@@ -306,7 +367,9 @@ export function optimizeForStates(
   const { rng, targetStates } = options;
   const iterations = options.iterations ?? 20000;
   const restarts = options.restarts ?? 4;
-  const startTemperature = options.startTemperature ?? 2.5;
+  // Twice what it was, because the cost now charges for both ends of a gap
+  // (see `costOverStates`) and the acceptance rule only ever sees the ratio.
+  const startTemperature = options.startTemperature ?? 5;
   if (targetStates.length === 0) throw new Error('targetStates must not be empty');
   for (const s of targetStates) {
     if (s < 0 || s >= surface.stateCount) throw new Error(`no such state: ${s}`);
@@ -317,8 +380,8 @@ export function optimizeForStates(
 
   // Flatten the parts of the graph the inner loop touches.
   const internal = surface.internalEdges;
-  const internalA = Int32Array.from(internal, e => e.a);
-  const internalB = Int32Array.from(internal, e => e.b);
+  const classIndexOf = new Map<number, number>();
+  internal.forEach((e, i) => classIndexOf.set(e.classId, i));
   const cutPairs = targetStates.map(s => {
     const pairs: number[] = [];
     for (const e of surface.adjByState[s]!) {
@@ -326,22 +389,45 @@ export function optimizeForStates(
     }
     return Int32Array.from(pairs);
   });
+  // Which cells a wall joins, per state: -1 where it is buried and joins none.
+  const wallPairs = targetStates.map(s => {
+    const pairs = new Int32Array(internal.length * 2).fill(-1);
+    for (const e of surface.adjByState[s]!) {
+      const index = classIndexOf.get(e.classId);
+      if (index === undefined) continue;
+      pairs[2 * index] = e.a;
+      pairs[2 * index + 1] = e.b;
+    }
+    return pairs;
+  });
+  const buried = targetStates.map(s => surface.cellCount - surface.visibleCount[s]!);
 
   const uf = new CellUnionFind(surface.cellCount);
-  const classIndexOf = new Map<number, number>();
-  internal.forEach((e, i) => classIndexOf.set(e.classId, i));
 
-  const evaluate = (openList: Int32Array): number => {
+  const evaluate = (openList: Int32Array, count: number): number => {
     let cost = 0;
-    for (const pairs of cutPairs) {
+    for (let t = 0; t < cutPairs.length; t++) {
+      const pairs = cutPairs[t]!;
+      const walls = wallPairs[t]!;
       uf.reset();
-      for (let i = 0; i < pairs.length; i += 2) uf.union(pairs[i]!, pairs[i + 1]!);
-      for (const e of openList) uf.union(internalA[e]!, internalB[e]!);
-      cost += uf.components - 1;
+      let cycles = 0;
+      for (let i = 0; i < pairs.length; i += 2) {
+        if (!uf.union(pairs[i]!, pairs[i + 1]!)) cycles++;
+      }
+      for (let k = 0; k < count; k++) {
+        const wall = 2 * openList[k]!;
+        const a = walls[wall]!;
+        if (a < 0) continue; // buried here, so it joins nothing here
+        if (!uf.union(a, walls[wall + 1]!)) cycles++;
+      }
+      // A buried cell is a component of its own; it is not part of the maze.
+      cost += uf.components - buried[t]! - 1 + cycles;
     }
     return cost;
   };
 
+  const canToggle = surface.hidesCells;
+  const capacity = internal.length;
   let bestList: Int32Array | null = null;
   let bestCost = Infinity;
   let steps = 0;
@@ -357,33 +443,58 @@ export function optimizeForStates(
       const index = classIndexOf.get(classId);
       if (index !== undefined) openIndices.push(index);
     }
-    let current = Int32Array.from(openIndices);
-    const isOpen = new Uint8Array(internal.length);
-    for (const i of current) isOpen[i] = 1;
-    let cost = evaluate(current);
-    const trial = new Int32Array(current.length);
+    const current = new Int32Array(capacity);
+    current.set(openIndices);
+    let size = openIndices.length;
+    const isOpen = new Uint8Array(capacity);
+    for (const i of openIndices) isOpen[i] = 1;
+    let cost = evaluate(current, size);
+    const trial = new Int32Array(capacity);
 
     for (let step = 0; step < iterations && cost > 0; step++) {
       steps++;
       const temperature = startTemperature * (1 - step / iterations) + 0.02;
-      const slot = rng.nextInt(current.length);
+
+      if (canToggle && rng.next() < TOGGLE_SHARE) {
+        const index = rng.nextInt(capacity);
+        let trialSize = 0;
+        if (isOpen[index]) {
+          for (let k = 0; k < size; k++) {
+            if (current[k] !== index) trial[trialSize++] = current[k]!;
+          }
+        } else {
+          trial.set(current.subarray(0, size));
+          trial[size] = index;
+          trialSize = size + 1;
+        }
+        const next = evaluate(trial, trialSize);
+        if (next <= cost || rng.next() < Math.exp((cost - next) / temperature)) {
+          isOpen[index] = isOpen[index] ? 0 : 1;
+          current.set(trial.subarray(0, trialSize));
+          size = trialSize;
+          cost = next;
+        }
+        continue;
+      }
+
+      const slot = rng.nextInt(size);
       const leaving = current[slot]!;
-      const entering = rng.nextInt(internal.length);
+      const entering = rng.nextInt(capacity);
       if (isOpen[entering]) continue;
-      trial.set(current);
+      trial.set(current.subarray(0, size));
       trial[slot] = entering;
-      const next = evaluate(trial);
+      const next = evaluate(trial, size);
       if (next <= cost || rng.next() < Math.exp((cost - next) / temperature)) {
         isOpen[leaving] = 0;
         isOpen[entering] = 1;
-        current.set(trial);
+        current.set(trial.subarray(0, size));
         cost = next;
       }
     }
 
     if (cost < bestCost) {
       bestCost = cost;
-      bestList = Int32Array.from(current);
+      bestList = Int32Array.from(current.subarray(0, size));
     }
   }
 
@@ -398,6 +509,15 @@ export function optimizeForStates(
     steps,
   };
 }
+
+/**
+ * How often the annealer opens or closes a wall rather than moving one.
+ *
+ * Only where cells can be buried, and an even split there: a run of swaps is
+ * what actually rearranges a maze, while toggles are what let the number of
+ * passages settle where each state needs it.
+ */
+const TOGGLE_SHARE = 0.5;
 
 export interface StartGoal {
   readonly start: number;
@@ -441,8 +561,10 @@ export function pickStartGoal(
     neighbours.get(e.b)!.push(e.a);
   }
 
+  // A marker is printed once and the object then moves, so it can only go
+  // somewhere that is on the outside however the object is folded.
   const onRim: number[] = [];
-  for (let cell = 0; cell < surface.cellCount; cell++) {
+  for (const cell of surface.alwaysVisible) {
     const from = surface.sideStart[cell]!;
     const to = surface.sideStart[cell + 1]!;
     for (let side = from; side < to; side++) {
@@ -500,7 +622,8 @@ function deadEndsInEveryState(
   surface: KineticSurface,
   design: Pick<KineticDesign, 'open'>,
 ): number[] {
-  const stillLeaf = new Uint8Array(surface.cellCount).fill(1);
+  const stillLeaf = new Uint8Array(surface.cellCount);
+  for (const cell of surface.alwaysVisible) stillLeaf[cell] = 1;
   const degree = new Int32Array(surface.cellCount);
   for (const adj of surface.adjByState) {
     degree.fill(0);
@@ -539,18 +662,6 @@ export function expandCutClasses(
   const chosen = [...(options.base ?? chooseCutClasses(surface, rng))];
   if (extra <= 0) return chosen;
 
-  const staysForest = (open: Set<number>): boolean => {
-    for (let s = 0; s < surface.stateCount; s++) {
-      const uf = new UnionFind<number>();
-      for (const e of surface.adjByState[s]!) {
-        if (!open.has(e.classId)) continue;
-        if (uf.connected(e.a, e.b)) return false;
-        uf.union(e.a, e.b);
-      }
-    }
-    return true;
-  };
-
   const open = new Set(chosen);
   const candidates = surface.cutClasses.filter(c => !open.has(c));
   rng.shuffle(candidates);
@@ -558,7 +669,7 @@ export function expandCutClasses(
   for (const c of candidates) {
     if (added === extra) break;
     open.add(c);
-    if (staysForest(open)) {
+    if (staysForest(surface, open)) {
       chosen.push(c);
       added++;
     } else {

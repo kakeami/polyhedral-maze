@@ -42,6 +42,14 @@ export interface KineticSurface {
   /** The one adjacency behind each 'internal' class — the free maze walls. */
   readonly internalEdges: readonly SurfaceAdjacency[];
   readonly cutClasses: readonly number[];
+  /** 1 where the cell is on the outside of the object in that state. */
+  readonly visibleByState: readonly Uint8Array[];
+  /** How many cells are on the outside in each state. */
+  readonly visibleCount: Int32Array;
+  /** Cells on the outside in *every* state — the only places a marker can go. */
+  readonly alwaysVisible: readonly number[];
+  /** Whether any cell is ever hidden: false for a mechanism that never folds shut. */
+  readonly hidesCells: boolean;
 }
 
 interface Pairing {
@@ -51,13 +59,66 @@ interface Pairing {
   cellB: number;
 }
 
-/** Pairs up sides that occupy the same segment of the surface in one state. */
-function pairSides(mech: Mechanism, state: KineticState, sideStart: Int32Array): Pairing[] {
+/**
+ * Cells that lie on the outside of the object in one state.
+ *
+ * Folding a mechanism shut presses two cells face to face, and from then on
+ * both of them describe a patch of surface that is *inside* the object: the
+ * maze cannot be seen there and cannot be walked across it. Two cells pressed
+ * together occupy the same patch of space, so coincident centres are the whole
+ * test — no boundary of a union of solids is needed. A mechanism whose pieces
+ * never meet face to face (the stack, a glued pair) has every cell visible in
+ * every state, which is why this changes nothing for them.
+ */
+function visibleCells(mech: Mechanism, state: KineticState): Uint8Array {
+  const visible = new Uint8Array(mech.cells.length).fill(1);
+  const welder = new VertexWelder();
+  const firstAt = new Map<number, number>();
+
+  mech.cells.forEach((cell, cellIndex) => {
+    const placement = state[cell.piece];
+    if (!placement) throw new Error(`state is missing a placement for piece ${cell.piece}`);
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    for (const corner of cell.corners) {
+      const p = applyPlacement(placement, corner);
+      cx += p[0];
+      cy += p[1];
+      cz += p[2];
+    }
+    const n = cell.corners.length;
+    const id = welder.id([cx / n, cy / n, cz / n]);
+    const first = firstAt.get(id);
+    if (first === undefined) firstAt.set(id, cellIndex);
+    else {
+      visible[cellIndex] = 0;
+      visible[first] = 0;
+    }
+  });
+  return visible;
+}
+
+/**
+ * Pairs up sides that occupy the same segment of the surface in one state.
+ *
+ * Hidden cells take no part: their sides are buried with them, and it is only
+ * by leaving them out that a segment is shared by at most two sides. Where
+ * four cubes of a folded ring meet along an interior edge, all eight sides
+ * incident to it belong to hidden cells, so nothing at all is left there.
+ */
+function pairSides(
+  mech: Mechanism,
+  state: KineticState,
+  sideStart: Int32Array,
+  visible: Uint8Array,
+): Pairing[] {
   const welder = new VertexWelder();
   const bySegment = new Map<string, number[]>();
   const cellOfSide: number[] = [];
 
   mech.cells.forEach((cell, cellIndex) => {
+    if (!visible[cellIndex]) return;
     const placement = state[cell.piece];
     if (!placement) throw new Error(`state is missing a placement for piece ${cell.piece}`);
     const ids = cell.corners.map(c => welder.id(applyPlacement(placement, c)));
@@ -104,7 +165,20 @@ export function buildSurface(mech: Mechanism, options: { maxStates?: number } = 
   }
   const sideCount = sideStart[cellCount]!;
 
-  const pairsByState = mech.states.map(state => pairSides(mech, state, sideStart));
+  const visibleByState = mech.states.map(state => visibleCells(mech, state));
+  const visibleCount = Int32Array.from(visibleByState, v => {
+    let n = 0;
+    for (const bit of v) n += bit;
+    return n;
+  });
+  const alwaysVisible: number[] = [];
+  for (let cell = 0; cell < cellCount; cell++) {
+    if (visibleByState.every(v => v[cell] === 1)) alwaysVisible.push(cell);
+  }
+
+  const pairsByState = mech.states.map((state, index) =>
+    pairSides(mech, state, sideStart, visibleByState[index]!),
+  );
 
   // One design boolean per class: sides that ever meet must agree (L0).
   const uf = new UnionFind<number>();
@@ -143,12 +217,16 @@ export function buildSurface(mech: Mechanism, options: { maxStates?: number } = 
   }
 
   // An internal class never changes partner, so it stands for exactly one wall.
+  // Every state is scanned rather than the first, because a wall can be buried
+  // in one state and back on the surface in the next; it is still one wall.
   const internalEdges: SurfaceAdjacency[] = [];
   const seen = new Set<number>();
-  for (const adj of adjByState[0]!) {
-    if (kind[adj.classId] !== 'internal' || seen.has(adj.classId)) continue;
-    seen.add(adj.classId);
-    internalEdges.push(adj);
+  for (const adj of adjByState) {
+    for (const e of adj) {
+      if (kind[e.classId] !== 'internal' || seen.has(e.classId)) continue;
+      seen.add(e.classId);
+      internalEdges.push(e);
+    }
   }
   for (let c = 0; c < classCount; c++) {
     if (kind[c] === 'internal' && classSides[c]!.length !== 2) {
@@ -172,5 +250,9 @@ export function buildSurface(mech: Mechanism, options: { maxStates?: number } = 
     adjByState,
     internalEdges,
     cutClasses,
+    visibleByState,
+    visibleCount,
+    alwaysVisible,
+    hidesCells: alwaysVisible.length < cellCount,
   };
 }
