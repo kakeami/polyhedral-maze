@@ -14,9 +14,13 @@ const design = generateKineticMaze(surface, { rng: createRng(20260912) });
 const plan = buildStackSheets(mech, surface, design);
 
 const allItems = plan.sheets.flatMap(s => s.items);
+// A maze wall is drawn at one of two weights: the lighter one inside a face,
+// the rim weight on an edge of the prism, which is a fold or a cut as well as
+// a wall. Both are walls, and the counts below are of walls.
 const wallLines = allItems.filter(
   (i): i is Extract<PageItem, { kind: 'line' }> =>
-    i.kind === 'line' && i.stroke === STACK_SHEET_STYLE.wallColor,
+    i.kind === 'line' &&
+    (i.stroke === STACK_SHEET_STYLE.wallColor || i.stroke === STACK_SHEET_STYLE.boundaryColor),
 );
 
 describe('stack sheets', () => {
@@ -89,6 +93,41 @@ describe('stack sheets', () => {
     }
     const full = [...byY.values()].filter(total => Math.abs(total - 180) < 1e-6);
     expect(full.length).toBe(2);
+  });
+
+  it('draws the rims and the creases at the rim weight, the inside at the lighter one', () => {
+    // The edges of the prism are not only walls: they are what the builder
+    // folds or cuts along, and the net PDF of a solid gives them their own
+    // weight for exactly that reason.
+    const rim = wallLines.filter(l => l.stroke === STACK_SHEET_STYLE.boundaryColor);
+    const inside = wallLines.filter(l => l.stroke === STACK_SHEET_STYLE.wallColor);
+    expect(rim.length).toBeGreaterThan(0);
+    expect(inside.length).toBeGreaterThan(0);
+    expect(rim.length + inside.length).toBe(wallLines.length);
+    // Every rim wall runs along an edge of the prism: a horizontal one on a
+    // band rim, a vertical one on a crease. Nothing else is drawn that heavy.
+    const verticals = rim.filter(l => Math.abs(l.a[0] - l.b[0]) < 1e-9);
+    for (const line of verticals) {
+      const column = Math.round((line.a[0] - A4_SHEET.margin) / 10);
+      expect(column % mech.cols).toBe(0);
+    }
+  });
+
+  it('stands the band\'s glue tab outside the band, filled rather than outlined', () => {
+    const tabs = allItems.filter(
+      (i): i is Extract<PageItem, { kind: 'poly' }> =>
+        i.kind === 'poly' && i.fill === STACK_SHEET_STYLE.glueFill,
+    );
+    // One per band, plus one per edge of every bulkhead.
+    expect(tabs.length).toBe(mech.layers * (1 + mech.sides * 2));
+    const bandRight = A4_SHEET.margin + mech.sides * mech.cols * 10;
+    const bandTabs = tabs.filter(t => t.pts.length === 4 && t.pts.some(pt => pt[0] > bandRight));
+    expect(bandTabs.length).toBe(mech.layers);
+    for (const tab of bandTabs) {
+      // Wholly to the right of the band: a tab over the maze is a tab folded
+      // the wrong way, and the walls under it would be glued out of sight.
+      for (const [x] of tab.pts) expect(x).toBeGreaterThanOrEqual(bandRight - 1e-9);
+    }
   });
 
   it('sits the entrance and the exit on dead ends, in every state', () => {

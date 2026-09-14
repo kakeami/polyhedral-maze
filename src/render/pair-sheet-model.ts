@@ -17,9 +17,13 @@
  */
 
 import type { Vec2 } from '../core/vec2.ts';
+import { centroid2 } from '../core/vec2.ts';
 import type { Face } from '../core/types.ts';
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { PageItem } from './face-page-model.ts';
+// The rim is ruled the way a printed face of a solid is ruled, by calling the
+// same code rather than by imitating it.
+import { insetPolygon } from './face-page-model.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { JoinedPairMechanism } from '../core/kinetic/mechanisms/joined.ts';
@@ -28,7 +32,7 @@ import { sub, scale as scale3, dot } from '../core/vec3.ts';
 import { computeNetLayout } from './net-layout.ts';
 import { cellVerts2d } from './net-cell-geometry.ts';
 import { buildEdgeIndex } from './edge-index.ts';
-import { bulkheadTabQuads, circlePoly, polygonPoints } from './stack-sheet-model.ts';
+import { bulkheadTabQuads, circlePoly, glueTabQuad, polygonPoints } from './stack-sheet-model.ts';
 import type { SheetBox } from './stack-sheet-model.ts';
 import {
   STACK_SHEET_STYLE as S,
@@ -175,15 +179,17 @@ export function buildPairSheets(
     : `${perfect} of the ${surface.stateCount} ways to turn the halves make a perfect maze — find one.`;
   for (const note of [
     'Print at 100%. Glue the sheets to thin card, then cut.',
-    '1. Cut each half on the dashed outline. Score the dotted folds and fold them all one way.',
-    '2. Glue the tabs inside. The open polygon is the face the two halves meet at — leave it open.',
-    `3. Pierce the bulkheads and the two discs for a ${dowel} mm dowel, and cut a dowel about ` +
+    '1. Cut each half on the dashed outline, round the shaded tabs.',
+    '2. Fold along every seam between two faces, all one way — the heavy lines inside a piece ' +
+      'are its folds.',
+    '3. Glue the tabs inside. The open polygon is the face the two halves meet at — leave it open.',
+    `4. Pierce the bulkheads and the two discs for a ${dowel} mm dowel, and cut a dowel about ` +
       `${dowelLengthMm} mm long.`,
-    '4. Fold the bulkhead tabs. Glue one bulkhead inside the first half, flush with the opening, ' +
+    '5. Fold the bulkhead tabs. Glue one bulkhead inside the first half, flush with the opening, ' +
       'then glue the dowel standing in its hole.',
-    '5. Slide the second bulkhead on, glue a disc to the dowel above it, and glue that bulkhead ' +
+    '6. Slide the second bulkhead on, glue a disc to the dowel above it, and glue that bulkhead ' +
       'into the second half with the disc inside.',
-    '6. Nothing else is glued: the two halves have to turn against each other.',
+    '7. Nothing else is glued: the two halves have to turn against each other.',
     puzzleLine,
   ]) {
     items.push({
@@ -212,23 +218,53 @@ export function buildPairSheets(
     // Page millimetres run y-down and the net comes out y-up.
     const place = ([x, y]: Vec2): Vec2 => [originX + x * scale, originY + (layout.height - y) * scale];
 
+    // Drawn in the order the net PDF draws its own: glue tabs underneath, then
+    // the faces themselves over any tab that falls across one, then the guides,
+    // then the maze — the rim over the walls, and the letters over everything,
+    // because they are the puzzle and a wall is only a wall.
+    const tabs: PageItem[] = [];
+    const paper: PageItem[] = [];
+    const guides: PageItem[] = [];
+    const marks: PageItem[] = [];
+    const walls: PageItem[] = [];
+    const rim: PageItem[] = [];
+    const letters: PageItem[] = [];
+
     for (const face of carrying) {
       const flat = netFaces.get(netIdOf.get(face.id)!);
       if (!flat) continue;
       drawFace(face, flat, piece);
     }
+    for (const layer of [tabs, paper, guides, marks, walls, rim, letters]) items.push(...layer);
     cursorY += netHeight + 2 * tab + gap;
 
     function drawFace(face: Face, flat: Vec2[], half: number) {
       const grid = mech.polyhedron.gridForFace(face, mech.n);
       const sides = face.vertices.length;
+      const outline = flat.map(place);
+      const inside = centroid2(outline);
+      // Where a rim wall runs: the outline pushed in by half the wall's width,
+      // corners mitred, so the wall's outer edge lands on the cut guide.
+      const rimLine = insetPolygon(outline, inside, S.boundaryInset);
+      // A ten-thousandth of a cell: far above what the arithmetic loses and far
+      // below any real gap, so what it separates is a cell side lying *on* an
+      // edge of the face from one merely near it.
+      const onEdgeTol = cellMm * 1e-4;
+      const folds: boolean[] = [];
 
-      // Outline: a fold where the neighbour was unfolded beside it, a cut
-      // otherwise. Cuts on the joint's own ring get no tab: that opening is
-      // where the bulkhead goes and where the other half sits.
+      paper.push({ kind: 'poly', pts: outline, fill: S.paperColor });
+
+      // Outline: a cut guide where the face's edge is an edge of the net, and
+      // nothing at all where the neighbour was unfolded beside it. A crease is
+      // not drawn, for the same reason the net PDF does not draw one: the line
+      // would have to run straight through the passages that cross it, and a
+      // dashed line across an opening reads as a wall. What marks a crease is
+      // the rim wall on either side of the gap. Cuts on the joint's own ring
+      // get no tab: that opening is where the bulkhead goes and where the other
+      // half sits.
       for (let e = 0; e < sides; e++) {
-        const a = place(flat[e]!);
-        const b = place(flat[(e + 1) % sides]!);
+        const a = outline[e]!;
+        const b = outline[(e + 1) % sides]!;
         const neighbour = edgeIndex.findAdjacentFace(face.id, e);
         const onJoint = neighbour === mech.jointFaceId;
         const here = netIdOf.get(face.id)!;
@@ -236,15 +272,14 @@ export function buildPairSheets(
         const folded = there !== undefined && layout.foldPairs.has(
           here < there ? `${here}:${there}` : `${there}:${here}`,
         );
-        if (folded) {
-          items.push({ kind: 'line', a, b, stroke: S.foldColor, width: S.foldWidth, dash: S.foldDash });
-          continue;
-        }
-        items.push({ kind: 'line', a, b, stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash });
+        folds[e] = folded;
+        if (folded) continue;
+        guides.push({ kind: 'line', a, b, stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash });
         if (!onJoint && layout.tabOwners.has(`${here}:${e}`)) {
-          items.push({
-            kind: 'poly', pts: glueTab(a, b, tab * 0.7),
-            stroke: S.glueColor, width: S.glueWidth, dash: S.cutDash,
+          const height = tab * 0.7;
+          const taper = Math.min(height, Math.hypot(b[0] - a[0], b[1] - a[1]) / 3);
+          tabs.push({
+            kind: 'poly', pts: glueTabQuad(a, b, height, taper, inside), fill: S.glueFill,
           });
         }
       }
@@ -254,20 +289,33 @@ export function buildPairSheets(
         if (index === undefined) continue;
         const corners = cellVerts2d(flat, cell, mech.n, grid.kind).map(place);
         if (index === start || index === goal) {
-          items.push({
+          marks.push({
             kind: 'poly', pts: corners,
             fill: index === start ? S.startColor : S.goalColor,
           });
-          items.push({
-            kind: 'text', at: centre(corners), text: index === start ? 'S' : 'G',
+          letters.push({
+            kind: 'text', at: centroid2(corners), text: index === start ? 'S' : 'G',
             size: S.markerTextSize, color: S.markerTextColor,
           });
         }
         for (let side = 0; side < corners.length; side++) {
           if (isOpen(index, side)) continue;
-          items.push({
-            kind: 'line', a: corners[side]!, b: corners[(side + 1) % corners.length]!,
-            stroke: S.wallColor, width: S.wallWidth, cap: 'round',
+          const a = corners[side]!;
+          const b = corners[(side + 1) % corners.length]!;
+          const e = faceEdgeUnder(outline, a, b, onEdgeTol);
+          if (e === null) {
+            walls.push({ kind: 'line', a, b, stroke: S.wallColor, width: S.wallWidth, cap: 'round' });
+            continue;
+          }
+          // A wall on an edge of the face is the rim of the finished piece:
+          // heavier, and pulled in off a cut so the knife does not take half
+          // of it away. On a fold it stays put, astride the crease.
+          const [p, q] = folds[e]
+            ? [a, b]
+            : [onInset(outline, rimLine, e, a), onInset(outline, rimLine, e, b)];
+          rim.push({
+            kind: 'line', a: p, b: q,
+            stroke: S.boundaryColor, width: S.boundaryWidth, cap: 'round',
           });
         }
       }
@@ -308,9 +356,7 @@ export function buildPairSheets(
       const cy = cursorY + across;
       const points = polygonPoints([cx, cy], jointRadiusMm, mech.gon);
       for (const quad of bulkheadTabQuads(points, bulkheadTab)) {
-        items.push({
-          kind: 'poly', pts: quad, stroke: S.glueColor, width: S.glueWidth, dash: S.cutDash,
-        });
+        items.push({ kind: 'poly', pts: quad, fill: S.glueFill });
       }
       for (let e = 0; e < points.length; e++) {
         items.push({
@@ -320,7 +366,7 @@ export function buildPairSheets(
       }
       items.push({
         kind: 'poly', pts: circlePoly([cx, cy], (dowel + D.dowelClearanceMm) / 2),
-        stroke: S.cutColor, width: S.cutWidth,
+        stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
       });
     }
     cursorY += 2 * across + gap;
@@ -340,7 +386,7 @@ export function buildPairSheets(
     });
     items.push({
       kind: 'poly', pts: circlePoly([cx, cy], dowel / 2),
-      stroke: S.cutColor, width: S.cutWidth,
+      stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
     });
   }
   cursorY += 2 * discRadius;
@@ -357,34 +403,55 @@ export function buildPairSheets(
   };
 }
 
-/** A tab standing off the outside of a cut edge, tapered so it glues flat. */
-function glueTab(a: Vec2, b: Vec2, height: number): Vec2[] {
-  const ex = b[0] - a[0];
-  const ey = b[1] - a[1];
-  const len = Math.hypot(ex, ey) || 1;
-  const ux = ex / len;
-  const uy = ey / len;
-  // Page coordinates run y-down, so the outward normal turns the other way
-  // from the textbook one.
-  const nx = uy;
-  const ny = -ux;
-  const taper = Math.min(height, len / 3);
-  return [
-    a,
-    [a[0] + ux * taper + nx * height, a[1] + uy * taper + ny * height],
-    [b[0] - ux * taper + nx * height, b[1] - uy * taper + ny * height],
-    b,
-  ];
+/**
+ * Which edge of `outline` the segment ab lies along, or null if it lies inside
+ * the face.
+ *
+ * Asked of every closed side of every cell, because a cell does not know
+ * whether it is at the edge of its face: which sides those are depends on the
+ * grid, and every grid answers differently. The geometry answers for all of
+ * them at once.
+ */
+function faceEdgeUnder(
+  outline: readonly Vec2[], a: Vec2, b: Vec2, tol: number,
+): number | null {
+  for (let e = 0; e < outline.length; e++) {
+    const p = outline[e]!;
+    const q = outline[(e + 1) % outline.length]!;
+    if (onEdge(p, q, a, tol) && onEdge(p, q, b, tol)) return e;
+  }
+  return null;
 }
 
-function centre(points: readonly Vec2[]): Vec2 {
-  let x = 0;
-  let y = 0;
-  for (const p of points) {
-    x += p[0];
-    y += p[1];
-  }
-  return [x / points.length, y / points.length];
+/** Whether x lies on the segment pq, to within `tol` millimetres. */
+function onEdge(p: Vec2, q: Vec2, x: Vec2, tol: number): boolean {
+  const ex = q[0] - p[0];
+  const ey = q[1] - p[1];
+  const len = Math.hypot(ex, ey);
+  if (len < tol) return false;
+  const along = ((x[0] - p[0]) * ex + (x[1] - p[1]) * ey) / len;
+  const off = Math.abs((x[0] - p[0]) * ey - (x[1] - p[1]) * ex) / len;
+  return off <= tol && along >= -tol && along <= len + tol;
+}
+
+/** How far along pq the point x lies, as a fraction of the whole edge. */
+function fractionAlong(p: Vec2, q: Vec2, x: Vec2): number {
+  const ex = q[0] - p[0];
+  const ey = q[1] - p[1];
+  const square = ex * ex + ey * ey;
+  if (square === 0) return 0;
+  return ((x[0] - p[0]) * ex + (x[1] - p[1]) * ey) / square;
+}
+
+/** The point of edge `e` at the same fraction along, on the inset outline. */
+function onInset(
+  outline: readonly Vec2[], inset: readonly Vec2[], e: number, x: Vec2,
+): Vec2 {
+  const nv = outline.length;
+  const t = fractionAlong(outline[e]!, outline[(e + 1) % nv]!, x);
+  const p = inset[e]!;
+  const q = inset[(e + 1) % nv]!;
+  return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
 }
 
 function centroid3(face: Face): [number, number, number] {

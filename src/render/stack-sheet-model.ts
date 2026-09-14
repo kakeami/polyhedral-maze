@@ -13,7 +13,11 @@
  */
 
 import type { Vec2 } from '../core/vec2.ts';
+import { centroid2 } from '../core/vec2.ts';
 import type { PageItem } from './face-page-model.ts';
+// Which way is out of a piece is decided by the same helper the printed faces
+// of a solid use, never by the order a polygon's points happen to come in.
+import { offsetOutward } from './face-page-model.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { StackMechanism } from '../core/kinetic/mechanisms/stack.ts';
@@ -91,27 +95,38 @@ export function bulkheadTabQuads(
 ): Vec2[][] {
   const sides = points.length;
   const interiorAngle = (Math.PI * (sides - 2)) / sides;
-  const taperFor = (length: number) =>
-    Math.min(tabHeight / Math.tan(interiorAngle / 2) + clearance, length / 2.5);
+  const inside = centroid2(points);
   return points.map((a, i) => {
     const b = points[(i + 1) % sides]!;
-    const ex = b[0] - a[0];
-    const ey = b[1] - a[1];
-    const len = Math.hypot(ex, ey);
-    const ux = ex / len;
-    const uy = ey / len;
-    // Page coordinates run y-down, so the outward normal is the edge direction
-    // turned the other way from the textbook one.
-    const nx = uy;
-    const ny = -ux;
-    const taper = taperFor(len);
-    return [
-      a,
-      [a[0] + ux * taper + nx * tabHeight, a[1] + uy * taper + ny * tabHeight],
-      [b[0] - ux * taper + nx * tabHeight, b[1] - uy * taper + ny * tabHeight],
-      b,
-    ] as Vec2[];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const taper = Math.min(tabHeight / Math.tan(interiorAngle / 2) + clearance, len / 2.5);
+    return glueTabQuad(a, b, tabHeight, taper, inside);
   });
+}
+
+/**
+ * A tapered tab standing off the edge a->b, on the far side from `inside`.
+ *
+ * Which side is out is settled by `inside` and never by the order the points
+ * come in, because the callers do not agree on it: a bulkhead is a polygon
+ * generated right here, a half of a glued pair is a face handed over by the
+ * net unfolder and then flipped into page coordinates, which reverses its
+ * winding. A tab that reads the winding is a tab that stands outside one of
+ * them and folds into the maze on the other.
+ */
+export function glueTabQuad(
+  a: Vec2, b: Vec2, height: number, taper: number, inside: Vec2,
+): Vec2[] {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const ux = (b[0] - a[0]) / len;
+  const uy = (b[1] - a[1]) / len;
+  const [oa, ob] = offsetOutward(a, b, inside, height);
+  return [
+    a,
+    [oa[0] + ux * taper, oa[1] + uy * taper],
+    [ob[0] - ux * taper, ob[1] - uy * taper],
+    b,
+  ];
 }
 
 export function buildStackSheets(
@@ -175,11 +190,12 @@ export function buildStackSheets(
       : `${perfect} of the ${surface.stateCount} ways to turn the rings make a perfect maze — find one.`;
   const notes = [
     'Print at 100%. Glue the sheet to thin card, then cut.',
-    `1. Cut each band on the dashed outline. Score the dotted verticals and fold them.`,
-    `2. Roll the band into a ring and glue the tab inside the far end.`,
-    `3. Fold the bulkhead tabs and glue one bulkhead inside each end of every band, flush with the edge.`,
-    `4. Thread the ${mech.layers} rings onto a ${dowel} mm dowel. Do not glue them — they have to turn.`,
-    '5. Cap the dowel above and below so the rings cannot slide off.',
+    '1. Score each band down the line between the ticks above it and below it — one score a crease.',
+    '2. Cut the band out on the dashed outline, round the shaded tab, and fold on every score.',
+    `3. Roll the band into a ring and glue the tab inside the far end.`,
+    `4. Fold the bulkhead tabs and glue one bulkhead inside each end of every band, flush with the edge.`,
+    `5. Thread the ${mech.layers} rings onto a ${dowel} mm dowel. Do not glue them — they have to turn.`,
+    '6. Cap the dowel above and below so the rings cannot slide off.',
     puzzleLine,
   ];
   for (const note of notes) {
@@ -212,30 +228,62 @@ export function buildStackSheets(
       size: S.labelSize, color: S.labelColor, align: 'left',
     });
 
-    // Cut outline: band plus the taper of the glue tab.
+    // The glue tab, first so that everything else is drawn over it. A fill and
+    // no outline: its silhouette is the cut, and the edge it stands on is the
+    // fold, which a single outline could not tell apart.
     const tabTop = y0 + D.tabTaperMm;
     const tabBottom = y0 + bandHeight - D.tabTaperMm;
     items.push({
       kind: 'poly',
       pts: [
-        [x0, y0], [xOf(columns), y0], [xOf(columns) + bandTab, tabTop],
-        [xOf(columns) + bandTab, tabBottom], [xOf(columns), y0 + bandHeight], [x0, y0 + bandHeight],
+        [xOf(columns), y0], [xOf(columns) + bandTab, tabTop],
+        [xOf(columns) + bandTab, tabBottom], [xOf(columns), y0 + bandHeight],
       ],
-      stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
+      fill: S.glueFill,
     });
 
-    // Score lines at the prism's vertical edges, and at the tab fold.
-    for (let k = 1; k <= mech.sides; k++) {
+    // Cut guide, on the band's own three cut sides. The fourth is the fold the
+    // tab turns on, and a cut mark there would be an instruction to cut the
+    // tab off.
+    for (const [a, b] of [
+      [[x0, y0], [xOf(columns), y0]],
+      [[x0, y0 + bandHeight], [xOf(columns), y0 + bandHeight]],
+      [[x0, y0], [x0, y0 + bandHeight]],
+    ] as [Vec2, Vec2][]) {
+      items.push({ kind: 'line', a, b, stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash });
+    }
+
+    // Where the band creases into the prism's edges, marked by a tick above
+    // and below and by nothing in between.
+    //
+    // A line drawn down the crease would have to cross every passage that
+    // crosses it, and a line across an opening reads as a wall — which is why
+    // the net PDF of a solid draws no crease at all. A band has no shape of its
+    // own to fold by, though, so the two ticks stand in for the line: lay a
+    // ruler between them and score, then cut the band out. They sit outside the
+    // cut guide, so nothing of them survives onto the finished ring.
+    for (let k = 1; k < mech.sides; k++) {
       const x = xOf(k * mech.cols);
-      items.push({
-        kind: 'line', a: [x, y0], b: [x, y0 + bandHeight],
-        stroke: S.foldColor, width: S.foldWidth, dash: S.foldDash,
-      });
+      for (const [from, to] of [
+        [y0 - S.creaseTickMm, y0],
+        [y0 + bandHeight, y0 + bandHeight + S.creaseTickMm],
+      ] as [number, number][]) {
+        items.push({
+          kind: 'line', a: [x, from], b: [x, to],
+          stroke: S.foldColor, width: S.creaseTickWidth,
+        });
+      }
     }
 
     // Walls. Every edge of the grid is drawn once: the bottom and left side of
     // each cell, plus the top side of the top row. The band's right edge is the
     // same seam as its left edge once rolled, so it is not drawn twice.
+    //
+    // A wall on an edge of the prism — the two rims and the vertical creases —
+    // is drawn as a rim wall, the weight the net PDF gives the edges of a face,
+    // because it is a fold or a cut as well as a wall. On a cut it is inset by
+    // half its width so its outer edge lands on the cut guide; on a crease it
+    // sits astride the fold, where the paper carries on.
     for (let face = 0; face < mech.sides; face++) {
       for (let col = 0; col < mech.cols; col++) {
         const u = face * mech.cols + col;
@@ -243,10 +291,24 @@ export function buildStackSheets(
           const index = mech.cellIndex(layer, face, row, col);
           const wall = (a: Vec2, b: Vec2) =>
             items.push({ kind: 'line', a, b, stroke: S.wallColor, width: S.wallWidth, cap: 'round' });
-          if (!open(index, 0)) wall([xOf(u), yOf(row)], [xOf(u + 1), yOf(row)]);
-          if (!open(index, 3)) wall([xOf(u), yOf(row)], [xOf(u), yOf(row + 1)]);
+          const rim = (a: Vec2, b: Vec2) =>
+            items.push({
+              kind: 'line', a, b, stroke: S.boundaryColor, width: S.boundaryWidth, cap: 'round',
+            });
+          const bottomIsRim = row === 0;
+          const leftIsRim = col === 0;
+          if (!open(index, 0)) {
+            const y = bottomIsRim ? yOf(row) - S.boundaryInset : yOf(row);
+            (bottomIsRim ? rim : wall)([xOf(u), y], [xOf(u + 1), y]);
+          }
+          if (!open(index, 3)) {
+            // The band's own left edge is a cut; every other crease is a fold.
+            const x = u === 0 ? xOf(u) + S.boundaryInset : xOf(u);
+            (leftIsRim ? rim : wall)([x, yOf(row)], [x, yOf(row + 1)]);
+          }
           if (row === mech.rows - 1 && !open(index, 2)) {
-            wall([xOf(u), yOf(row + 1)], [xOf(u + 1), yOf(row + 1)]);
+            const y = yOf(row + 1) + S.boundaryInset;
+            rim([xOf(u), y], [xOf(u + 1), y]);
           }
           if (index === start || index === goal) {
             const inset = cell * 0.18;
@@ -294,21 +356,15 @@ export function buildStackSheets(
       const cy = rowTop + bulkheadSpan / 2;
       const pts = polygonPoints([cx, cy], bulkheadRadius, mech.sides);
       const tabs = bulkheadTabQuads(pts, bulkheadTab);
-      tabs.forEach((quad, e) => {
-        const a = quad[0]!;
-        const b = quad[3]!;
-        // Open path: the cut line is the outside of the tab only. Closing it
-        // along the polygon edge would put a cut mark on a fold.
-        for (const [p, q] of [[a, quad[1]!], [quad[1]!, quad[2]!], [quad[2]!, b]] as [Vec2, Vec2][]) {
-          items.push({
-            kind: 'line', a: p, b: q, stroke: S.glueColor, width: S.glueWidth, dash: S.cutDash,
-          });
-        }
+      // Filled, not outlined: the tab's own silhouette is what the knife
+      // follows, and the edge it stands on is a fold rather than a cut.
+      for (const quad of tabs) items.push({ kind: 'poly', pts: quad, fill: S.glueFill });
+      for (let e = 0; e < pts.length; e++) {
         items.push({
           kind: 'line', a: pts[e]!, b: pts[(e + 1) % pts.length]!,
           stroke: S.foldColor, width: S.foldWidth, dash: S.foldDash,
         });
-      });
+      }
       items.push({
         kind: 'poly',
         pts: circlePoly([cx, cy], (dowel + D.dowelClearanceMm) / 2),

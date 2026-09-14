@@ -510,7 +510,7 @@ function bbox(pts: Vec2[], angle: number): [number, number, number, number] {
  * still meets the cut line exactly. A corner too sharp to mitre sanely (the
  * miter point would run away up the bisector) keeps the plain offset.
  */
-function insetPolygon(pts: Vec2[], center: Vec2, inset: number): Vec2[] {
+export function insetPolygon(pts: Vec2[], center: Vec2, inset: number): Vec2[] {
   const nv = pts.length;
   const edges = pts.map((p, i) => offsetOutward(p, pts[(i + 1) % nv]!, center, -inset));
   const limit = MITER_LIMIT * inset;
@@ -553,7 +553,7 @@ function labelSize(
 }
 
 /** Shift segment ab away from `from` by `dist` mm. */
-function offsetOutward(a: Vec2, b: Vec2, from: Vec2, dist: number): [Vec2, Vec2] {
+export function offsetOutward(a: Vec2, b: Vec2, from: Vec2, dist: number): [Vec2, Vec2] {
   const dx = b[0] - a[0], dy = b[1] - a[1];
   const len = Math.hypot(dx, dy);
   if (len < 1e-12) return [a, b];

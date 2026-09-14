@@ -18,7 +18,14 @@ const linesOf = (stroke: readonly number[]) =>
   allItems.filter(
     (i): i is Extract<PageItem, { kind: 'line' }> => i.kind === 'line' && i.stroke === stroke,
   );
-const wallLines = linesOf(STACK_SHEET_STYLE.wallColor);
+// A maze wall is drawn at one of two weights: the lighter one inside a face,
+// the rim weight on an edge of the face, which is a fold or a cut as well as a
+// wall. Both are walls, and the count below is of walls.
+const wallLines = [...linesOf(STACK_SHEET_STYLE.wallColor), ...linesOf(STACK_SHEET_STYLE.boundaryColor)];
+const tabPolys = allItems.filter(
+  (i): i is Extract<PageItem, { kind: 'poly' }> =>
+    i.kind === 'poly' && i.fill === STACK_SHEET_STYLE.glueFill,
+);
 const textOf = () =>
   allItems.filter((i): i is Extract<PageItem, { kind: 'text' }> => i.kind === 'text');
 
@@ -55,13 +62,49 @@ describe('glued pair sheets', () => {
   it('leaves the joint open: no glue tab on the face the halves meet at', () => {
     // A tab on that ring would be glued to the other half, which has to turn.
     // Each half's opening is the joint polygon, so the tabs are all elsewhere.
-    const tabs = allItems.filter(
-      (i): i is Extract<PageItem, { kind: 'poly' }> =>
-        i.kind === 'poly' && i.stroke === STACK_SHEET_STYLE.glueColor,
-    );
     // Bulkhead tabs are one per joint edge, twice over; the rest belong to the
     // net, and there is no way for the count to include the joint ring itself.
-    expect(tabs.length).toBeGreaterThanOrEqual(2 * mech.gon);
+    expect(tabPolys.length).toBeGreaterThanOrEqual(2 * mech.gon);
+  });
+
+  it('stands every glue tab outside the face it is folded from', () => {
+    // The unfolder hands its faces over wound the other way from the page once
+    // the y axis is flipped. Read the winding instead of the geometry and every
+    // tab lands *inside* its own face, over the very walls it was meant to be
+    // glued beside.
+    const inside = (poly: Vec2[], p: Vec2): boolean => {
+      let sign = 0;
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i]!;
+        const b = poly[(i + 1) % poly.length]!;
+        const side = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+        if (Math.abs(side) < 1e-6) continue;
+        if (sign !== 0 && Math.sign(side) !== sign) return false;
+        sign = Math.sign(side);
+      }
+      return sign !== 0;
+    };
+    const same = (a: Vec2, b: Vec2) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6;
+    // Each face is laid down as a sheet of blank paper before it is drawn on,
+    // which is what tells the two halves' outlines from everything else here.
+    const faces = allItems.filter(
+      (i): i is Extract<PageItem, { kind: 'poly' }> =>
+        i.kind === 'poly' && i.fill === STACK_SHEET_STYLE.paperColor,
+    );
+    let checked = 0;
+    for (const tab of tabPolys) {
+      // A tab keeps the edge it stands on as its first and last point.
+      const [foot, , , heel] = tab.pts as [Vec2, Vec2, Vec2, Vec2];
+      const face = faces.find(
+        f => f.pts.some(p => same(p, foot)) && f.pts.some(p => same(p, heel)),
+      );
+      if (!face) continue; // a bulkhead tab: its disc is not a face of the net
+      checked++;
+      for (const corner of [tab.pts[1]!, tab.pts[2]!]) {
+        expect(inside(face.pts, corner)).toBe(false);
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it('prints a bulkhead for each half, however wide the joint', () => {

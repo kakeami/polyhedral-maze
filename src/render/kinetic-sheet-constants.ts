@@ -11,23 +11,71 @@
 import type { RGB } from './face-page-constants.ts';
 
 export const STACK_SHEET_STYLE = {
-  /** Maze walls. */
+  /** Maze walls inside a face. */
   wallColor: [17, 17, 17] as RGB,
   wallWidth: 0.5,
+
+  /**
+   * Maze walls on an edge of a face — the rim of the finished piece.
+   *
+   * Heavier than an interior wall, as on the net PDF, because it is not the
+   * same thing: an interior wall is a line the solver may not cross, a rim
+   * wall is also a fold or a cut the builder has to find. Twice the interior
+   * weight — nearer the net PDF's 1.6 than the face pages' 3, because a
+   * kinetic cell is a centimetre where a face page's is three, and a rim as
+   * bold as a face page's would be a fifth of the cell it borders.
+   */
+  boundaryColor: [0, 0, 0] as RGB,
+  boundaryWidth: 1,
+  /**
+   * Half the rim width, so a rim wall on a *cut* edge has its outer edge
+   * exactly on the cut line — "cut along the outside of the black border" is
+   * then true, and the piece comes out its stated size rather than a
+   * millimetre over on every side. Rim walls on folds are not inset: the paper
+   * carries on there and the wall belongs astride the crease.
+   */
+  boundaryInset: 0.5,
+
+  /**
+   * Blank paper. A piece is filled with it before anything is drawn on it, so
+   * that a glue tab reaching across the piece laid out beside it in the net
+   * goes under that piece rather than over its maze — the net PDF's own answer
+   * to the same problem.
+   */
+  paperColor: [255, 255, 255] as RGB,
 
   /** Cut outline of a piece: dashed, and the piece's exact size. */
   cutColor: [150, 150, 150] as RGB,
   cutWidth: 0.25,
   cutDash: [1.6, 1.2] as [number, number],
 
-  /** Score lines: where the band folds into the prism's edges. */
+  /**
+   * Fold marks: the bulkhead's edges, and the ticks that stand for a band's
+   * creases.
+   *
+   * No fold is ever drawn *across* a piece that carries maze. The line would
+   * have to run through every passage that crosses it, and a line across an
+   * opening reads as a wall — which is why the net PDF of a solid draws no
+   * crease at all, and why a band's creases are marked outside the cut guide
+   * instead. A bulkhead carries no maze, so its edges are drawn in full.
+   */
   foldColor: [120, 160, 200] as RGB,
   foldWidth: 0.2,
   foldDash: [0.8, 1.2] as [number, number],
+  /** How far a crease tick stands off the band, and how heavy it is drawn. */
+  creaseTickMm: 2.5,
+  creaseTickWidth: 0.3,
 
-  /** Glue areas: tabs on the band and on the bulkheads. */
-  glueColor: [150, 150, 150] as RGB,
-  glueWidth: 0.25,
+  /**
+   * Glue areas: tabs on the band, the halves and the bulkheads.
+   *
+   * A pale fill and no outline at all, exactly as on the net PDF. An outlined
+   * tab has to say which of its two long sides is the cut and which is the
+   * fold and cannot; a filled one shows its own silhouette, and where a tab
+   * falls against a neighbouring piece in the net the piece is simply drawn
+   * over it.
+   */
+  glueFill: [224, 224, 224] as RGB,
 
   startColor: [178, 240, 178] as RGB,
   goalColor: [240, 178, 178] as RGB,
