@@ -23,7 +23,15 @@
  * than over the numbers themselves, so that a shipped set with a gap in it —
  * 2, 3, 5 — is still a slider with three stops rather than one that can be
  * dragged somewhere there is no maze.
+ *
+ * What it does carry that the object does not: the style of the 3D view, and
+ * the two buttons every page here ends with — a link to what is on screen, and
+ * the pattern to print. Both are named as the other pages name them.
  */
+
+import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
+import type { PresetId } from '../render/scene-presets.ts';
+import type { FoldParams } from './fold-param-codec.ts';
 
 export interface FoldPose {
   readonly label: string;
@@ -47,6 +55,8 @@ export interface FoldMetrics {
 }
 
 export interface FoldControlsContext {
+  /** Everything a link carries, read off the panel as it stands. */
+  getParams(): FoldParams;
   /** The rulings there are mazes for, and which one is on show. */
   setRulings(rulings: readonly number[], current: number): void;
   /** How many mazes this ruling has, and which of them is on show (from one). */
@@ -65,12 +75,16 @@ export interface FoldControlsContext {
   isAutoRotating(): boolean;
   isAutoFolding(): boolean;
   isShowingSolution(): boolean;
+  style(): PresetId;
   showToast(message: string): void;
   setExportBusy(busy: boolean): void;
 }
 
-export function createFoldControls(container: HTMLElement): FoldControlsContext {
-  container.innerHTML = buildHTML();
+export function createFoldControls(
+  container: HTMLElement,
+  initial: FoldParams,
+): FoldControlsContext {
+  container.innerHTML = buildHTML(initial);
   const el = <T extends HTMLElement>(id: string) => container.querySelector<T>(`#${id}`)!;
 
   const cellsSlider = el<HTMLInputElement>('fold-cells');
@@ -85,7 +99,10 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
   const autoRotate = el<HTMLInputElement>('fold-autorotate');
   const autoFold = el<HTMLInputElement>('fold-autofold');
   const solution = el<HTMLInputElement>('fold-solution');
+  const styleSelect = el<HTMLSelectElement>('fold-style');
+  const styleNote = el<HTMLDivElement>('fold-style-note');
   const exportBtn = el<HTMLButtonElement>('fold-export-pdf');
+  const copyBtn = el<HTMLButtonElement>('fold-copy-url');
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   const actions = new Map<string, () => void>();
@@ -115,8 +132,25 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
   autoRotate.addEventListener('change', () => actions.get('auto-rotate')?.());
   autoFold.addEventListener('change', () => actions.get('auto-fold')?.());
   exportBtn.addEventListener('click', () => actions.get('export-pdf')?.());
+  copyBtn.addEventListener('click', () => actions.get('copy-url')?.());
+  styleSelect.addEventListener('change', () => {
+    styleNote.textContent = resolvePreset(styleSelect.value).note;
+    actions.get('style')?.();
+  });
+  styleNote.textContent = resolvePreset(styleSelect.value).note;
 
   return {
+    getParams() {
+      return {
+        cells: rulingAt(Number(cellsSlider.value)),
+        maze: Number(mazeSlider.value),
+        pose: Number(poseSelect.value),
+        showSolution: solution.checked,
+        fold: autoFold.checked,
+        autoRotate: autoRotate.checked,
+        style: styleSelect.value as PresetId,
+      };
+    },
     setRulings(next, current) {
       rulings = next;
       const at = Math.max(0, next.indexOf(current));
@@ -192,6 +226,9 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
     isShowingSolution() {
       return solution.checked;
     },
+    style() {
+      return styleSelect.value as PresetId;
+    },
     showToast(message) {
       let toast = document.querySelector<HTMLDivElement>('.toast');
       if (!toast) {
@@ -216,12 +253,15 @@ const BLURB =
   'The maze is printed once and never changes; what changes is which half of ' +
   'it is on the outside. Every pose is a perfect maze in its own right.';
 
-function buildHTML(): string {
+function buildHTML(p: FoldParams): string {
+  const styleOptions = SCENE_PRESETS.map(style =>
+    `<option value="${esc(style.id)}"${style.id === p.style ? ' selected' : ''}>` +
+    `${esc(style.label)}</option>`).join('');
   return `
     <h2>Folding Maze</h2>
     <p class="blurb">${esc(BLURB)}</p>
 
-    <label>Cells across a face: <span id="fold-cells-val">3</span>
+    <label>Cells across a face: <span id="fold-cells-val">${p.cells}</span>
       <input id="fold-cells" type="range" min="0" max="0" value="0" />
     </label>
 
@@ -233,13 +273,21 @@ function buildHTML(): string {
       <select id="fold-pose"></select>
     </label>
 
+    <label>Style <span class="hint">(3D view only)</span>
+      <select id="fold-style">
+        ${styleOptions}
+      </select>
+    </label>
+    <div class="shape-info" id="fold-style-note"></div>
+
     <div class="checkboxes">
-      <label title="The way from the entrance to the exit in the pose on show. It is a different way in every pose"><input id="fold-solution" type="checkbox" /> Show solution</label>
-      <label title="It goes from pose to pose on its own, a fold at a time, and keeps out of your way for a few seconds after you have asked for something. Off, it stays where it is put"><input id="fold-autofold" type="checkbox" checked /> Cubes fold</label>
-      <label title="The view drifts around the object. This turns the camera, not the object"><input id="fold-autorotate" type="checkbox" checked /> Auto-rotate</label>
+      <label title="The way from the entrance to the exit in the pose on show. It is a different way in every pose"><input id="fold-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
+      <label title="It goes from pose to pose on its own, a fold at a time, and keeps out of your way for a few seconds after you have asked for something. Off, it stays where it is put"><input id="fold-autofold" type="checkbox" ${p.fold ? 'checked' : ''} /> Cubes fold</label>
+      <label title="The view drifts around the object. This turns the camera, not the object"><input id="fold-autorotate" type="checkbox" ${p.autoRotate ? 'checked' : ''} /> Auto-rotate</label>
     </div>
 
     <div class="buttons">
+      <button id="fold-copy-url" class="wide">Copy URL</button>
       <button id="fold-export-pdf" class="wide" title="Nine sheets: how the eight cubes go together, then one cube each, to print, cut and tape">Export cubes PDF</button>
     </div>
 

@@ -48,9 +48,8 @@ import { exportFoldPDF } from '../render/pdf-fold-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
-
-/** Cells across one face of one cube, to open with: what the paper model is. */
-const DEFAULT_CELLS = 3;
+import { decodeFoldParams, encodeFoldParams } from './fold-param-codec.ts';
+import type { FoldParams } from './fold-param-codec.ts';
 
 /**
  * What a search gets, on the rare occasion one is needed.
@@ -87,16 +86,15 @@ interface Ruling {
 }
 
 export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
-  const scene = createFoldScene(viewportEl);
-  const controls = createFoldControls(controlsEl);
+  const opening = decodeFoldParams(window.location.search);
+  const scene = createFoldScene(viewportEl, opening.style);
+  const controls = createFoldControls(controlsEl, opening);
 
   const rulings = new Map<number, Ruling>();
   let build: Build | null = null;
-  let cells = INFINITY_CUBE_RULINGS.includes(DEFAULT_CELLS)
-    ? DEFAULT_CELLS
-    : INFINITY_CUBE_RULINGS[0] ?? DEFAULT_CELLS;
-  let maze = 0;
-  let poseIndex = 0;
+  let cells = opening.cells;
+  let maze = opening.maze - 1;
+  let poseIndex = opening.pose;
   /** Bumped by every rebuild, so an older search knows it has been overtaken. */
   let buildToken = 0;
 
@@ -150,9 +148,15 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     controls.setPoses(next.poses, pose);
     controls.setMazes(next.mazes, next.maze);
     refreshPose();
+    syncUrl();
   }
 
   /** The route and the numbers for whichever pose the object has landed in. */
+  function syncUrl() {
+    const params: FoldParams = { ...controls.getParams(), cells, maze: maze + 1, pose: poseIndex };
+    history.replaceState(null, '', encodeFoldParams(params) || window.location.pathname);
+  }
+
   function refreshPose() {
     if (!build) return;
     const { mech, surface, design, ends } = build;
@@ -292,7 +296,24 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.holdAutoFold();
   });
 
-  controls.onAction('solution', () => refreshPose());
+  controls.onAction('solution', () => {
+    refreshPose();
+    syncUrl();
+  });
+
+  controls.onAction('style', () => {
+    scene.setPreset(controls.style());
+    syncUrl();
+  });
+
+  controls.onAction('copy-url', () => {
+    const params: FoldParams = { ...controls.getParams(), cells, maze: maze + 1, pose: poseIndex };
+    const url = window.location.origin + window.location.pathname + encodeFoldParams(params);
+    navigator.clipboard.writeText(url).then(
+      () => controls.showToast('URL copied'),
+      () => controls.showToast('Could not copy the URL'),
+    );
+  });
 
   // The pattern is nine sheets and takes a moment to draw, so the button says
   // so before the work starts rather than after it.
@@ -315,9 +336,15 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     }, 0);
   });
 
-  controls.onAction('auto-rotate', () => scene.setAutoRotate(controls.isAutoRotating()));
+  controls.onAction('auto-rotate', () => {
+    scene.setAutoRotate(controls.isAutoRotating());
+    syncUrl();
+  });
 
-  controls.onAction('auto-fold', () => scene.setAutoFold(controls.isAutoFolding()));
+  controls.onAction('auto-fold', () => {
+    scene.setAutoFold(controls.isAutoFolding());
+    syncUrl();
+  });
 
   // The numbers belong to the pose that is on screen, so they wait for the
   // folding to stop rather than describing a shape the object is passing
@@ -326,11 +353,16 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     poseIndex = index;
     controls.setPose(index);
     refreshPose();
+    // Including the poses it folds itself into: the URL is what is on screen,
+    // and the object moves on its own.
+    syncUrl();
   });
 
   window.addEventListener('resize', () => scene.resize());
   controls.setRulings(INFINITY_CUBE_RULINGS, cells);
-  rebuild(false);
+  // Opened in the pose the link asked for, and cut to it rather than folded:
+  // there is nothing to have come from.
+  rebuild(true);
 }
 
 /**
