@@ -15,11 +15,12 @@ import {
   createInfinityCube, PLANK_RING,
 } from '../kinetic/mechanisms/infinity-cube.ts';
 import {
-  buildFoldGraph, foldPath, stateDuringFold, sweepIsClear,
+  buildFoldGraph, chooseNextPose, foldPath, poseDistances, stateDuringFold, sweepIsClear,
 } from '../kinetic/fold-path.ts';
 import { applyPlacement } from '../kinetic/types.ts';
 import type { KineticState } from '../kinetic/types.ts';
 import type { Vec3 } from '../types.ts';
+import { createRng } from '../prng.ts';
 
 const mech = createInfinityCube({ cells: 1 });
 const graph = buildFoldGraph(mech);
@@ -140,5 +141,60 @@ describe('getting from one pose to another', () => {
       }
     }
     expect(unreachable).toBe(18);
+  });
+});
+
+describe('folding on its own', () => {
+  const distances = poseDistances(graph);
+
+  it('knows how far apart the poses are, and agrees with the paths', () => {
+    for (let from = 0; from < mech.states.length; from++) {
+      expect(distances[from]![from]).toBe(0);
+      for (let to = 0; to < mech.states.length; to++) {
+        expect(distances[from]![to]).toBe(foldPath(graph, from, to)!.length);
+      }
+    }
+  });
+
+  it('mostly takes a single fold, and still visits every pose', () => {
+    // The two halves of the point. Short journeys are what makes an object
+    // left to itself legible; but of the fifteen pairs only four are a single
+    // fold apart and those four do not join all six poses, so a rule that only
+    // ever took the nearest would strand it in three of them for ever.
+    const rng = createRng(4);
+    const visits = new Array(mech.states.length).fill(0);
+    const lengths: number[] = [];
+    let at = 0;
+    let cameFrom = -1;
+    for (let step = 0; step < 2000; step++) {
+      const next = chooseNextPose({
+        distances, from: at, cameFrom, random: () => rng.next(),
+      })!;
+      expect(next).not.toBe(at);
+      visits[next]++;
+      lengths.push(distances[at]![next]!);
+      cameFrom = at;
+      at = next;
+    }
+    for (const seen of visits) expect(seen).toBeGreaterThan(50);
+    const single = lengths.filter(n => n === 1).length / lengths.length;
+    expect(single).toBeGreaterThan(0.5);
+    expect(Math.max(...lengths)).toBeGreaterThan(1); // the far ones do come up
+  });
+
+  it('turns back much less often than it goes on', () => {
+    const rng = createRng(11);
+    let back = 0;
+    let at = 1;
+    let cameFrom = 0;
+    for (let step = 0; step < 2000; step++) {
+      const next = chooseNextPose({
+        distances, from: at, cameFrom, random: () => rng.next(),
+      })!;
+      if (next === cameFrom) back++;
+      cameFrom = at;
+      at = next;
+    }
+    expect(back / 2000).toBeLessThan(0.25);
   });
 });

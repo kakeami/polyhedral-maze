@@ -136,6 +136,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     // was a different maze, so there was no journey.
     scene.setPose(pose);
     scene.setAutoRotate(controls.isAutoRotating());
+    scene.setAutoFold(controls.isAutoFolding());
     controls.setPoses(next.poses, pose);
     controls.setMazes(next.mazes, next.maze);
     refreshPose();
@@ -245,6 +246,10 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     // Folded to, not cut to: the whole claim of the page is that these six
     // shapes are the same object, and a cut says nothing about that.
     scene.setPose(index, { animate: true });
+    // And then left alone with it. Asking for a pose and being folded away
+    // from it a moment later would make the object feel like it was ignoring
+    // the question.
+    scene.holdAutoFold();
   });
 
   controls.onRuling(next => {
@@ -256,14 +261,18 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     // the ruling should not also feel like changing the maze.
     maze = Math.min(maze, Math.max(0, infinityCubeDesigns(next).length - 1));
     rebuild(true);
+    scene.holdAutoFold();
   });
 
   controls.onMaze(next => {
     maze = Math.max(0, next - 1);
     rebuild(true);
+    scene.holdAutoFold();
   });
 
   controls.onAction('auto-rotate', () => scene.setAutoRotate(controls.isAutoRotating()));
+
+  controls.onAction('auto-fold', () => scene.setAutoFold(controls.isAutoFolding()));
 
   // The numbers belong to the pose that is on screen, so they wait for the
   // folding to stop rather than describing a shape the object is passing

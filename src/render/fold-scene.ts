@@ -33,7 +33,9 @@ import type { Vec3 } from '../core/types.ts';
 import type { KineticState, Placement } from '../core/kinetic/types.ts';
 import { applyPlacement } from '../core/kinetic/types.ts';
 import type { FoldGraph, FoldStep } from '../core/kinetic/fold-path.ts';
-import { foldPath, stateDuringFold } from '../core/kinetic/fold-path.ts';
+import {
+  chooseNextPose, foldPath, poseDistances, stateDuringFold,
+} from '../core/kinetic/fold-path.ts';
 import type { KineticPieceGeometry } from './kinetic-geometry.ts';
 import { BLOOM_LAYER } from './scene-bloom.ts';
 import {
@@ -44,6 +46,7 @@ import {
   makeSegments,
 } from './scene-objects.ts';
 import { createSceneStage } from './scene-stage.ts';
+import { FOLD_SCENE } from './fold-scene-constants.ts';
 import { DEFAULT_PRESET_ID, faceColorHex, resolvePreset } from './scene-presets.ts';
 import type { PresetId, ScenePreset } from './scene-presets.ts';
 
@@ -64,6 +67,18 @@ export interface FoldSceneContext {
   setPose(index: number, options?: { animate?: boolean }): void;
   /** Called when a fold, or a sequence of them, has finished. */
   onArrive(cb: (pose: number) => void): void;
+  /**
+   * Whether the object folds from pose to pose by itself. What it is for: a
+   * visitor who has not found the controls still sees the thing the page is
+   * about, which is that these are all one object.
+   */
+  setAutoFold(on: boolean): void;
+  /**
+   * Leaves the visitor alone for a while — called when they have asked for
+   * something, so that the object does not fold away from what they asked for
+   * a moment later.
+   */
+  holdAutoFold(seconds?: number): void;
   /** Whether the object is mid-fold: the maze on show is nobody's. */
   readonly folding: boolean;
   /** The route through the pose on show, in the mechanism's coordinates. */
@@ -94,6 +109,12 @@ export function createFoldScene(
   /** A pose asked for while the object was still folding towards another. */
   let queued: number | null = null;
   let arriveCallback: ((pose: number) => void) | null = null;
+  let autoFold = false;
+  /** How long the object has stood still, and how long it has been asked to. */
+  let resting = 0;
+  let holding = 0;
+  let distances: number[][] = [];
+  let cameFrom = -1;
   let lineMaterials: LineMaterial[] = [];
   let solutionLine: Line2 | null = null;
   let solutionMaterial: LineMaterial | null = null;
@@ -127,6 +148,7 @@ export function createFoldScene(
     const pieceCount = model.pieces.length;
 
     measure(model);
+    distances = poseDistances(model.graph);
 
     for (const piece of model.pieces) {
       const group = new THREE.Group();
@@ -300,6 +322,7 @@ export function createFoldScene(
       arriveCallback?.(pose);
       return;
     }
+    cameFrom = pose;
     const steps = foldPath(model.graph, pose, target);
     if (!steps || steps.length === 0) {
       // No way there that this object allows — say so by arriving anyway
@@ -318,11 +341,30 @@ export function createFoldScene(
   /** Eased at both ends: a hand does not start or stop a fold at full speed. */
   const ease = (at: number): number => at * at * (3 - 2 * at);
 
+  function advanceAutoFold(dt: number) {
+    if (!autoFold || playing || !model) return;
+    if (holding > 0) {
+      holding -= dt;
+      resting = 0;
+      return;
+    }
+    resting += dt;
+    if (resting < FOLD_SCENE.dwellSeconds) return;
+    resting = 0;
+    const next = chooseNextPose({
+      distances,
+      from: pose,
+      cameFrom,
+      bias: FOLD_SCENE.nearnessBias,
+    });
+    if (next !== null) goTo(next, true);
+  }
+
   function advanceFold(dt: number) {
     if (!playing) return;
     playing.elapsed += dt;
-    while (playing && playing.elapsed >= FOLD_SECONDS) {
-      playing.elapsed -= FOLD_SECONDS;
+    while (playing && playing.elapsed >= FOLD_SCENE.foldSeconds) {
+      playing.elapsed -= FOLD_SCENE.foldSeconds;
       playing.step++;
       if (playing.step >= playing.steps.length) {
         const arrived = playing.to;
@@ -341,7 +383,7 @@ export function createFoldScene(
     }
     if (!playing) return;
     const step = playing.steps[playing.step]!;
-    applyState(stateDuringFold(step, ease(playing.elapsed / FOLD_SECONDS)));
+    applyState(stateDuringFold(step, ease(playing.elapsed / FOLD_SCENE.foldSeconds)));
   }
 
   rig.applyPreset(preset);
@@ -353,7 +395,9 @@ export function createFoldScene(
     requestAnimationFrame(animate);
     // Clamped, so that a tab left in the background does not come back and
     // fold the whole sequence away in one frame.
-    advanceFold(Math.min(clock.getDelta(), 0.1));
+    const dt = Math.min(clock.getDelta(), 0.1);
+    advanceFold(dt);
+    advanceAutoFold(dt);
     rig.controls.update();
     rig.render(object);
   }
@@ -373,6 +417,8 @@ export function createFoldScene(
       solutionPath = null; // it belonged to the object being replaced
       playing = null;
       queued = null;
+      resting = 0;
+      cameFrom = -1;
       pose = 0;
       clearModel();
       buildModel();
@@ -382,6 +428,14 @@ export function createFoldScene(
     },
     onArrive(cb) {
       arriveCallback = cb;
+    },
+    setAutoFold(on) {
+      autoFold = on;
+      resting = 0;
+    },
+    holdAutoFold(seconds = FOLD_SCENE.pauseAfterAskingSeconds) {
+      holding = seconds;
+      resting = 0;
     },
     get folding() {
       return playing !== null;
@@ -410,15 +464,6 @@ export function createFoldScene(
     },
   };
 }
-
-/**
- * How long one fold takes.
- *
- * Slow enough to be followed — the whole point of the page is that a visitor
- * can see which cubes went where — and fast enough that a four-fold journey
- * between two poses is over in three seconds.
- */
-const FOLD_SECONDS = 0.75;
 
 /** A piece's placement as a matrix, with the object's middle brought to the origin. */
 function matrixOf(at: Placement, centre: Vec3): THREE.Matrix4 {

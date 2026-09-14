@@ -15,8 +15,9 @@
  * parameter of the object at all: it is where the object happens to be
  * standing, the same thing a hand on a ring decides on the kinetic page. It
  * sits below the things that describe the object, and it is set from the scene
- * as well as from the panel, because the object arrives in a pose a moment
- * after it is asked to.
+ * as well as from the panel — because the object arrives in a pose a moment
+ * after it is asked to, and because, left alone, it goes and folds itself into
+ * another one.
  *
  * The ruling slider runs over the *positions* in the list of rulings rather
  * than over the numbers themselves, so that a shipped set with a gap in it —
@@ -60,6 +61,7 @@ export interface FoldControlsContext {
   onMaze(cb: (maze: number) => void): void;
   onAction(action: string, cb: () => void): void;
   isAutoRotating(): boolean;
+  isAutoFolding(): boolean;
 }
 
 export function createFoldControls(container: HTMLElement): FoldControlsContext {
@@ -76,6 +78,7 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
   const progressBar = el<HTMLDivElement>('fold-progress');
   const progressFill = el<HTMLDivElement>('fold-progress-fill');
   const autoRotate = el<HTMLInputElement>('fold-autorotate');
+  const autoFold = el<HTMLInputElement>('fold-autofold');
 
   const actions = new Map<string, () => void>();
   let rulings: readonly number[] = [];
@@ -101,6 +104,7 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
   poseSelect.addEventListener('change', () => poseCallback?.(Number(poseSelect.value)));
 
   autoRotate.addEventListener('change', () => actions.get('auto-rotate')?.());
+  autoFold.addEventListener('change', () => actions.get('auto-fold')?.());
 
   return {
     setRulings(next, current) {
@@ -171,6 +175,9 @@ export function createFoldControls(container: HTMLElement): FoldControlsContext 
     isAutoRotating() {
       return autoRotate.checked;
     },
+    isAutoFolding() {
+      return autoFold.checked;
+    },
   };
 }
 
@@ -197,7 +204,8 @@ function buildHTML(): string {
     </label>
 
     <div class="checkboxes">
-      <label><input id="fold-autorotate" type="checkbox" checked /> Drift the view</label>
+      <label title="It goes from pose to pose on its own, a fold at a time, and keeps out of your way for a few seconds after you have asked for something. Off, it stays where it is put"><input id="fold-autofold" type="checkbox" checked /> Cubes fold</label>
+      <label title="The view drifts around the object. This turns the camera, not the object"><input id="fold-autorotate" type="checkbox" checked /> Auto-rotate</label>
     </div>
 
     <div class="progress" id="fold-progress" hidden>

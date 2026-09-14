@@ -154,6 +154,80 @@ export function foldPath(
 }
 
 /**
+ * How many folds apart each pose is from each other, for a page that wants to
+ * fold the object on its own.
+ *
+ * Poses, not shapes: what can be stopped at. Something choosing where to fold
+ * next wants to prefer somewhere close, because a journey of four folds is a
+ * long time to watch — and it wants the far ones to remain possible, because
+ * only four of the fifteen pairs are a single fold apart and a wanderer that
+ * only ever took those would never leave three of the six poses.
+ */
+export function poseDistances(graph: FoldGraph): number[][] {
+  return graph.poseAt.map(from => {
+    const distance = new Int32Array(graph.shapes.length).fill(-1);
+    distance[from] = 0;
+    const queue = [from];
+    for (let head = 0; head < queue.length; head++) {
+      const at = queue[head]!;
+      for (const { to } of graph.folds[at]!) {
+        if (distance[to]! >= 0) continue;
+        distance[to] = distance[at]! + 1;
+        queue.push(to);
+      }
+    }
+    return graph.poseAt.map(to => distance[to]!);
+  });
+}
+
+/**
+ * Where to fold next, left to itself.
+ *
+ * Weighted towards the poses that are near, because a four-fold journey is a
+ * long time to watch and a single fold is the object at its most legible — but
+ * never only the near ones, since a wanderer that took single folds alone
+ * would leave half the poses unvisited for ever: of the fifteen pairs only
+ * four are one fold apart, and those four do not join all six.
+ *
+ * Where it has just come from is not forbidden, only made unlikely. Forbidding
+ * it would strand the object wherever a pose has one near neighbour, and
+ * "unlikely" is all that is wanted anyway: what it stops is the rocking
+ * between two shapes that a plain nearest-first rule falls into.
+ */
+export function chooseNextPose(options: {
+  distances: readonly (readonly number[])[];
+  from: number;
+  /** The pose it arrived from, if any: worth less than the others. */
+  cameFrom?: number;
+  /** How much a pose twice as far is worth: 1/distance to this power. */
+  bias?: number;
+  random?: () => number;
+}): number | null {
+  const { distances, from } = options;
+  const bias = options.bias ?? 2;
+  const random = options.random ?? Math.random;
+  const away = distances[from];
+  if (!away) return null;
+
+  const weights = away.map((steps, pose) => {
+    if (pose === from || steps <= 0) return 0;
+    return (pose === options.cameFrom ? BACKTRACK_WORTH : 1) / Math.pow(steps, bias);
+  });
+  const total = weights.reduce((sum, worth) => sum + worth, 0);
+  if (total <= 0) return null;
+
+  let ticket = random() * total;
+  for (let pose = 0; pose < weights.length; pose++) {
+    ticket -= weights[pose]!;
+    if (ticket <= 0) return pose;
+  }
+  return weights.length - 1;
+}
+
+/** What the pose it has just come from is worth, against any other at that distance. */
+const BACKTRACK_WORTH = 0.15;
+
+/**
  * The object part-way through a fold.
  *
  * `at` runs from 0 at the start of the fold to 1 at the end; the pieces that
