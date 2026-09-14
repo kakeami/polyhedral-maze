@@ -64,6 +64,44 @@ describe('glued pair sheets', () => {
     expect(tabs.length).toBeGreaterThanOrEqual(2 * mech.gon);
   });
 
+  it('prints a bulkhead for each half, however wide the joint', () => {
+    // A wide joint puts two bulkheads past the edge of the sheet side by side.
+    // They have to go one under the other, not one of them go missing: a
+    // pattern one bulkhead short is a pattern for an object nobody can build.
+    const holesIn = (items: PageItem[]) => items.filter(
+      (i): i is Extract<PageItem, { kind: 'poly' }> => {
+        if (i.kind !== 'poly' || i.pts.length < 20) return false;
+        const xs = i.pts.map(p => p[0]);
+        const width = Math.max(...xs) - Math.min(...xs);
+        return Math.abs(width - (STACK_SHEET_DEFAULTS.dowelMm + STACK_SHEET_DEFAULTS.dowelClearanceMm)) < 0.2;
+      },
+    );
+    expect(holesIn(allItems)).toHaveLength(2);
+
+    const wide = createJoinedPair({ shape: 'j2', gon: 5, n: 6 });
+    const wideSurface = buildSurface(wide);
+    const wideDesign = searchAllStates(wideSurface, { rng: createRng(42) }).design;
+    const widePlan = buildPairSheets(wide, wideSurface, wideDesign);
+    // Two of these will not stand side by side on the sheet, which is the
+    // case that used to lose one of them.
+    const bulkheadWidth = widePlan.jointWidthMm + 2 * STACK_SHEET_DEFAULTS.bulkheadTabMm;
+    expect(2 * bulkheadWidth).toBeGreaterThan(A4_SHEET.width - 2 * A4_SHEET.margin);
+    const wideItems = widePlan.sheets.flatMap(sh => sh.items);
+    expect(holesIn(wideItems)).toHaveLength(2);
+    // And still on the paper.
+    for (const sheet of widePlan.sheets) {
+      for (const item of sheet.items) {
+        const points = item.kind === 'line' ? [item.a, item.b]
+          : item.kind === 'poly' ? item.pts : [item.at];
+        for (const [x, y] of points) {
+          expect(x).toBeGreaterThanOrEqual(A4_SHEET.margin - 0.01);
+          expect(x).toBeLessThanOrEqual(A4_SHEET.width - A4_SHEET.margin + 0.01);
+          expect(y).toBeLessThanOrEqual(A4_SHEET.height - A4_SHEET.margin + 0.01);
+        }
+      }
+    }
+  });
+
   it('cuts a dowel that stays inside the object', () => {
     // Long enough to hold the two halves together, short enough that neither
     // end reaches the far face, which carries maze.

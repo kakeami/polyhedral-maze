@@ -278,38 +278,54 @@ export function buildPairSheets(
   const jointCircumUnits = length2(joint.vertices[0]!, centroid3(joint), true);
   const jointRadiusMm = jointCircumUnits * scale - D.bulkheadInsetMm;
   const jointWidthMm = 2 * (jointCircumUnits * scale);
-  const bulkheadBlock = 2 * (jointRadiusMm + bulkheadTab) + S.labelSize + 2.5;
-  ensure(bulkheadBlock);
-  items.push({
-    kind: 'text', at: [sheet.margin, cursorY + S.labelSize],
-    text: `Bulkheads (2) and retaining discs (2) — ${mech.gon}-gon, ${dowel} mm hole`,
-    size: S.labelSize, color: S.labelColor, align: 'left',
-  });
-  cursorY += S.labelSize + 2.5;
-
+  // Both halves need one, and a wide joint puts two of them past the edge of
+  // the sheet side by side. They go one under the other then, and onto a
+  // further sheet if that is what it takes: a pattern that is one bulkhead
+  // short is a pattern for an object that cannot be built.
   const across = jointRadiusMm + bulkheadTab;
-  for (let i = 0; i < 2; i++) {
-    const cx = sheet.margin + across + i * (2 * across + gap);
-    const cy = cursorY + across;
-    if (cx + across > sheet.width - sheet.margin) break;
-    const points = polygonPoints([cx, cy], jointRadiusMm, mech.gon);
-    for (const quad of bulkheadTabQuads(points, bulkheadTab)) {
-      items.push({
-        kind: 'poly', pts: quad, stroke: S.glueColor, width: S.glueWidth, dash: S.cutDash,
-      });
-    }
-    for (let e = 0; e < points.length; e++) {
-      items.push({
-        kind: 'line', a: points[e]!, b: points[(e + 1) % points.length]!,
-        stroke: S.foldColor, width: S.foldWidth, dash: S.foldDash,
-      });
-    }
-    items.push({
-      kind: 'poly', pts: circlePoly([cx, cy], (dowel + D.dowelClearanceMm) / 2),
-      stroke: S.cutColor, width: S.cutWidth,
-    });
+  const acrossSheet = sheet.width - 2 * sheet.margin;
+  if (2 * across > acrossSheet) {
+    throw new Error(
+      `a bulkhead is ${(2 * across).toFixed(0)} mm across, wider than the ` +
+        `${acrossSheet.toFixed(0)} mm the sheet has; try a smaller n`,
+    );
   }
-  cursorY += 2 * across + gap;
+  const perRow = Math.max(1, Math.floor((acrossSheet + gap) / (2 * across + gap)));
+  const heading = `Bulkheads (2) and retaining discs (2) — ${mech.gon}-gon, ${dowel} mm hole`;
+  for (let placed = 0; placed < 2; ) {
+    const inRow = Math.min(perRow, 2 - placed);
+    const wasOn = sheets.length;
+    ensure(2 * across + S.labelSize + 2.5);
+    if (placed === 0 || sheets.length !== wasOn) {
+      items.push({
+        kind: 'text', at: [sheet.margin, cursorY + S.labelSize], text: heading,
+        size: S.labelSize, color: S.labelColor, align: 'left',
+      });
+      cursorY += S.labelSize + 2.5;
+    }
+    for (let i = 0; i < inRow; i++) {
+      const cx = sheet.margin + across + i * (2 * across + gap);
+      const cy = cursorY + across;
+      const points = polygonPoints([cx, cy], jointRadiusMm, mech.gon);
+      for (const quad of bulkheadTabQuads(points, bulkheadTab)) {
+        items.push({
+          kind: 'poly', pts: quad, stroke: S.glueColor, width: S.glueWidth, dash: S.cutDash,
+        });
+      }
+      for (let e = 0; e < points.length; e++) {
+        items.push({
+          kind: 'line', a: points[e]!, b: points[(e + 1) % points.length]!,
+          stroke: S.foldColor, width: S.foldWidth, dash: S.foldDash,
+        });
+      }
+      items.push({
+        kind: 'poly', pts: circlePoly([cx, cy], (dowel + D.dowelClearanceMm) / 2),
+        stroke: S.cutColor, width: S.cutWidth,
+      });
+    }
+    cursorY += 2 * across + gap;
+    placed += inRow;
+  }
 
   // The discs that stop the halves lifting off the dowel. Their holes get no
   // clearance: one is glued to the dowel, the other turns against a bulkhead.
