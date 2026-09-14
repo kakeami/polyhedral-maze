@@ -165,15 +165,27 @@ describe('the glued pair on the same page', () => {
     expect(coarse.k).toBe(0);
   });
 
-  it('never lets a joint run past the work budget', () => {
+  it('never lets a joint run past its own budget', () => {
     for (const choice of JOINED_PAIRS) {
       const n = maxPairN(choice.id);
       const cells = pairCellCount(choice.id, n);
-      expect(cells).toBeLessThanOrEqual(KINETIC_LIMITS.maxCells);
+      expect(cells).toBeLessThanOrEqual(KINETIC_LIMITS.pairCells);
       expect(cells * pairStateCount(choice.id)).toBeLessThanOrEqual(KINETIC_LIMITS.maxWork);
       expect(clampKineticParams({
         ...DEFAULT_KINETIC_PARAMS, mechanism: 'pair', pair: choice.id, pairN: 99,
       }).pairN).toBe(n);
+      // One more cell along the edge would cost more than the budget allows.
+      if (n < KINETIC_LIMITS.pairN.max) {
+        expect(pairCellCount(choice.id, n + 1)).toBeGreaterThan(KINETIC_LIMITS.pairCells);
+      }
     }
+  });
+
+  it('lets a joint with few states be ruled much more finely', () => {
+    // Five states and five faces a half: the cells are the whole cost, so this
+    // one has room for a grid three times what the stack's budget would allow.
+    expect(maxPairN('j2@5')).toBeGreaterThan(6);
+    // Ten states over seventeen faces is the other end of the same rule.
+    expect(maxPairN('j6@10')).toBe(3);
   });
 });

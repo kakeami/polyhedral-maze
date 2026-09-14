@@ -68,7 +68,19 @@ export const KINETIC_LIMITS = {
   /** Past this the cells are too small to read on screen anyway. */
   maxCells: 720,
   /** Cells along a face edge of a glued pair. */
-  pairN: { min: 1, max: 6 },
+  pairN: { min: 1, max: 12 },
+  /**
+   * Cells a glued pair may carry.
+   *
+   * Its own number rather than `maxCells` because the two mechanisms are not
+   * costly in the same way. A stack has hundreds of states and a handful of
+   * cells each; a pair has a handful of states and all of its cost in the
+   * cells, so `states x cells` — which bounds the stack — never comes near
+   * binding here. Measured on this code, a pair of this many cells rebuilds in
+   * about a second and a half at worst, and still prints at 7 mm a cell, which
+   * is the other thing that has to hold.
+   */
+  pairCells: 1250,
   /**
    * The real limit, and the reason the sliders bound each other.
    *
@@ -179,18 +191,21 @@ export function pairStateCount(pairId: string): number {
 }
 
 /**
- * How finely a pair may be ruled before the search stops being instant.
+ * How finely a pair may be ruled.
  *
- * The same budget the stack obeys: what a rebuild costs is states times cells,
- * and a joint with ten positions can afford a third of the grid one with three
- * positions can.
+ * Bounded by the cells rather than by `states x cells`, for the reason given at
+ * `pairCells`. Note what this does *not* promise: that a design perfect in
+ * every state will be found at the top of the range. Whether one is found is a
+ * matter of how long the search is given, which is what the effort ladder is
+ * for, and the page says plainly when it fell short. A ruling the search
+ * sometimes has to be asked twice about is still a ruling worth offering.
  */
 export function maxPairN(pairId: string): number {
   const states = pairStateCount(pairId);
   let best: number = KINETIC_LIMITS.pairN.min;
   for (let n = KINETIC_LIMITS.pairN.min + 1; n <= KINETIC_LIMITS.pairN.max; n++) {
     const cells = pairCellCount(pairId, n);
-    if (cells > KINETIC_LIMITS.maxCells) break;
+    if (cells > KINETIC_LIMITS.pairCells) break;
     if (cells * states > KINETIC_LIMITS.maxWork) break;
     best = n;
   }
