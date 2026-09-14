@@ -24,6 +24,17 @@ export interface InfinityCubeMechanism extends Mechanism {
   stateTurns(index: number): readonly number[];
   /** Index into `cells` for one cell of one cube. */
   cellIndex(piece: number, face: number, row: number, col: number): number;
+  /**
+   * Every way the ring closes, the open shapes included — `states` is the part
+   * of this a hand can stop at. The way from one pose to another goes through
+   * the rest, so anything working out the *motion* needs all of them.
+   *
+   * Worked out once, on the first call: most of what uses this mechanism never
+   * asks, and enumerating is a walk over four to the eighth.
+   */
+  closures(): readonly KineticState[];
+  /** Half-extents of each piece about its own origin: these pieces are cubes. */
+  readonly pieceHalfExtents: readonly Vec3[];
 }
 
 /**
@@ -407,6 +418,8 @@ export function createInfinityCube(options: InfinityCubeOptions = {}): InfinityC
   const { states, turns } = enumerateClosures(ring, hinges, { maxStates, shut: true });
   if (states.length === 0) throw new Error('this hinge pattern never closes into a cube');
 
+  let everyClosure: KineticState[] | null = null;
+
   return {
     id: `infinity-cube-${cells}-${ring.map(p => p.join('')).join('')}-${hinges.join('')}`,
     pieceCount: PIECE_COUNT,
@@ -418,5 +431,12 @@ export function createInfinityCube(options: InfinityCubeOptions = {}): InfinityC
     stateTurns: index => turns[index] ?? [],
     cellIndex: (piece, face, row, col) => piece * perPiece + face * perFace + row * cells + col,
     stateLabel: index => (turns[index] ?? []).join(''),
+    closures: () => {
+      if (!everyClosure) {
+        everyClosure = enumerateClosures(ring, hinges, { maxStates: 1e6, shut: false }).states;
+      }
+      return everyClosure;
+    },
+    pieceHalfExtents: Array.from({ length: PIECE_COUNT }, () => [0.5, 0.5, 0.5] as Vec3),
   };
 }

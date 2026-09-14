@@ -12,10 +12,17 @@
  * lines and pins (`scene-objects.ts`), the glow (`scene-bloom.ts`) and the
  * piece geometry (`kinetic-geometry.ts`, which only ever looks at a mechanism).
  *
- * The object is recentred pose by pose. A plank and a cube of the same eight
+ * The object is recentred continuously. A plank and a cube of the same eight
  * cubes have their middles in different places, and a view that kept the
  * mechanism's own origin fixed would swing the object off the screen every
  * time it folded.
+ *
+ * Folding from one pose to another is `core/kinetic/fold-path.ts`'s to work
+ * out — which arc turns, about which line, how far, and which way round — and
+ * this only plays it: a fold at a time, eased at both ends, with the pieces
+ * that are not in the arc left exactly as they were. Most pairs of poses are
+ * more than one fold apart, so what is played is usually a short sequence, and
+ * the object passes through shapes it cannot be put down in.
  */
 
 import * as THREE from 'three';
@@ -25,6 +32,8 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { Vec3 } from '../core/types.ts';
 import type { KineticState, Placement } from '../core/kinetic/types.ts';
 import { applyPlacement } from '../core/kinetic/types.ts';
+import type { FoldGraph, FoldStep } from '../core/kinetic/fold-path.ts';
+import { foldPath, stateDuringFold } from '../core/kinetic/fold-path.ts';
 import type { KineticPieceGeometry } from './kinetic-geometry.ts';
 import { BLOOM_LAYER } from './scene-bloom.ts';
 import {
@@ -42,12 +51,21 @@ export interface FoldModel {
   readonly pieces: readonly KineticPieceGeometry[];
   /** Where each piece stands in each pose — the mechanism's own states. */
   readonly states: readonly KineticState[];
+  /** Every shape it can close into, and the folds between them. */
+  readonly graph: FoldGraph;
 }
 
 export interface FoldSceneContext {
   setModel(model: FoldModel): void;
-  /** Puts the object into one of its poses. */
-  setPose(index: number): void;
+  /**
+   * Puts the object into one of its poses, folding its way there unless told
+   * to cut straight to it.
+   */
+  setPose(index: number, options?: { animate?: boolean }): void;
+  /** Called when a fold, or a sequence of them, has finished. */
+  onArrive(cb: (pose: number) => void): void;
+  /** Whether the object is mid-fold: the maze on show is nobody's. */
+  readonly folding: boolean;
   /** The route through the pose on show, in the mechanism's coordinates. */
   setSolution(path: readonly Vec3[] | null): void;
   setPreset(id: PresetId): void;
@@ -69,8 +87,13 @@ export function createFoldScene(
 
   let model: FoldModel | null = null;
   let pose = 0;
-  let centres: Vec3[] = [];
+  /** The eight corners of each piece's own box, in its body frame. */
+  let pieceCorners: Vec3[][] = [];
   let pieceGroups: THREE.Group[] = [];
+  let playing: { steps: readonly FoldStep[]; step: number; elapsed: number; to: number } | null = null;
+  /** A pose asked for while the object was still folding towards another. */
+  let queued: number | null = null;
+  let arriveCallback: ((pose: number) => void) | null = null;
   let lineMaterials: LineMaterial[] = [];
   let solutionLine: Line2 | null = null;
   let solutionMaterial: LineMaterial | null = null;
@@ -147,50 +170,73 @@ export function createFoldScene(
   }
 
   /**
-   * How big the object is and where its middle sits, pose by pose.
+   * Each piece's own box, and how much room the whole object ever needs.
    *
    * The scale is taken from the *widest* pose rather than the one on show, so
    * that folding the plank into a cube makes the object smaller on screen —
    * which is what it does in a hand. Rescaling to fill the frame at every pose
-   * would hide the very thing the page is about.
+   * would hide the very thing the page is about, and rescaling mid-fold would
+   * make the object breathe while it moved.
+   *
+   * The boxes are what the middle of the object is worked out from, frame by
+   * frame during a fold. Eight corners a piece is enough because the box
+   * contains the piece, and it is the same eight points whatever the piece is
+   * made of — so this says nothing about cubes.
    */
   function measure(next: FoldModel) {
-    centres = [];
-    let reach = 0;
-    for (const state of next.states) {
+    pieceCorners = next.pieces.map(piece => {
       const low: Vec3 = [Infinity, Infinity, Infinity];
       const high: Vec3 = [-Infinity, -Infinity, -Infinity];
-      for (const piece of next.pieces) {
-        const at = state[piece.piece];
-        if (!at) continue;
-        for (let i = 0; i < piece.positions.length; i += 3) {
-          const w = applyPlacement(at, [
-            piece.positions[i]!, piece.positions[i + 1]!, piece.positions[i + 2]!,
-          ]);
-          for (let axis = 0; axis < 3; axis++) {
-            low[axis] = Math.min(low[axis]!, w[axis]!);
-            high[axis] = Math.max(high[axis]!, w[axis]!);
-          }
+      for (let i = 0; i < piece.positions.length; i += 3) {
+        for (let axis = 0; axis < 3; axis++) {
+          const at = piece.positions[i + axis]!;
+          low[axis] = Math.min(low[axis]!, at);
+          high[axis] = Math.max(high[axis]!, at);
         }
       }
-      const centre: Vec3 = [
-        (low[0] + high[0]) / 2, (low[1] + high[1]) / 2, (low[2] + high[2]) / 2,
-      ];
-      centres.push(centre);
-      for (let axis = 0; axis < 3; axis++) {
-        reach = Math.max(reach, (high[axis]! - low[axis]!) / 2);
+      const corners: Vec3[] = [];
+      for (const x of [low[0], high[0]]) {
+        for (const y of [low[1], high[1]]) {
+          for (const z of [low[2], high[2]]) corners.push([x, y, z]);
+        }
       }
+      return corners;
+    });
+
+    let reach = 0;
+    for (const state of next.states) {
+      const box = boundsOf(state);
+      for (let axis = 0; axis < 3; axis++) reach = Math.max(reach, box.half[axis]!);
     }
     // The same room a solid of circumradius 1 gets in the other views, so the
     // camera framing carries over unchanged.
     rig.stage.scale.setScalar(reach > 0 ? 1 / reach : 1);
   }
 
-  function applyPose() {
-    if (!model) return;
-    const state = model.states[pose];
-    const centre = centres[pose] ?? [0, 0, 0];
-    if (!state) return;
+  /** Where the object sits and how far it reaches, in whatever shape it is in. */
+  function boundsOf(state: KineticState): { centre: Vec3; half: Vec3 } {
+    const low: Vec3 = [Infinity, Infinity, Infinity];
+    const high: Vec3 = [-Infinity, -Infinity, -Infinity];
+    pieceCorners.forEach((corners, piece) => {
+      const at = state[piece];
+      if (!at) return;
+      for (const corner of corners) {
+        const w = applyPlacement(at, corner);
+        for (let axis = 0; axis < 3; axis++) {
+          low[axis] = Math.min(low[axis]!, w[axis]!);
+          high[axis] = Math.max(high[axis]!, w[axis]!);
+        }
+      }
+    });
+    return {
+      centre: [(low[0] + high[0]) / 2, (low[1] + high[1]) / 2, (low[2] + high[2]) / 2],
+      half: [(high[0] - low[0]) / 2, (high[1] - low[1]) / 2, (high[2] - low[2]) / 2],
+    };
+  }
+
+  /** Puts the pieces where a state says, with the object's middle at the origin. */
+  function applyState(state: KineticState) {
+    const centre = boundsOf(state).centre;
     pieceGroups.forEach((group, index) => {
       const at = state[index];
       if (!at) return;
@@ -199,10 +245,17 @@ export function createFoldScene(
     });
   }
 
+  function applyPose() {
+    if (!model) return;
+    const state = model.states[pose];
+    if (state) applyState(state);
+  }
+
   function rebuildSolution() {
     clearSolution();
-    if (!solutionPath || solutionPath.length < 2) return;
-    const centre = centres[pose] ?? [0, 0, 0];
+    if (!model || !solutionPath || solutionPath.length < 2) return;
+    const state = model.states[pose];
+    const centre: Vec3 = state ? boundsOf(state).centre : [0, 0, 0];
     const positions: number[] = [];
     for (const v of solutionPath) {
       positions.push(v[0] - centre[0], v[1] - centre[1], v[2] - centre[2]);
@@ -220,12 +273,87 @@ export function createFoldScene(
     object.add(solutionLine);
   }
 
+  /**
+   * Sets a sequence of folds going, or cuts straight to the pose.
+   *
+   * A cut is not a worse animation, it is a different statement: it says the
+   * object is in that pose, where a fold says it got there. The page cuts when
+   * it has just built a new maze and folds when a visitor asks for a pose.
+   */
+  function goTo(index: number, animated: boolean) {
+    if (!model) return;
+    const target = Math.max(0, Math.min(index, model.states.length - 1));
+    if (animated && playing) {
+      // Asked for somewhere else mid-fold. The object is between shapes and
+      // has nowhere to start a new path from, so the request waits for this
+      // one to land — a fold is three-quarters of a second, and cutting it
+      // short would lose the very thing it is there to show.
+      queued = target;
+      return;
+    }
+    if (!animated || target === pose) {
+      playing = null;
+      queued = null;
+      pose = target;
+      applyPose();
+      rebuildSolution();
+      arriveCallback?.(pose);
+      return;
+    }
+    const steps = foldPath(model.graph, pose, target);
+    if (!steps || steps.length === 0) {
+      // No way there that this object allows — say so by arriving anyway
+      // rather than by refusing a button.
+      playing = null;
+      pose = target;
+      applyPose();
+      rebuildSolution();
+      arriveCallback?.(pose);
+      return;
+    }
+    clearSolution(); // a route through a shape that is about to stop existing
+    playing = { steps, step: 0, elapsed: 0, to: target };
+  }
+
+  /** Eased at both ends: a hand does not start or stop a fold at full speed. */
+  const ease = (at: number): number => at * at * (3 - 2 * at);
+
+  function advanceFold(dt: number) {
+    if (!playing) return;
+    playing.elapsed += dt;
+    while (playing && playing.elapsed >= FOLD_SECONDS) {
+      playing.elapsed -= FOLD_SECONDS;
+      playing.step++;
+      if (playing.step >= playing.steps.length) {
+        const arrived = playing.to;
+        playing = null;
+        pose = arrived;
+        applyPose();
+        rebuildSolution();
+        arriveCallback?.(arrived);
+        if (queued !== null) {
+          const next = queued;
+          queued = null;
+          goTo(next, true);
+        }
+        return;
+      }
+    }
+    if (!playing) return;
+    const step = playing.steps[playing.step]!;
+    applyState(stateDuringFold(step, ease(playing.elapsed / FOLD_SECONDS)));
+  }
+
   rig.applyPreset(preset);
 
+  const clock = new THREE.Clock();
   let running = true;
   function animate() {
     if (!running) return;
     requestAnimationFrame(animate);
+    // Clamped, so that a tab left in the background does not come back and
+    // fold the whole sequence away in one frame.
+    advanceFold(Math.min(clock.getDelta(), 0.1));
     rig.controls.update();
     rig.render(object);
   }
@@ -243,15 +371,20 @@ export function createFoldScene(
     setModel(next) {
       model = next;
       solutionPath = null; // it belonged to the object being replaced
+      playing = null;
+      queued = null;
       pose = 0;
       clearModel();
       buildModel();
     },
-    setPose(index) {
-      if (!model) return;
-      pose = Math.max(0, Math.min(index, model.states.length - 1));
-      applyPose();
-      rebuildSolution();
+    setPose(index, options) {
+      goTo(index, options?.animate ?? false);
+    },
+    onArrive(cb) {
+      arriveCallback = cb;
+    },
+    get folding() {
+      return playing !== null;
     },
     setSolution(path) {
       solutionPath = path;
@@ -262,6 +395,7 @@ export function createFoldScene(
       rig.applyPreset(preset);
       // Rebuilt for the new palette and line colours; the pose is untouched,
       // since what changed is what the object is made of, not how it is folded.
+      playing = null;
       clearModel();
       buildModel();
     },
@@ -277,7 +411,16 @@ export function createFoldScene(
   };
 }
 
-/** A piece's placement as a matrix, with the pose's middle brought to the origin. */
+/**
+ * How long one fold takes.
+ *
+ * Slow enough to be followed — the whole point of the page is that a visitor
+ * can see which cubes went where — and fast enough that a four-fold journey
+ * between two poses is over in three seconds.
+ */
+const FOLD_SECONDS = 0.75;
+
+/** A piece's placement as a matrix, with the object's middle brought to the origin. */
 function matrixOf(at: Placement, centre: Vec3): THREE.Matrix4 {
   const { rot, offset } = at;
   return new THREE.Matrix4().set(
