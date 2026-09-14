@@ -1,16 +1,24 @@
 /**
- * Wiring for the folding maze: mechanism -> search -> scene.
+ * Wiring for the folding maze: mechanism -> design -> scene.
  *
- * The same shape as `kinetic-app.ts`, and for the same reason: the search is
- * a few seconds of solid arithmetic and the page has one thread, so it is run
- * a round at a time with the browser handed back in between. What is different
- * is how little there is to choose. The object is eight cubes taped one
- * particular way — the taping is a property of what folds, not a preference —
- * so the only inputs are the seed and which pose to look at.
+ * Unlike the other two pages, this one does not search. Nothing about the
+ * object varies — one taping, one ring, six poses — so the mazes were found
+ * once, offline, and are read off the shelf here
+ * (`core/kinetic/mechanisms/infinity-cube-designs.ts`). A search would be two
+ * to seven seconds at three cells across a face and half a minute at four,
+ * which is a wait nobody asked for and, at four, one most tries do not even
+ * come back from.
  *
- * This is the first cut: the poses are switched, not folded into each other,
- * and there is no start or finish yet. Both are the next things to build; see
- * the note in `.dev/`.
+ * What is kept from the searching version is the check and the fallback. A
+ * stored design is a set of class numbers, and class numbers mean whatever the
+ * surface says they mean; so every design is verified as it is decoded — a
+ * perfect maze in every pose, by the same arithmetic that would have judged a
+ * fresh one — and if a design ever fails that, the page searches for one
+ * instead of drawing something it cannot vouch for.
+ *
+ * This is the second cut: poses fold into one another now. There is still no
+ * start or finish marker; that is next, and it is a question about where a
+ * marker can go on an object that hides half of itself, not about this file.
  */
 
 import { createRng } from '../core/prng.ts';
@@ -18,31 +26,32 @@ import { buildSurface } from '../core/kinetic/surface.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import { createInfinityCube } from '../core/kinetic/mechanisms/infinity-cube.ts';
 import type { InfinityCubeMechanism } from '../core/kinetic/mechanisms/infinity-cube.ts';
+import {
+  INFINITY_CUBE_RULINGS, infinityCubeDesigns,
+} from '../core/kinetic/mechanisms/infinity-cube-designs.ts';
+import { decodeOpenClasses } from '../core/kinetic/stored-design.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
-import { DEFAULT_SEARCH_EFFORT, createAllStatesSearch, stateStats } from '../core/kinetic/maze.ts';
+import {
+  DEFAULT_SEARCH_EFFORT, createAllStatesSearch, stateStats, treeRate,
+} from '../core/kinetic/maze.ts';
+import { buildFoldGraph } from '../core/kinetic/fold-path.ts';
+import type { FoldGraph } from '../core/kinetic/fold-path.ts';
 import { buildKineticPieces } from '../render/kinetic-geometry.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
 
-/**
- * Cells across one face of one cube.
- *
- * Three, because that is what the paper model is meant to be built at, and
- * because four is where the search stops being something to wait for: a design
- * that takes two to seven seconds at three takes fifteen at four, and comes
- * back empty three times in four.
- */
-const CELLS_PER_FACE = 3;
+/** Cells across one face of one cube, to open with: what the paper model is. */
+const DEFAULT_CELLS = 3;
 
 /**
- * How long the search may go on, and in how many rounds.
+ * What a search gets, on the rare occasion one is needed.
  *
  * More generous than the default on both counts. The default budget is set so
  * that asking for something impossible is refused in about a second, which is
- * right on a page where most requests are answerable; here every request is a
- * hard one — six poses of a folding object, all of which must come out perfect
- * — and stopping at a second means never finding anything at all.
+ * right on a page where most requests are answerable; a request here is a hard
+ * one — six poses of a folding object, all of which must come out perfect —
+ * and stopping at a second would mean never finding anything at all.
  */
 const FOLD_EFFORT = DEFAULT_SEARCH_EFFORT * 12;
 const FOLD_ROUNDS = 12;
@@ -51,32 +60,83 @@ const FOLD_RESTARTS = 4;
 interface Build {
   mech: InfinityCubeMechanism;
   surface: KineticSurface;
+  graph: FoldGraph;
   design: KineticDesign;
   poses: FoldPose[];
   perfectPoses: number;
-  seed: number;
+  /** Which of the stored mazes this is, counting from one; 0 when searched for. */
+  maze: number;
+  mazes: number;
+}
+
+/** Mechanism and surface, kept so that moving between mazes costs nothing. */
+interface Ruling {
+  mech: InfinityCubeMechanism;
+  surface: KineticSurface;
+  graph: FoldGraph;
 }
 
 export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   const scene = createFoldScene(viewportEl);
   const controls = createFoldControls(controlsEl);
 
+  const rulings = new Map<number, Ruling>();
   let build: Build | null = null;
+  let cells = INFINITY_CUBE_RULINGS.includes(DEFAULT_CELLS)
+    ? DEFAULT_CELLS
+    : INFINITY_CUBE_RULINGS[0] ?? DEFAULT_CELLS;
+  let maze = 0;
   let poseIndex = 0;
-  let seed = 1;
   /** Bumped by every rebuild, so an older search knows it has been overtaken. */
   let buildToken = 0;
 
-  function show(next: Build) {
+  function rulingFor(next: number): Ruling {
+    const had = rulings.get(next);
+    if (had) return had;
+    const mech = createInfinityCube({ cells: next });
+    const made: Ruling = {
+      mech,
+      surface: buildSurface(mech, { maxStates: mech.states.length }),
+      graph: buildFoldGraph(mech),
+    };
+    rulings.set(next, made);
+    return made;
+  }
+
+  /**
+   * The stored maze, if it still describes this surface.
+   *
+   * Two checks, and the second is the one that matters. The class count only
+   * says the design is the right size; that it is a *perfect maze in every
+   * pose* is asked of the geometry, exactly as it would be of a design found a
+   * moment ago.
+   */
+  function storedDesign(ruling: Ruling, index: number): KineticDesign | null {
+    const shelf = infinityCubeDesigns(ruling.mech.cellsPerFace);
+    const stored = shelf[index % Math.max(1, shelf.length)];
+    if (!stored || stored.classCount !== ruling.surface.classCount) return null;
+    const design: KineticDesign = {
+      open: decodeOpenClasses(stored),
+      openCutClasses: [],
+      targetState: 0,
+    };
+    return treeRate(ruling.surface, design).rate === 1 ? design : null;
+  }
+
+  function show(next: Build, keepPose: boolean) {
     build = next;
-    poseIndex = 0;
+    const pose = keepPose ? Math.min(poseIndex, next.mech.states.length - 1) : 0;
+    poseIndex = pose;
     scene.setModel({
       pieces: buildKineticPieces(next.mech, next.surface, next.design),
       states: next.mech.states,
+      graph: next.graph,
     });
-    scene.setPose(poseIndex);
+    // Cut to the pose rather than fold to it: the object on screen a moment ago
+    // was a different maze, so there was no journey.
+    scene.setPose(pose);
     scene.setAutoRotate(controls.isAutoRotating());
-    controls.setPoses(next.poses, poseIndex);
+    controls.setPoses(next.poses, pose);
     refreshPose();
   }
 
@@ -86,38 +146,63 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       poses: build.poses,
       poseIndex,
       perfectPoses: build.perfectPoses,
-      seed: build.seed,
+      maze: build.maze,
+      mazes: build.mazes,
       cellsPerFace: build.mech.cellsPerFace,
+      searched: build.maze === 0,
     });
   }
 
-  /**
-   * Builds the object, then walks the search one round per frame.
-   *
-   * `token` stands in for cancellation: if anything starts a newer build, the
-   * older loop finds its token stale and drops what it was doing.
-   */
-  function rebuild() {
-    const token = ++buildToken;
-    const mine = seed;
-    controls.setBusy(true);
-    controls.setStatus('Folding the ring...');
-    controls.setProgress(0);
+  function buildFrom(ruling: Ruling, design: KineticDesign, index: number, mazes: number) {
+    const rate = treeRate(ruling.surface, design);
+    return {
+      mech: ruling.mech,
+      surface: ruling.surface,
+      graph: ruling.graph,
+      design,
+      poses: describePoses(ruling.mech, ruling.surface, design),
+      perfectPoses: rate.perfectStates.length,
+      maze: index,
+      mazes,
+    };
+  }
 
-    // Let the browser paint that line before the thread disappears into the
-    // first round, exactly as the kinetic page does.
+  /** Puts a maze on screen: off the shelf if it is there, searched for if not. */
+  function rebuild(keepPose: boolean) {
+    const token = ++buildToken;
+    const ruling = rulingFor(cells);
+    const shelf = infinityCubeDesigns(cells);
+    const design = storedDesign(ruling, maze);
+    if (design) {
+      controls.setStatus('');
+      controls.setProgress(null);
+      controls.setBusy(false);
+      show(buildFrom(ruling, design, (maze % shelf.length) + 1, shelf.length), keepPose);
+      return;
+    }
+    searchInstead(ruling, token, keepPose);
+  }
+
+  /**
+   * The fallback: find one here and now, a round at a time.
+   *
+   * Only reached if the stored mazes have stopped describing the object — a
+   * change to how the surface is built, say. The page has one thread, so the
+   * search is walked a round per frame with the browser handed back in
+   * between, exactly as the kinetic page does it.
+   */
+  function searchInstead(ruling: Ruling, token: number, keepPose: boolean) {
+    controls.setBusy(true);
+    controls.setStatus('Looking for a maze that survives every fold...');
+    controls.setProgress(0);
     requestAnimationFrame(() => setTimeout(() => {
       if (token !== buildToken) return;
-      const mech = createInfinityCube({ cells: CELLS_PER_FACE });
-      const surface = buildSurface(mech, { maxStates: mech.states.length });
-      const search = createAllStatesSearch(surface, {
-        rng: createRng(mine),
+      const search = createAllStatesSearch(ruling.surface, {
+        rng: createRng(maze + 1),
         effort: FOLD_EFFORT,
         maxRounds: FOLD_ROUNDS,
         restarts: FOLD_RESTARTS,
       });
-      controls.setStatus('Looking for a maze that survives every fold...');
-
       const pump = () => {
         if (token !== buildToken) return;
         let done: boolean;
@@ -141,23 +226,14 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
           requestAnimationFrame(pump);
           return;
         }
-
         const found = search.result();
-        show({
-          mech,
-          surface,
-          design: found.design,
-          poses: describePoses(mech, surface, found.design),
-          perfectPoses: found.rate.perfectStates.length,
-          seed: mine,
-        });
+        show(buildFrom(ruling, found.design, 0, 0), keepPose);
         controls.setProgress(null);
         controls.setBusy(false);
-        const short = found.rate.rate < 1;
         controls.setStatus(
-          short
+          found.rate.rate < 1
             ? `Best found: a perfect maze in ${found.rate.perfectStates.length} of ` +
-              `${surface.stateCount} poses. Try another maze.`
+              `${ruling.surface.stateCount} poses. Try another maze.`
             : '',
         );
       };
@@ -167,19 +243,36 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
 
   controls.onPose(index => {
     poseIndex = index;
-    scene.setPose(index);
-    refreshPose();
+    // Folded to, not cut to: the whole claim of the page is that these six
+    // shapes are the same object, and a cut says nothing about that.
+    scene.setPose(index, { animate: true });
+  });
+
+  controls.onRuling(next => {
+    if (next === cells) return;
+    cells = next;
+    maze = 0;
+    rebuild(true);
   });
 
   controls.onAction('another', () => {
-    seed++;
-    rebuild();
+    maze++;
+    rebuild(true);
   });
 
   controls.onAction('auto-rotate', () => scene.setAutoRotate(controls.isAutoRotating()));
 
+  // The numbers belong to the pose that is on screen, so they wait for the
+  // folding to stop rather than describing a shape the object is passing
+  // through.
+  scene.onArrive(index => {
+    poseIndex = index;
+    refreshPose();
+  });
+
   window.addEventListener('resize', () => scene.resize());
-  rebuild();
+  controls.setRulings(INFINITY_CUBE_RULINGS, cells);
+  rebuild(false);
 }
 
 /**
