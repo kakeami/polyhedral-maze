@@ -58,7 +58,7 @@ export interface StackSheetPlan {
 
 const TAU = Math.PI * 2;
 
-function circlePoly(center: Vec2, radius: number, segments = 40): Vec2[] {
+export function circlePoly(center: Vec2, radius: number, segments = 40): Vec2[] {
   return Array.from({ length: segments }, (_, i) => {
     const a = (i / segments) * TAU;
     return [center[0] + radius * Math.cos(a), center[1] + radius * Math.sin(a)] as Vec2;
@@ -66,7 +66,7 @@ function circlePoly(center: Vec2, radius: number, segments = 40): Vec2[] {
 }
 
 /** Regular polygon with a flat side at the bottom, centred on `center`. */
-function polygonPoints(center: Vec2, circumradius: number, sides: number): Vec2[] {
+export function polygonPoints(center: Vec2, circumradius: number, sides: number): Vec2[] {
   const offset = Math.PI / 2 + Math.PI / sides;
   return Array.from({ length: sides }, (_, i) => {
     const a = offset + (i / sides) * TAU;
