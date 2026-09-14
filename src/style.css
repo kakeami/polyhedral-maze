@@ -209,7 +209,7 @@ html, body {
   color: #111;
 }
 
-/* The moving maze: a line of explanation above the controls, and a status
+/* The kinetic maze: a line of explanation above the controls, and a status
    line that only says anything while the search is running or fell short. */
 .blurb {
   margin: -4px 0 18px;

@@ -1,5 +1,5 @@
 /**
- * Wiring for the moving maze: panel -> mechanism -> scene.
+ * Wiring for the kinetic maze: panel -> mechanism -> scene.
  *
  * The one thing to know about the shape of this file is why the build is
  * announced before it runs. Finding a design that is a perfect maze in every

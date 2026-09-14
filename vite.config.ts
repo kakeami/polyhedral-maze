@@ -5,7 +5,7 @@ export default defineConfig({
   base: '/polyhedral-maze/',
   build: {
     rollupOptions: {
-      // Two pages, one deployment: the solids at the root and the moving maze
+      // Two pages, one deployment: the solids at the root and the kinetic maze
       // at /kinetic/. They share `core/` and most of `render/`, so a second
       // entry costs a page, not a second app.
       input: {

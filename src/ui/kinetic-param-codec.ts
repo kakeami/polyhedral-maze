@@ -1,5 +1,5 @@
 /**
- * URL <-> parameters for the moving maze, and the limits those parameters obey.
+ * URL <-> parameters for the kinetic maze, and the limits those parameters obey.
  *
  * The limits are here rather than in the panel because they are not a matter of
  * taste: a stack of `layers` rings with `sides` faces has sides^(layers-1)

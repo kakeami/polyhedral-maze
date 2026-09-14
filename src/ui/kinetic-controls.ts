@@ -1,5 +1,5 @@
 /**
- * The panel for the moving maze.
+ * The panel for the kinetic maze.
  *
  * Built the same way as `controls.ts` — one string of HTML, then listeners —
  * so the two pages stay recognisably one site. What differs is that some of
@@ -339,7 +339,7 @@ function buildHTML(p: KineticParams): string {
   const L = KINETIC_LIMITS;
 
   return `
-    <h2>Moving Maze</h2>
+    <h2>Kinetic Maze</h2>
     <p class="blurb" id="kin-blurb">
       ${esc(p.mechanism === 'pair' ? PAIR_BLURB : STACK_BLURB)}
     </p>
