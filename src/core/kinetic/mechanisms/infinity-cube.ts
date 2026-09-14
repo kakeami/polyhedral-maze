@@ -86,12 +86,25 @@ export const DEFAULT_RING = PLANK_RING;
  * lists them; `.dev/probe-tape-map.ts` reads a taping back as "top, bottom or
  * which side", which is the form a pair of hands needs.
  *
- * This is the first of the eight. Seam by seam round the plank, the tape goes
- * on the outer side, the top, the bottom, the long side, the far outer side,
- * the top, the bottom, and the long side — which is `21022102` in the notation
- * the earlier probes used, the taping recommended for the first one built.
+ * Only four of the eight can be folded from any pose to any other, and this is
+ * one of them. Which four is decided by the two seams that cross from one row
+ * of the plank to the other: tape those on the same face, in line with each
+ * other, and the plank can be split along its length and opened, which is the
+ * move that reaches the second cube. Tape them on opposite faces and only
+ * three of the six poses are reachable — `.dev/probe-taping-connectivity.ts`
+ * counts it, and the taping first recommended here was one of those, chosen
+ * because the search of the day happened to manage it.
+ *
+ * Of the four, this one is the plainest to build: each row of the plank is
+ * taped top, outer side, top, and the two crossing seams at the ends are taped
+ * underneath — two tapes on an awkward vertical edge rather than four. On the
+ * maze it is a coin toss; all four reach a design in seven or eight tries out
+ * of eight at both rulings, with the same dead ends and the same walks
+ * (`.dev/probe-taping-choice.ts`). It is also `12101210` in the notation of the
+ * earlier probes, the one they reached a design for independently, so the two
+ * implementations are a check on each other here.
  */
-export const DEFAULT_HINGES: readonly number[] = [3, 2, 0, 2, 1, 2, 0, 0];
+export const DEFAULT_HINGES: readonly number[] = [2, 3, 2, 3, 2, 1, 2, 3];
 
 export const CUBE_RING_HINGES: readonly number[] = [0, 2, 2, 0, 1, 0, 1, 0];
 

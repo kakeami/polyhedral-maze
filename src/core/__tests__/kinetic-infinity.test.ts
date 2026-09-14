@@ -9,7 +9,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
-import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
+import {
+  createInfinityCube, hingeLine, DEFAULT_HINGES, PLANK_RING,
+} from '../kinetic/mechanisms/infinity-cube.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
 import { applyPlacement, type KineticCell, type Placement } from '../kinetic/types.ts';
 import { pickStartGoal, searchAllStates, type KineticDesign } from '../kinetic/maze.ts';
@@ -159,5 +161,36 @@ describe('gamma on the infinity cube', () => {
   it('is deterministic for a fixed seed', () => {
     const again = searchAllStates(surface, { rng: createRng(2) });
     expect([...again.design.open].sort()).toEqual([...result.design.open].sort());
+  });
+});
+
+describe('the taping it ships with', () => {
+  it('lines up the two seams that cross between the rows', () => {
+    // What decides whether the thing folds at all. The plank is two rows of
+    // four; the seams at its ends are the only ones joining the rows, and only
+    // if their tapes lie on the same face, in line with each other, can the
+    // plank be split along its length and opened out — the move that reaches
+    // the second cube. Tape them on the end edges instead and three of the six
+    // poses become unreachable, which is what the first taping recommended
+    // here did. `.dev/probe-taping-connectivity.ts` folds it out in full; this
+    // is the property that separates the four that work from the four that
+    // do not.
+    const crossing = [3, 7].map(seam => hingeLine(
+      PLANK_RING[seam]!,
+      PLANK_RING[(seam + 1) % PLANK_RING.length]!,
+      DEFAULT_HINGES[seam]!,
+    ));
+    const [a, b] = [crossing[0]!, crossing[1]!];
+    expect(a.axis).toBe(0); // along the plank, not up its end
+    expect(b.axis).toBe(0);
+    expect(a.point[2]).toBe(b.point[2]); // and both on the same face of it
+  });
+
+  it('folds through all six poses, two of them cubes', () => {
+    const shapes = mech.states.map(state =>
+      [0, 1, 2].map(axis => new Set(state.map(p => p.offset[axis]!.toFixed(1))).size)
+        .sort((x, y) => x - y).join('x'));
+    expect(shapes.filter(s => s === '2x2x2').length).toBe(2);
+    expect(shapes.length).toBe(6);
   });
 });
