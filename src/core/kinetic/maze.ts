@@ -375,34 +375,78 @@ export function optimizeForStates(
     if (s < 0 || s >= surface.stateCount) throw new Error(`no such state: ${s}`);
   }
 
+  const canToggle = surface.hidesCells;
   const openCutClasses = options.openCutClasses ?? chooseCutClasses(surface, rng);
   const cutSet = new Set(openCutClasses);
 
   // Flatten the parts of the graph the inner loop touches.
   const internal = surface.internalEdges;
+  const internalCount = internal.length;
   const classIndexOf = new Map<number, number>();
   internal.forEach((e, i) => classIndexOf.set(e.classId, i));
+  // Where cells can be buried, the seams are design variables too.
+  //
+  // Freezing them is a consequence of the budget, not a rule of its own: where
+  // the passage count is pinned at N-1, a seam opening spends one unit of it
+  // in every state at once, so the set has to be settled before the walls are
+  // arranged around it. A mechanism that folds shut has no such count to
+  // spend, and holding its seams still only costs it: the greedy choice is
+  // made against connectivity alone, blind to whether the loops it leaves can
+  // be undone anywhere. Measured on the eight-cube ring, freeing them is the
+  // difference between finding a design for two tapings out of four and for
+  // all four.
+  const seams: readonly number[] = canToggle ? surface.cutClasses : [];
+  seams.forEach((c, i) => classIndexOf.set(c, internalCount + i));
+  // Seam openings the design is stuck with: none, where it may move them.
   const cutPairs = targetStates.map(s => {
     const pairs: number[] = [];
-    for (const e of surface.adjByState[s]!) {
-      if (cutSet.has(e.classId)) pairs.push(e.a, e.b);
+    if (!canToggle) {
+      for (const e of surface.adjByState[s]!) {
+        if (cutSet.has(e.classId)) pairs.push(e.a, e.b);
+      }
     }
     return Int32Array.from(pairs);
   });
   // Which cells a wall joins, per state: -1 where it is buried and joins none.
   const wallPairs = targetStates.map(s => {
-    const pairs = new Int32Array(internal.length * 2).fill(-1);
+    const pairs = new Int32Array(internalCount * 2).fill(-1);
     for (const e of surface.adjByState[s]!) {
       const index = classIndexOf.get(e.classId);
-      if (index === undefined) continue;
+      if (index === undefined || index >= internalCount) continue;
       pairs[2 * index] = e.a;
       pairs[2 * index + 1] = e.b;
     }
     return pairs;
   });
+  // A seam is not one wall but as many as happen to meet along it in this
+  // state, so it needs a list where a wall needs a pair. Kept apart from the
+  // walls rather than folded in with them, so that the common case — one pair,
+  // or none — stays the two array reads it always was.
+  const seamStart = targetStates.map(() => new Int32Array(seams.length + 1));
+  const seamPairs = targetStates.map((s, t) => {
+    const buckets: number[][] = seams.map(() => []);
+    for (const e of surface.adjByState[s]!) {
+      const index = classIndexOf.get(e.classId);
+      if (index === undefined || index < internalCount) continue;
+      buckets[index - internalCount]!.push(e.a, e.b);
+    }
+    const start = seamStart[t]!;
+    const flat: number[] = [];
+    buckets.forEach((pairs, i) => {
+      start[i] = flat.length;
+      flat.push(...pairs);
+    });
+    start[seams.length] = flat.length;
+    return Int32Array.from(flat);
+  });
   const buried = targetStates.map(s => surface.cellCount - surface.visibleCount[s]!);
 
   const uf = new CellUnionFind(surface.cellCount);
+
+  // What each state costs on its own, written by every `evaluate` and kept for
+  // the accepted design, so the next move can be aimed at a state that fails.
+  const trialPerState = new Int32Array(targetStates.length);
+  const costPerState = new Int32Array(targetStates.length);
 
   const evaluate = (openList: Int32Array, count: number): number => {
     let cost = 0;
@@ -414,20 +458,112 @@ export function optimizeForStates(
       for (let i = 0; i < pairs.length; i += 2) {
         if (!uf.union(pairs[i]!, pairs[i + 1]!)) cycles++;
       }
+      const start = seamStart[t]!;
+      const seamData = seamPairs[t]!;
       for (let k = 0; k < count; k++) {
-        const wall = 2 * openList[k]!;
-        const a = walls[wall]!;
-        if (a < 0) continue; // buried here, so it joins nothing here
-        if (!uf.union(a, walls[wall + 1]!)) cycles++;
+        const index = openList[k]!;
+        if (index < internalCount) {
+          const wall = 2 * index;
+          const a = walls[wall]!;
+          if (a < 0) continue; // buried here, so it joins nothing here
+          if (!uf.union(a, walls[wall + 1]!)) cycles++;
+          continue;
+        }
+        const seam = index - internalCount;
+        for (let p = start[seam]!; p < start[seam + 1]!; p += 2) {
+          if (!uf.union(seamData[p]!, seamData[p + 1]!)) cycles++;
+        }
       }
       // A buried cell is a component of its own; it is not part of the maze.
-      cost += uf.components - buried[t]! - 1 + cycles;
+      const own = uf.components - buried[t]! - 1 + cycles;
+      trialPerState[t] = own;
+      cost += own;
     }
     return cost;
   };
 
-  const canToggle = surface.hidesCells;
-  const capacity = internal.length;
+  const capacity = internalCount + seams.length;
+
+  /**
+   * A wall to flip, chosen where the design is actually broken.
+   *
+   * A uniform flip is a bad bet late on: nearly every wall is already where
+   * some state wants it, so the move is nearly always rejected and the search
+   * stalls a long way from zero. This picks a state that still fails, rebuilds
+   * just that state, and offers a wall that answers its complaint — one that
+   * spans two of its pieces of surface, or one of the walls that closed a loop
+   * in it. Either is an improvement *there* by construction; whether it is an
+   * improvement overall is still the acceptance rule's to decide, so the moves
+   * are biased but the distribution they anneal against is not.
+   *
+   * Only where cells can be buried. A mechanism with a fixed passage count
+   * never reaches this: it swaps rather than flips, and its behaviour from a
+   * given seed is unchanged.
+   */
+  const failing: number[] = [];
+  const looped: number[] = [];
+  const proposeDefect = (
+    openList: Int32Array,
+    count: number,
+    isOpen: Uint8Array,
+  ): number => {
+    failing.length = 0;
+    for (let t = 0; t < costPerState.length; t++) {
+      if (costPerState[t]! > 0) failing.push(t);
+    }
+    if (failing.length === 0) return rng.nextInt(capacity);
+    const t = failing[rng.nextInt(failing.length)]!;
+    const pairs = cutPairs[t]!;
+    const walls = wallPairs[t]!;
+
+    const start = seamStart[t]!;
+    const seamData = seamPairs[t]!;
+    uf.reset();
+    for (let i = 0; i < pairs.length; i += 2) uf.union(pairs[i]!, pairs[i + 1]!);
+    looped.length = 0;
+    for (let k = 0; k < count; k++) {
+      const index = openList[k]!;
+      if (index < internalCount) {
+        const wall = 2 * index;
+        const a = walls[wall]!;
+        if (a < 0) continue;
+        if (!uf.union(a, walls[wall + 1]!)) looped.push(index);
+        continue;
+      }
+      const seam = index - internalCount;
+      for (let p = start[seam]!; p < start[seam + 1]!; p += 2) {
+        if (!uf.union(seamData[p]!, seamData[p + 1]!)) looped.push(index);
+      }
+    }
+    const components = uf.components - buried[t]! - 1;
+
+    // A loop is only ever undone by closing one of the walls that made it, so
+    // where the state is whole and looped there is nothing else worth trying.
+    if (looped.length > 0 && (components === 0 || rng.next() < HALF)) {
+      return looped[rng.nextInt(looped.length)]!;
+    }
+    // A gap, likewise, only by opening a wall whose two sides are on opposite
+    // banks of it. Sampled rather than scanned: the walls that span a gap are
+    // a large share of the closed ones while the state is badly broken, and by
+    // the time they are scarce the loop term above is usually what is left.
+    for (let tries = 0; tries < DEFECT_TRIES; tries++) {
+      const index = rng.nextInt(capacity);
+      if (isOpen[index]) continue;
+      if (index < internalCount) {
+        const wall = 2 * index;
+        const a = walls[wall]!;
+        if (a < 0) continue;
+        if (uf.find(a) !== uf.find(walls[wall + 1]!)) return index;
+        continue;
+      }
+      const seam = index - internalCount;
+      for (let p = start[seam]!; p < start[seam + 1]!; p += 2) {
+        if (uf.find(seamData[p]!) !== uf.find(seamData[p + 1]!)) return index;
+      }
+    }
+    return rng.nextInt(capacity);
+  };
+
   let bestList: Int32Array | null = null;
   let bestCost = Infinity;
   let steps = 0;
@@ -449,6 +585,7 @@ export function optimizeForStates(
     const isOpen = new Uint8Array(capacity);
     for (const i of openIndices) isOpen[i] = 1;
     let cost = evaluate(current, size);
+    costPerState.set(trialPerState);
     const trial = new Int32Array(capacity);
 
     for (let step = 0; step < iterations && cost > 0; step++) {
@@ -456,7 +593,9 @@ export function optimizeForStates(
       const temperature = startTemperature * (1 - step / iterations) + 0.02;
 
       if (canToggle && rng.next() < TOGGLE_SHARE) {
-        const index = rng.nextInt(capacity);
+        const index = rng.next() < DEFECT_SHARE
+          ? proposeDefect(current, size, isOpen)
+          : rng.nextInt(capacity);
         let trialSize = 0;
         if (isOpen[index]) {
           for (let k = 0; k < size; k++) {
@@ -473,6 +612,7 @@ export function optimizeForStates(
           current.set(trial.subarray(0, trialSize));
           size = trialSize;
           cost = next;
+          costPerState.set(trialPerState);
         }
         continue;
       }
@@ -489,6 +629,7 @@ export function optimizeForStates(
         isOpen[entering] = 1;
         current.set(trial.subarray(0, size));
         cost = next;
+        costPerState.set(trialPerState);
       }
     }
 
@@ -498,10 +639,17 @@ export function optimizeForStates(
     }
   }
 
-  const open = new Set<number>(openCutClasses);
-  for (const i of bestList ?? []) open.add(internal[i]!.classId);
+  // The seams it was given, unless it was free to choose its own — in which
+  // case which of them ended up open is a result, not a setting.
+  const open = new Set<number>(canToggle ? [] : openCutClasses);
+  for (const i of bestList ?? []) {
+    open.add(i < internalCount ? internal[i]!.classId : seams[i - internalCount]!);
+  }
+  const cutsOpen = canToggle
+    ? seams.filter(c => open.has(c))
+    : [...openCutClasses];
   return {
-    design: { open, openCutClasses: [...openCutClasses], targetState: targetStates[0]! },
+    design: { open, openCutClasses: cutsOpen, targetState: targetStates[0]! },
     cost: bestCost,
     targetStates: [...targetStates],
     restarts,
@@ -518,6 +666,25 @@ export function optimizeForStates(
  * passages settle where each state needs it.
  */
 const TOGGLE_SHARE = 0.5;
+
+/**
+ * How often a flip is aimed at a state that fails rather than thrown at random.
+ * High, because the uniform flip is what the aimed one is there to replace;
+ * the remainder is what keeps the search from only ever touching the walls the
+ * failing states have an opinion about.
+ */
+const DEFECT_SHARE = 0.9;
+
+/**
+ * Closed walls to sample when looking for one that spans a gap, before giving
+ * up and flipping something at random. A handful: where such walls are common
+ * the first try usually finds one, and where they are rare the search is close
+ * enough to done that the loop term is the one that matters.
+ */
+const DEFECT_TRIES = 16;
+
+/** Named only because a bare 0.5 in the middle of the aim reads as a threshold. */
+const HALF = 0.5;
 
 export interface StartGoal {
   readonly start: number;
