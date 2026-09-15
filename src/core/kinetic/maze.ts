@@ -903,18 +903,47 @@ export function pickPrintedEnds(
     return made;
   };
 
+  /**
+   * The longest walk that starts at a pair, in the pose where that is shortest.
+   *
+   * No combination can score better than this at either end, because the score
+   * is a distance from one of these cells in some pose and this is the
+   * furthest anything is. So it is an upper bound on every combination the
+   * pair takes part in, and pairs can be looked at in order of it.
+   */
+  const reachOf = (pair: readonly [number, number]): number => {
+    let worst = Infinity;
+    for (let state = 0; state < states; state++) {
+      const from = surface.visibleByState[state]![pair[0]] ? pair[0] : pair[1];
+      const far = walksFrom(from)[state]!;
+      let furthest = 0;
+      for (let cell = 0; cell < far.length; cell++) if (far[cell]! > furthest) furthest = far[cell]!;
+      worst = Math.min(worst, furthest);
+    }
+    return worst;
+  };
+
   // Every pair of pairs, judged by the walk in the state where it is shortest
   // — the same measure the shipped designs are ranked by. Quadratic in the
-  // number of dead ends, which is what keeps it cheap: it is a fraction of the
-  // cells, and the moment a combination is worse than the best one so far in
-  // any single state the rest of the states are not looked at.
+  // number of dead ends, and that number grows with the ruling rather than
+  // staying a handful: 1032 pairs at three cells across a face and 26726 at
+  // seven, which is 357 million combinations. So they are taken in order of
+  // the bound above and the sweep stops at the first pair that cannot beat
+  // what has already been found — everything after it is worse still. Within a
+  // combination, likewise, the moment it is worse in one pose the rest are not
+  // looked at.
+  const order = pairs
+    .map((pair, index) => ({ pair, index, reach: reachOf(pair) }))
+    .sort((a, b) => b.reach - a.reach || a.index - b.index);
   let best: PrintedEnds | null = null;
   let bestWalk = -Infinity;
-  for (let i = 0; i < pairs.length; i++) {
-    const s = pairs[i]!;
+  for (let i = 0; i < order.length; i++) {
+    if (order[i]!.reach <= bestWalk) break;
+    const s = order[i]!.pair;
     const fromStart = [walksFrom(s[0]), walksFrom(s[1])];
-    for (let j = i + 1; j < pairs.length; j++) {
-      const g = pairs[j]!;
+    for (let j = i + 1; j < order.length; j++) {
+      if (order[j]!.reach <= bestWalk) break;
+      const g = order[j]!.pair;
       if (g[0] === s[0] || g[0] === s[1] || g[1] === s[0] || g[1] === s[1]) continue;
       const byState: StartGoal[] = [];
       let worst = Infinity;
