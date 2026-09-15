@@ -7,13 +7,13 @@
  * and framed the same way, and that sameness is what makes them read as one
  * site rather than three demos.
  *
- * The mechanism's own frame is z-up; the sky is y-up. `stage` is where that is
- * reconciled, so everything a scene builds goes under it in the mechanism's
- * coordinates and comes out standing the right way round.
- *
- * Written when the folding view needed it. The two older scenes each still
- * build their own copy of this rig — identical but for the odd line — and
- * should be moved onto it by someone who can look at them while they do it.
+ * `stage` is the one mount point, and the one place a view's own frame is
+ * reconciled with the sky's. A mechanism is built z-up and about its own
+ * middle, so the stage stands it up and lifts it to the point the camera looks
+ * at; a polyhedron is already in the sky's frame and centred on the origin, so
+ * for it the stage is an identity and nothing but a mount point. Either way a
+ * view builds in its own coordinates and comes out standing the right way
+ * round.
  */
 
 import * as THREE from 'three';
@@ -23,23 +23,35 @@ import { BloomChain } from './scene-bloom.ts';
 import { SCENE_CONFIG } from './scene-constants.ts';
 import type { ScenePreset } from './scene-presets.ts';
 
+export interface SceneStageOptions {
+  /**
+   * Which way up the view builds. `'z-up'` is a mechanism's frame — the stage
+   * turns it upright and puts its middle where the camera is aimed; `'y-up'`
+   * is the sky's own frame, where the stage has nothing to do.
+   */
+  readonly frame?: 'z-up' | 'y-up';
+}
+
 export interface SceneStage {
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   readonly controls: OrbitControls;
   readonly bloom: BloomChain;
-  /** Everything the scene builds goes here: the mechanism's own frame, z-up. */
+  /** Everything the scene builds goes here, in the view's own frame. */
   readonly stage: THREE.Group;
   /** Exposure and light levels, which are the preset's to set. */
   applyPreset(preset: ScenePreset): void;
   /** One frame. `glowing` is the part of the object the bloom pass keeps. */
-  render(glowing: THREE.Object3D): void;
+  render(glowing: THREE.Object3D | null): void;
   resize(): void;
   dispose(): void;
 }
 
-export function createSceneStage(container: HTMLElement): SceneStage {
+export function createSceneStage(
+  container: HTMLElement,
+  options: SceneStageOptions = {},
+): SceneStage {
   const scene = new THREE.Scene();
   const { camera: camCfg, sky: skyCfg, controls: ctrlCfg, lights } = SCENE_CONFIG;
 
@@ -99,8 +111,10 @@ export function createSceneStage(container: HTMLElement): SceneStage {
   const bloom = new BloomChain(renderer, scene, camera, container);
 
   const stage = new THREE.Group();
-  stage.rotation.x = -Math.PI / 2;
-  stage.position.set(...ctrlCfg.target);
+  if ((options.frame ?? 'z-up') === 'z-up') {
+    stage.rotation.x = -Math.PI / 2;
+    stage.position.set(...ctrlCfg.target);
+  }
   scene.add(stage);
 
   return {

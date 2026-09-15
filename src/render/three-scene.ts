@@ -1,6 +1,16 @@
+/**
+ * The 3D view of a maze on a polyhedron: one object, and a camera that drifts
+ * around it.
+ *
+ * The oldest of the three views, and the plainest — nothing here moves but the
+ * camera, so a maze is built once and swapped whole when the parameters or the
+ * preset change. The twilight it floats in is `scene-stage.ts`, the same rig
+ * the two kinetic views stand on; what it adds of its own is the polyhedron's
+ * faces, the fat lines over them, and the ground some presets put underneath.
+ */
+
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Sky } from 'three/addons/objects/Sky.js';
+import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
@@ -9,8 +19,8 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { Polyhedron } from '../core/polyhedron.ts';
 import type { Face } from '../core/types.ts';
 import type { MazeRenderData } from './maze-geometry.ts';
-import { SCENE_CONFIG } from './scene-constants.ts';
-import { BLOOM_LAYER, BloomChain } from './scene-bloom.ts';
+import { BLOOM_LAYER } from './scene-bloom.ts';
+import { createSceneStage } from './scene-stage.ts';
 import {
   disposeObject,
   makeFaceMaterial,
@@ -43,71 +53,12 @@ export interface SceneContext {
 }
 
 export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT_PRESET_ID): SceneContext {
-  const scene = new THREE.Scene();
-
-  const { camera: camCfg, sky: skyCfg, controls: ctrlCfg, lights } = SCENE_CONFIG;
+  // The polyhedron is built in the sky's own frame and about the origin, so
+  // the stage has nothing to reconcile here — it is only where the maze hangs.
+  const rig = createSceneStage(container, { frame: 'y-up' });
+  const { scene, camera, renderer, controls } = rig;
 
   let preset: ScenePreset = resolvePreset(presetId);
-
-  const camera = new THREE.PerspectiveCamera(
-    camCfg.fov,
-    container.clientWidth / container.clientHeight,
-    camCfg.near,
-    camCfg.far,
-  );
-  camera.position.set(...camCfg.position);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, SCENE_CONFIG.pixelRatioClamp));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  container.appendChild(renderer.domElement);
-
-  // Sky (twilight atmosphere)
-  const sky = new Sky();
-  sky.scale.setScalar(skyCfg.scale);
-
-  const skyUniforms = sky.material.uniforms as Record<string, { value: unknown }>;
-  skyUniforms['turbidity']!.value = skyCfg.turbidity;
-  skyUniforms['rayleigh']!.value = skyCfg.rayleigh;
-  skyUniforms['mieCoefficient']!.value = skyCfg.mieCoefficient;
-  skyUniforms['mieDirectionalG']!.value = skyCfg.mieDirectionalG;
-
-  const sun = new THREE.Vector3();
-  const phi = THREE.MathUtils.degToRad(90 - skyCfg.elevation);
-  const theta = THREE.MathUtils.degToRad(skyCfg.azimuth);
-  sun.setFromSphericalCoords(1, phi, theta);
-  (skyUniforms['sunPosition']!.value as THREE.Vector3).copy(sun);
-
-  // Turn the sky into an environment map. Metal reflects the environment and
-  // nothing else — without this, anything with metalness renders black. The
-  // sky is briefly parented to a scratch scene because PMREMGenerator renders
-  // whatever scene it is handed from the origin outwards.
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const skyOnly = new THREE.Scene();
-  skyOnly.add(sky);
-  const envTarget = pmrem.fromScene(skyOnly);
-  scene.environment = envTarget.texture;
-  scene.add(sky);
-  pmrem.dispose();
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(...ctrlCfg.target);
-  controls.enableDamping = true;
-  controls.dampingFactor = ctrlCfg.dampingFactor;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = ctrlCfg.autoRotateSpeed;
-
-  // Lighting — directional light aligned with the sun. Intensities per preset.
-  const ambient = new THREE.AmbientLight(lights.ambientColor, 1);
-  scene.add(ambient);
-  const dir = new THREE.DirectionalLight(lights.directionalColor, 1);
-  dir.position.copy(sun).multiplyScalar(10);
-  scene.add(dir);
-
-  // Bloom needs a post-processing chain; the presets that do without it keep
-  // rendering straight to the canvas, so they pay nothing for it.
-  const bloom = new BloomChain(renderer, scene, camera, container);
 
   let mazeGroup: THREE.Group | null = null;
   let ground: THREE.Mesh | null = null;
@@ -116,11 +67,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
   let lastData: MazeRenderData | null = null;
 
   function applyPreset() {
-    renderer.toneMappingExposure = preset.lighting.exposure;
-    ambient.intensity = preset.lighting.ambientIntensity;
-    dir.intensity = preset.lighting.directionalIntensity;
-
-    bloom.setSpec(preset.bloom);
+    rig.applyPreset(preset);
 
     if (ground) {
       scene.remove(ground);
@@ -135,7 +82,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
 
   function rebuildMazeGroup() {
     if (mazeGroup) {
-      scene.remove(mazeGroup);
+      rig.stage.remove(mazeGroup);
       disposeObject(mazeGroup);
       mazeGroup = null;
     }
@@ -143,7 +90,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     if (!lastPolyhedron || !lastData) return;
     const resolution = new THREE.Vector2(container.clientWidth, container.clientHeight);
     mazeGroup = buildMazeGroup(lastPolyhedron, lastData, preset, resolution, lineMaterials);
-    scene.add(mazeGroup);
+    rig.stage.add(mazeGroup);
   }
 
   function updateMaze(polyhedron: Polyhedron, data: MazeRenderData) {
@@ -159,12 +106,9 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
   }
 
   function resize() {
+    rig.resize();
     const w = container.clientWidth;
     const h = container.clientHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
-    bloom.setSize(w, h);
     for (const mat of lineMaterials) {
       mat.resolution.set(w, h);
     }
@@ -178,9 +122,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     if (!running) return;
     requestAnimationFrame(animate);
     controls.update();
-    if (!bloom.render(mazeGroup, sky)) {
-      renderer.render(scene, camera);
-    }
+    rig.render(mazeGroup);
   }
   animate();
 
@@ -188,13 +130,7 @@ export function createScene(container: HTMLElement, presetId: PresetId = DEFAULT
     running = false;
     if (mazeGroup) disposeObject(mazeGroup);
     if (ground) disposeObject(ground);
-    bloom.dispose();
-    envTarget.dispose();
-    sky.geometry.dispose();
-    sky.material.dispose();
-    renderer.dispose();
-    controls.dispose();
-    renderer.domElement.remove();
+    rig.dispose();
   }
 
   return { renderer, scene, camera, controls, updateMaze, setPreset, resize, dispose };

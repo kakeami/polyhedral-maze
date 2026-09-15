@@ -4,9 +4,9 @@
  * It is a different scene from `three-scene.ts` rather than a mode of it,
  * because the objects come from somewhere else entirely — a mechanism's pieces,
  * not a polyhedron's faces — and because what moves is the object, not the
- * camera. What the two share is everything about how a maze is *drawn*:
- * `scene-objects.ts` for the lines, materials and pins, `scene-bloom.ts` for
- * the glow, `scene-presets.ts` and `scene-constants.ts` for the twilight.
+ * camera. What the two share is everything else: `scene-stage.ts` for the
+ * twilight it floats in, `scene-objects.ts` for the lines, materials and pins,
+ * `scene-bloom.ts` for the glow.
  *
  * Each piece is a `Group`. Animating the mechanism is then nothing more than
  * setting one rotation per group, which is exactly what the maths says: the
@@ -14,8 +14,6 @@
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Sky } from 'three/addons/objects/Sky.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -23,7 +21,7 @@ import type { Vec3 } from '../core/types.ts';
 import { createRng } from '../core/prng.ts';
 import type { KineticPieceGeometry } from './kinetic-geometry.ts';
 import { RingDriver } from './snap-motion.ts';
-import { BLOOM_LAYER, BloomChain } from './scene-bloom.ts';
+import { BLOOM_LAYER } from './scene-bloom.ts';
 import {
   disposeObject,
   makeFaceMaterial,
@@ -31,7 +29,7 @@ import {
   makeRimMaterial,
   makeSegments,
 } from './scene-objects.ts';
-import { SCENE_CONFIG } from './scene-constants.ts';
+import { createSceneStage } from './scene-stage.ts';
 import { DEFAULT_PRESET_ID, faceColorHex, resolvePreset } from './scene-presets.ts';
 import type { PresetId, ScenePreset } from './scene-presets.ts';
 import { KINETIC_SCENE } from './kinetic-scene-constants.ts';
@@ -69,72 +67,13 @@ export function createKineticScene(
   container: HTMLElement,
   presetId: PresetId = DEFAULT_PRESET_ID,
 ): KineticSceneContext {
-  const scene = new THREE.Scene();
-  const { camera: camCfg, sky: skyCfg, controls: ctrlCfg, lights } = SCENE_CONFIG;
+  const rig = createSceneStage(container);
+  const { camera, renderer, controls } = rig;
   let preset: ScenePreset = resolvePreset(presetId);
 
-  const camera = new THREE.PerspectiveCamera(
-    camCfg.fov,
-    container.clientWidth / container.clientHeight,
-    camCfg.near,
-    camCfg.far,
-  );
-  camera.position.set(...camCfg.position);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, SCENE_CONFIG.pixelRatioClamp));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  container.appendChild(renderer.domElement);
-
-  // Sky, environment and lights: the same twilight the polyhedra float in.
-  const sky = new Sky();
-  sky.scale.setScalar(skyCfg.scale);
-  const skyUniforms = sky.material.uniforms as Record<string, { value: unknown }>;
-  skyUniforms['turbidity']!.value = skyCfg.turbidity;
-  skyUniforms['rayleigh']!.value = skyCfg.rayleigh;
-  skyUniforms['mieCoefficient']!.value = skyCfg.mieCoefficient;
-  skyUniforms['mieDirectionalG']!.value = skyCfg.mieDirectionalG;
-
-  const sun = new THREE.Vector3();
-  sun.setFromSphericalCoords(
-    1,
-    THREE.MathUtils.degToRad(90 - skyCfg.elevation),
-    THREE.MathUtils.degToRad(skyCfg.azimuth),
-  );
-  (skyUniforms['sunPosition']!.value as THREE.Vector3).copy(sun);
-
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const skyOnly = new THREE.Scene();
-  skyOnly.add(sky);
-  const envTarget = pmrem.fromScene(skyOnly);
-  scene.environment = envTarget.texture;
-  scene.add(sky);
-  pmrem.dispose();
-
-  const ambient = new THREE.AmbientLight(lights.ambientColor, 1);
-  scene.add(ambient);
-  const dirLight = new THREE.DirectionalLight(lights.directionalColor, 1);
-  dirLight.position.copy(sun).multiplyScalar(10);
-  scene.add(dirLight);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(...ctrlCfg.target);
-  controls.enableDamping = true;
-  controls.dampingFactor = ctrlCfg.dampingFactor;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = ctrlCfg.autoRotateSpeed;
-
-  const bloom = new BloomChain(renderer, scene, camera, container);
-
-  // stage: the mechanism is built z-up; the sky is y-up.
-  const stage = new THREE.Group();
-  stage.rotation.x = -Math.PI / 2;
-  stage.position.set(...ctrlCfg.target);
-  scene.add(stage);
   // barrel: what a hand on the bottom ring turns — the whole object at once.
   const barrel = new THREE.Group();
-  stage.add(barrel);
+  rig.stage.add(barrel);
 
   let model: KineticModel | null = null;
   let driver: RingDriver | null = null;
@@ -184,7 +123,7 @@ export function createKineticScene(
     // so the camera framing carries over unchanged from the other view.
     const halfHeight = Math.max(model.zMax, -model.zMin);
     const fit = 1 / Math.max(model.radius, halfHeight);
-    stage.scale.setScalar(fit);
+    rig.stage.scale.setScalar(fit);
 
     for (const piece of model.pieces) {
       const group = new THREE.Group();
@@ -263,13 +202,6 @@ export function createKineticScene(
     solutionMaterial.transparent = true;
     solutionLine = new Line2(geo, solutionMaterial);
     barrel.add(solutionLine);
-  }
-
-  function applyPreset() {
-    renderer.toneMappingExposure = preset.lighting.exposure;
-    ambient.intensity = preset.lighting.ambientIntensity;
-    dirLight.intensity = preset.lighting.directionalIntensity;
-    bloom.setSpec(preset.bloom);
   }
 
   // ─── Turning a ring by hand ──────────────────────────────────────────
@@ -414,7 +346,7 @@ export function createKineticScene(
     stateCallback?.(driver.offsets(), atRest);
   }
 
-  applyPreset();
+  rig.applyPreset(preset);
 
   const clock = new THREE.Clock();
   let running = true;
@@ -437,17 +369,14 @@ export function createKineticScene(
     }
 
     controls.update();
-    if (!bloom.render(barrel, sky)) renderer.render(scene, camera);
+    rig.render(barrel);
   }
   animate();
 
   function resize() {
+    rig.resize();
     const w = container.clientWidth;
     const h = container.clientHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
-    bloom.setSize(w, h);
     for (const mat of lineMaterials) mat.resolution.set(w, h);
     solutionMaterial?.resolution.set(w, h);
   }
@@ -469,7 +398,7 @@ export function createKineticScene(
     },
     setPreset(id) {
       preset = resolvePreset(id);
-      applyPreset();
+      rig.applyPreset(preset);
       // The geometry has to be rebuilt for the new palette and line colours,
       // but the rings keep turning from where they were: what changed is what
       // the object is made of, not which way it is pointing.
@@ -498,13 +427,7 @@ export function createKineticScene(
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       renderer.domElement.removeEventListener('pointercancel', onPointerUp);
       clearModel();
-      bloom.dispose();
-      envTarget.dispose();
-      sky.geometry.dispose();
-      sky.material.dispose();
-      renderer.dispose();
-      controls.dispose();
-      renderer.domElement.remove();
+      rig.dispose();
     },
   };
 }
