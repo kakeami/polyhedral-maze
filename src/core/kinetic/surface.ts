@@ -4,9 +4,13 @@ import { UnionFind } from '../graph.ts';
 import { VertexWelder } from './weld.ts';
 
 export type SideClassKind =
-  /** Meets a side of another piece in at least one state. */
+  /**
+   * Stands for more than one wall: it meets a side of another piece in some
+   * state, or another side lies buried under it. Opening it opens every wall
+   * it stands for, in every state at once.
+   */
   | 'cut'
-  /** Always meets the same side of the same piece (a fold or a grid line). */
+  /** Exactly one wall: the same two cells of one piece, always (a grid line). */
   | 'internal'
   /** Never meets anything: a free rim of the object. */
   | 'rim';
@@ -26,6 +30,9 @@ export interface SurfaceAdjacency {
  * side meets different partners in different states, all of them must agree on
  * where the opening is, or the drawing would break at a seam (L0). Union-Find
  * over the pairings of every state is exactly that agreement.
+ *
+ * What counts as meeting is `BuildSurfaceOptions.weld`, and on an object that
+ * folds shut on itself the two answers differ — see there.
  */
 export interface KineticSurface {
   readonly mechanism: Mechanism;
@@ -148,7 +155,69 @@ function pairSides(
   return pairs;
 }
 
-export function buildSurface(mech: Mechanism, options: { maxStates?: number } = {}): KineticSurface {
+export interface BuildSurfaceOptions {
+  readonly maxStates?: number;
+  /**
+   * Which sides have to agree about their opening.
+   *
+   * `'seam-safe'`, the default, welds every side lying on a segment where any
+   * one of them is on the surface — the buried ones included. It is a rule
+   * about the built object rather than about the walk: folded shut, a cell
+   * pressed against another piece keeps its printed walls, and the ones along
+   * the edge of that face lie exactly on the seam the surface crosses there.
+   * A paper's thickness of slop then shows a wall across a passage. Welding
+   * them makes the drawing agree with itself wherever a hand can see it, at
+   * the cost of some of the freedom the search had.
+   *
+   * `'walkable'` welds only what a walk can use: two sides both on the
+   * surface. It is the weaker rule, and the honest one if all that is wanted
+   * is a maze on a screen.
+   *
+   * Two faces pressed together share every grid line as well as their edges,
+   * and those lines are inside the object for good. Neither rule welds them:
+   * asking the drawings on two faces to match leaves the search with nothing
+   * to arrange, and on the eight-cube ring no design at all.
+   *
+   * On a mechanism that never buries a cell the two rules are the same one,
+   * and the extra work is skipped.
+   */
+  readonly weld?: 'seam-safe' | 'walkable';
+}
+
+/**
+ * Sides lying on the same segment of space in one state, buried ones included.
+ *
+ * `pairSides` leaves hidden cells out, because a walk cannot use them and
+ * because with them in a segment can be shared by three or four sides. Here
+ * that is the point: those are the sides that have to agree with the surface
+ * without ever being part of it.
+ */
+function touchingSides(
+  mech: Mechanism,
+  state: KineticState,
+  sideStart: Int32Array,
+): number[][] {
+  const welder = new VertexWelder();
+  const bySegment = new Map<string, number[]>();
+
+  mech.cells.forEach((cell, cellIndex) => {
+    const placement = state[cell.piece];
+    if (!placement) throw new Error(`state is missing a placement for piece ${cell.piece}`);
+    const ids = cell.corners.map(c => welder.id(applyPlacement(placement, c)));
+    for (let s = 0; s < ids.length; s++) {
+      const u = ids[s]!;
+      const v = ids[(s + 1) % ids.length]!;
+      const key = u < v ? `${u}:${v}` : `${v}:${u}`;
+      const side = sideStart[cellIndex]! + s;
+      const bucket = bySegment.get(key);
+      if (bucket) bucket.push(side);
+      else bySegment.set(key, [side]);
+    }
+  });
+  return [...bySegment.values()];
+}
+
+export function buildSurface(mech: Mechanism, options: BuildSurfaceOptions = {}): KineticSurface {
   const maxStates = options.maxStates ?? 4096;
   if (mech.states.length === 0) throw new Error('mechanism has no states');
   if (mech.states.length > maxStates) {
@@ -175,6 +244,7 @@ export function buildSurface(mech: Mechanism, options: { maxStates?: number } = 
   for (let cell = 0; cell < cellCount; cell++) {
     if (visibleByState.every(v => v[cell] === 1)) alwaysVisible.push(cell);
   }
+  const hidesCells = alwaysVisible.length < cellCount;
 
   const pairsByState = mech.states.map((state, index) =>
     pairSides(mech, state, sideStart, visibleByState[index]!),
@@ -185,6 +255,25 @@ export function buildSurface(mech: Mechanism, options: { maxStates?: number } = 
   for (let s = 0; s < sideCount; s++) uf.find(s);
   for (const pairs of pairsByState) {
     for (const p of pairs) uf.union(p.sideA, p.sideB);
+  }
+  if ((options.weld ?? 'seam-safe') === 'seam-safe' && hidesCells) {
+    // And the sides buried under them, wherever any side of the segment is on
+    // the surface: what is printed underneath must not contradict what is on
+    // show at the same place. Nothing is welded where every side is buried —
+    // that is inside the object, and nobody will ever see it.
+    const cellOfSide = new Int32Array(sideCount);
+    for (let cell = 0; cell < cellCount; cell++) {
+      for (let side = sideStart[cell]!; side < sideStart[cell + 1]!; side++) {
+        cellOfSide[side] = cell;
+      }
+    }
+    mech.states.forEach((state, index) => {
+      const visible = visibleByState[index]!;
+      for (const sides of touchingSides(mech, state, sideStart)) {
+        if (!sides.some(side => visible[cellOfSide[side]!] === 1)) continue;
+        for (let i = 1; i < sides.length; i++) uf.union(sides[0]!, sides[i]!);
+      }
+    });
   }
 
   const classOf = new Int32Array(sideCount).fill(-1);
@@ -209,7 +298,9 @@ export function buildSurface(mech: Mechanism, options: { maxStates?: number } = 
     for (const p of pairs) {
       const classId = classOf[p.sideA]!;
       const intra = mech.cells[p.cellA]!.piece === mech.cells[p.cellB]!.piece;
-      if (!intra) kind[classId] = 'cut';
+      // More than the one pair of sides means more than one wall stands or
+      // falls with the class, which is a seam whatever it joins here.
+      if (!intra || classSides[classId]!.length !== 2) kind[classId] = 'cut';
       else if (kind[classId] !== 'cut') kind[classId] = 'internal';
       adj.push({ a: p.cellA, b: p.cellB, classId, intra });
     }
@@ -253,6 +344,6 @@ export function buildSurface(mech: Mechanism, options: { maxStates?: number } = 
     visibleByState,
     visibleCount,
     alwaysVisible,
-    hidesCells: alwaysVisible.length < cellCount,
+    hidesCells,
   };
 }

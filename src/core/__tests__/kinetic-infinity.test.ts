@@ -338,3 +338,74 @@ describe('the longest walk through a pose', () => {
     expect(longestWalk(surface, { open: new Set() }, 0)).toBe(0);
   });
 });
+
+/**
+ * What a builder is promised: the drawing never contradicts itself anywhere a
+ * hand can see.
+ *
+ * Folded shut, the wall printed along the edge of a face pressed inside sits a
+ * paper's thickness from the seam the surface crosses there. Unless it agrees
+ * with the side on show, a millimetre of slop in the taping shows a wall
+ * across a passage — on the model, where no rendering rule can help. So the
+ * search is run on a surface that welds a buried side to whatever is on show
+ * on top of it, and this is that promise, read back off the geometry.
+ */
+describe('a drawing that agrees with itself where it shows', () => {
+  /** Sides sharing a segment of space in one state, buried ones included. */
+  function touching(surface: KineticSurface, state: number): number[][] {
+    const at = mech.states[state]!;
+    const key = (v: Vec3) => v.map(x => Math.round(x / 1e-6)).join(',');
+    const bySegment = new Map<string, number[]>();
+    mech.cells.forEach((cell, index) => {
+      const world = cell.corners.map(c => applyPlacement(at[cell.piece]!, c));
+      for (let s = 0; s < world.length; s++) {
+        const u = key(world[s]!);
+        const v = key(world[(s + 1) % world.length]!);
+        const segment = u < v ? `${u}|${v}` : `${v}|${u}`;
+        const side = surface.sideStart[index]! + s;
+        const bucket = bySegment.get(segment);
+        if (bucket) bucket.push(side); else bySegment.set(segment, [side]);
+      }
+    });
+    return [...bySegment.values()];
+  }
+
+  /** Segments with a side on show whose sides disagree about the opening. */
+  function disagreeing(surface: KineticSurface, design: Pick<KineticDesign, 'open'>): number {
+    let count = 0;
+    for (let state = 0; state < surface.stateCount; state++) {
+      const visible = surface.visibleByState[state]!;
+      for (const sides of touching(surface, state)) {
+        if (sides.length < 2) continue;
+        const cellOf = (side: number) => {
+          let cell = 0;
+          while (surface.sideStart[cell + 1]! <= side) cell++;
+          return cell;
+        };
+        if (!sides.some(side => visible[cellOf(side)] === 1)) continue;
+        const opens = sides.map(side => design.open.has(surface.classOf[side]!));
+        if (opens.some(open => open !== opens[0])) count++;
+      }
+    }
+    return count;
+  }
+
+  it('holds under the rule the designs are searched with', () => {
+    const design = searchAllStates(surface, { rng: createRng(5) }).design;
+    expect(disagreeing(surface, design)).toBe(0);
+  });
+
+  it('does not hold under the weaker one, which is why the rule exists', () => {
+    const loose = buildSurface(mech, { weld: 'walkable' });
+    const design = searchAllStates(loose, { rng: createRng(5) }).design;
+    expect(disagreeing(loose, design)).toBeGreaterThan(0);
+  });
+
+  it('costs the stack nothing: it never buries a cell', () => {
+    const stack = createStack({ sides: 5, layers: 3, cols: 2, rows: 2 });
+    const safe = buildSurface(stack);
+    const loose = buildSurface(stack, { weld: 'walkable' });
+    expect(safe.classCount).toBe(loose.classCount);
+    expect([...safe.classOf]).toEqual([...loose.classOf]);
+  });
+});

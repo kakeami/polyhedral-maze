@@ -6,9 +6,14 @@
  * The object never varies, so neither do these. A search takes seconds at
  * three cells across a face and the better part of half a minute at four,
  * which is not a wait to put in front of someone who opened a page; found
- * once, they cost a decode and a check. They are the best of sixteen tries at
+ * once, they cost a decode and a check. They are the best of two dozen tries at
  * each ruling, ranked by the longest walk in the pose where it is shortest —
  * see the probe for why that is the measure.
+ *
+ * Found under the welding rule a builder needs rather than the one a walk
+ * needs: a side buried against another cube agrees with whatever is on show on
+ * top of it (`BuildSurfaceOptions.weld`), so no printed wall can ever peek
+ * across a passage on the model.
  *
  * Each is a perfect maze in all six poses. The page checks that again as it
  * decodes, because a stored design is only as good as the surface it was found
@@ -18,60 +23,60 @@
 import type { StoredDesign } from '../stored-design.ts';
 
 export const INFINITY_CUBE_DESIGNS: readonly StoredDesign[] = [
-  // 192 cells, walks 44-56
-  { cells: 2, classCount: 272,
-    open: '3MRdI4KNZlatrmlCmQ_HHnzl1mg-LnBly6nNd9jV4167vQ' },
-  // 192 cells, walks 39-53
-  { cells: 2, classCount: 272,
-    open: 'LkguPazjWmcVdZvyTNpgUp2x061xDt7tgFprJjm7unuHTg' },
-  // 192 cells, walks 38-56
-  { cells: 2, classCount: 272,
-    open: 'LfkaljJW66Cl8tVl6Afert3RlKU9Zur1nl95LsnS6hreWg' },
-  // 192 cells, walks 38-50
-  { cells: 2, classCount: 272,
-    open: 'xSVqPq8WQpXb8YpTi06sfkPrcD9EVJxRe7PJE6PTZLnFxw' },
-  // 192 cells, walks 37-46
-  { cells: 2, classCount: 272,
-    open: 'A-sK7S5MLc4WnNknOcua6ey3x01OWRalRFuXzqu3mN43Jw' },
-  // 192 cells, walks 37-51
-  { cells: 2, classCount: 272,
-    open: '2EPUx2qajttmmHJJnWw6lHiY6XdhJqATatOePlpvz2mNWg' },
-  // 432 cells, walks 67-91
-  { cells: 3, classCount: 696,
-    open: 'jmhgPqgz1lzJ2ZorSnXo9IT8GaKmOdrlsWx0RrHaPyZpGz3rlL11KXO5F1eCMZ8R6bI5Gl1sQdmefC5rqj7ajY6R9GI9MNW3OZ-NOd_SGzeLPp01Na3P' },
-  // 432 cells, walks 67-80
-  { cells: 3, classCount: 696,
-    open: 'o049onZjxg1quKaaaUYtLL2ic73KnNSaS66oQhdpoyZ3dk7lTw_rLLuU3OBnlbbCOzJi2q1Xm5PB-uyzFlID9XBPcq0fn3ma-bSYL5FHUz01Y1lt6nzI' },
-  // 432 cells, walks 64-95
-  { cells: 3, classCount: 696,
-    open: 'pK4SejhQnS-yzthVi49QGTubHeXGuF2q8-bRNtNG7VnXVLS5gcvnwzqJZk4fZS1VOSfsHGedjhusS0PbxYNjrXCG2tZ-aadtZCYuLzZuuGVdTc_yzhPb' },
+  // 192 cells, walks 43-55
+  { cells: 2, classCount: 256,
+    open: '5XOg5UNL4mmqlpexqbvlnXExE4-h-enYLl1Xpe7SKls' },
+  // 192 cells, walks 40-51
+  { cells: 2, classCount: 256,
+    open: 'FlWvNoKuKq50-b6kpLNGYXk0XJGqtVnetOWJMb1O2t4' },
+  // 192 cells, walks 40-49
+  { cells: 2, classCount: 256,
+    open: 'TFRsNrhubblj9ZZGL6DM6rBtd-fiYoTMknkeuXYbsec' },
+  // 192 cells, walks 40-51
+  { cells: 2, classCount: 256,
+    open: 'lEZcY9TlRu-qrY50xIbb6s6KnBkXzhnPrtDFXtfuzOc' },
+  // 192 cells, walks 39-65
+  { cells: 2, classCount: 256,
+    open: '1FOi9Baec2V2ntmAI3Hdjp3LjqnnVR_L-IgmUutt4ck' },
+  // 192 cells, walks 39-54
+  { cells: 2, classCount: 256,
+    open: 'ZUGscuy25WlWHV_FCWW-k-XchlhLpcbh-qU13u7epxk' },
+  // 432 cells, walks 69-84
+  { cells: 3, classCount: 672,
+    open: 'dguKQ1dqbS0g5hbbWt41VdK500wxVvmJ1xGPgr4Mz3RfjpYje7PFbKacKjqrNzo6jXjg0uz4aQTp9mBEu5wby5vH4T6Nx6aXdElzuMZhuRPLjvEs' },
+  // 432 cells, walks 66-91
+  { cells: 3, classCount: 672,
+    open: 'auSipg3DV4a3tEo7RbniHK5NSs56xrims6p6NbeYk9qWbPZo61gsx6qszD4-WnM4rYSf0ZpltjQbi1XV1p4zfmZ7jop6Jpe2XVOfz3M-sSOdVa22' },
+  // 432 cells, walks 65-83
+  { cells: 3, classCount: 672,
+    open: 'lGk2I7TSFTvJzzBvYdsi1Y1vXDgTZmp0E5tcBl1c3DPXs9-c8nxsylXquPXReeOU6isdczab57Jipa60zJ6ZbQ_uUUkOWe50N3pmZmxqXirmTHkY' },
+  // 432 cells, walks 65-92
+  { cells: 3, classCount: 672,
+    open: 'cXiyHsUTX8hbaqroWmMhN-HD7WJkY-El9iHOGhzPjFazEpe3ppm53mfGbVye5egkXbiqVLY6djh3u8TOjviI52YST5xZxefk9aj02X2Xde7M4elo' },
+  // 432 cells, walks 63-80
+  { cells: 3, classCount: 672,
+    open: 'NmJNayTakdRS-lRVm8xs4T-8Sut47KOoM3rE1pRZBcTqYx47s3XO1G_h5caOqcIdDjsr2egmjzSnC9d72p7h6KvbNFYFhWKTtOnV7nGUz7JZZ66n' },
   // 432 cells, walks 63-87
-  { cells: 3, classCount: 696,
-    open: 'wnVjWFPPU1FtzOJwLmbdKKG5icPzSL-Jo1D6FcM2qg9T1-qdK3LQJTdk8jN5pgey5DI545xcvL0jnZZELt753MmO-MnLIjFfhkxPbHcXh-ZSpR70La3B' },
-  // 432 cells, walks 61-76
-  { cells: 3, classCount: 696,
-    open: 'VAd_TuJHo47YsVTxPaMuFZqGTH2JMp9BukU2LbkYeuVtznS28qMdXhtzevOhaNbk0tSsE_lYffCwfFqeM-cj-pzVWd2kmRHtS6Vpcd3lFq1qsTp8HOwn' },
-  // 432 cells, walks 61-84
-  { cells: 3, classCount: 696,
-    open: 'bYKV3MQ2PIZJ9jF10suFypVr_VQynOR0c4Mqvr0uZwq75ZMiJ7qqGJdGw1Va0uPDwszoNA4nGnnTHhumnFjVjpzgmzujqR5VHcaWWVlOm4HtcV6xusny' },
-  // 768 cells, walks 104-117
-  { cells: 4, classCount: 1312,
-    open: 'z0W4fUXkOW7BVPwCpg6czNAmpFcdWTbHGW4HjESWHs4Qn5mpYlw7cl51LuGS9VTU3bBny-WnVpNdUJlOR6qWblnOtTNP1aTjkdBni666a3Yfjy06SlUVt2qKedCpEuXkFTt5sOoj0ZrViTubVtODxitDxV1HPi9J-lWVL_bCXbRxfUU6lb7S6pEvMM74MsZaqtmcDo93pcOx8Rv59iDs0E1O66U' },
-  // 768 cells, walks 99-122
-  { cells: 4, classCount: 1312,
-    open: 'VKZayJGy2OO4NGydYN0hw56zcE7OU75qbS9WCTR-D-6lGZU8odyapbEqP65JP1PcaNiavRumouYO3leaBbonGw70MVM60TwRuWyOaD85bVMd2PhZUo7eNN0oY-5gVTc-Edln6x7a08JjMB9tMnrOc4gaXTexLll84oxarrW1xecxpvKmhpWe5HML_qCWXcE7zLg7_MhXsq60Nae14TkdszprIKU' },
-  // 768 cells, walks 88-122
-  { cells: 4, classCount: 1312,
-    open: 'J8R6ljGW8TG8Fv4uOcyjQd_DQ3xBp0F5bcJ74fAhzZiebpGtjjmUR1gvI051aHF6jjGjOWZlraG8Zj7l8sitDo2TRydapjIzPzos7WZN58hhRj-W5YXlmiZ90o5oVOeYjVM2X7Y1OUGPT0VrXkJNUYt_QSabrU6MXo2al7OfDhPXsF0_EmWOqp9N6ZJN2KjYMfZ_tIrZRjd68ahIWa_QdvRL7MU' },
+  { cells: 3, classCount: 672,
+    open: '3iFZzGQ2Ql226tFysfWVuDU50DIan22PAVO3pSV-4KFlVxuXnkYnC3daoxd5K1qWRsbqME48jLesiw5V2YubL9N5zMxwdlrssAW3rAO3NH5JN67b' },
+  // 768 cells, walks 96-136
+  { cells: 4, classCount: 1280,
+    open: 'FnWZNxHE90ngFFqPYVUi07ODWvtTadtNKzB212xdUR8XHWajdeJxVF_j2qF5mWQ9SWldZI27Ck0lr9hbnTzXZlY5K67JrGnuRXRLi_K1FfW0NYM7WjPqPZrOlzSKlm1FTwdnbVjfmDc5i1jvC9A92Rta7Z1Urm7Lmlfo5Uh7grFHvHblbHaW8H5B-FrT8TV6aluT8mHV1mnz0r2YwVNtBw' },
+  // 768 cells, walks 87-108
+  { cells: 4, classCount: 1280,
+    open: '5QFXcg7ORgaekippeM2nNcYbY_9gjpy2L2vEY35jI3OMo1oaOHOb9D6sH9psnmiXjZixO7I5RD9bi9rTOyu8yRqpXK-5K2Y_esAnz5nCFesfKTtyk5rlHXnau0SHTuNWrJ9AmnkRdscjPmqZOeUdPXamK3IlrZnskfLumKZ4Oq_yKZfKB5GmWtW1cbG15bVY7Y1jyc2OrtcZadWf8I2qRQ' },
   // 768 cells, walks 86-112
-  { cells: 4, classCount: 1312,
-    open: '1HIXM2pKNupGFSuQnyTmpNYbF6zywy3iiSWvIq1XxZxkbxzIujhVU-qyXSXbx4bai6zi4EW7Q7lyluOcMWU32qW2bH5QPWtmxzUbaHvUNR5XOzmlNUfbn5I4Z5HeGadZQzw7pK9hbiWfbY1tu06l1EPYJdH5U5c1OpeXZNSd6CfG2TKZjZGlPa1jlDNssXp6hZfZpnqamdPmcqZnDeNr0szjcY4' },
-  // 768 cells, walks 80-125
-  { cells: 4, classCount: 1312,
-    open: 'plGL9agUM6OGM3BqSrcl9ZIud6aj0eiXXi4hXbw-djCvxqAaPTdsssVurjWa-jI7E-GVvjyh3FNKh2rqkTOWybis7qnbuBPfktI5atXwMWfWzs6WB3v0oWkYfeMkasXYq1bejcRN06JVmjKuzhrfOvFtQKO28jemGSVP7Slu4TdesFnvElslOX6itatGfbIGq7fpNxrjXHancexHbWlpd-BZnpo' },
-  // 768 cells, walks 79-94
-  { cells: 4, classCount: 1312,
-    open: 'wvK0x2VS5TXaJD9kk4nkdDSir1jHdk12llLWRrAryis661JfYyw595U2jsZG9tJkWtWk0aHPrWDZ4CU1PLeGpwem2tapdjM6sRnapydHE-W4h1YdvSFfOnhImai9gtWU51NshXfxldbsMbuKVW-JPEv3pHdxG2oZyTdLNEquVKW6i46Wjid7GJsBXTaiX1xpT4teDV2z7NO53MVrSGzN3IJojY8' },
+  { cells: 4, classCount: 1280,
+    open: 'xx5GMHk1RsVWMJk0Lm481GYrrll8feFaO1G7XOEeNjE0jNacNd3VBzqp_AldjvPDHBx_ODmKd4hae8reefBM7clqWz-XlaX0U_DDCpttuWnNKkun36JWNu4KpYMVt8lgpVq1R-p6dctloY4bluQHnLgy2_zIJpvOfsyIdiar3Bp40lzGWtiawZlZeTqL7eQbbr7oOM4vc_dQg5yusVfmCw' },
+  // 768 cells, walks 85-127
+  { cells: 4, classCount: 1280,
+    open: 'ZR4slWRHh7oPmDTpNC68YqshznLmuZBXMVLNWPmxpTk-PPi6yTDnyVbP2okpTo4-GV3Q2q09pGqd9jjn4B8jy_hiburTJ3a-iVzRC-3Nb0SuTarpUVy3JDTXvAFoNbkzu9hz4T7FLXiTPw8psr6gduOORz7toXZK7Fy7UbZ2t2GBdVr9WQ7nOfqjPb74Qc6m9msceEZufONjTP5U6MwpLw' },
+  // 768 cells, walks 85-119
+  { cells: 4, classCount: 1280,
+    open: 'UVbPYSx6I8ybMHGjLE-apO3ItqU1afQMLgtP2VEl2ZqzD8gGT42Pb6Grb_TxwZcpo5Y7erxlyvBWdjTX8EN9sQvRcXND2-VrpyhXmU5XbqTWYHuzVZ3YIoejtIVjPZILV7e6RxrrrNoRuZZXVuUbauN86DU2RbrumC8X5_RKc1FGcY5jt5mu-OPYTdPwm3NW-PNGXaQtuj-NxE4qP52wcw' },
+  // 768 cells, walks 84-135
+  { cells: 4, classCount: 1280,
+    open: 'lNmJ-gAH9kngDPeR6Lwd9uSsnTFz8hObh1Mxi-7TOCuNN0w8hdRWX6GuVB9fq2LM65nrSVS5iS7NK_UWaqZObHhep8yU7DFjFSk9LyPNUY405gzWqTr6BrYKmI3MNjTfZQd4V-JmH5kzTWVdWfbARm1pqNWxo-G6yNTUI-sFP88wI6Opp-UmfKrpuRrzH9BjP1bvsSO0D0VrG6qtdQmtXA' },
 ];
 
 /** The rulings there are designs for, in the order the page should offer them. */

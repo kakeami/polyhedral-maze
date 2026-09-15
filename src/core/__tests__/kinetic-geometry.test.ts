@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
 import { buildSurface } from '../kinetic/surface.ts';
+import type { KineticSurface } from '../kinetic/surface.ts';
 import { pickStartGoal, searchAllStates, stateStats } from '../kinetic/maze.ts';
 import { applyPlacement } from '../kinetic/types.ts';
 import { createRng } from '../prng.ts';
@@ -287,6 +288,12 @@ describe('the closed ends of a ring', () => {
  * surface crosses from one cube to the next. Drawing them anyway lays a wall
  * across a passage the maze says is open — which is what the answer walks
  * through, on screen, for anyone to see.
+ *
+ * Two things now stop that, and they are worth keeping apart. The design is
+ * searched under a rule that makes the buried side agree with the one on show
+ * (`weld: 'seam-safe'`), so on the built object there is nothing to see; and
+ * the scene draws only the walls of the cells on show, so it holds for any
+ * design at all, including one found under the weaker rule.
  */
 describe('the walls a pose has on show', () => {
   const mech = createInfinityCube({ cells: 2 });
@@ -294,15 +301,19 @@ describe('the walls a pose has on show', () => {
   const design = searchAllStates(surface, { rng: createRng(2) }).design;
 
   /** The passages of one state, as the midpoint of each side walked through. */
-  function doorways(state: number): Vec3[] {
+  function doorways(
+    state: number,
+    on: KineticSurface = surface,
+    plan: { open: Set<number> } = design,
+  ): Vec3[] {
     const place = mech.states[state]!;
     const points: Vec3[] = [];
-    for (const edge of surface.adjByState[state]!) {
-      if (!design.open.has(edge.classId)) continue;
+    for (const edge of on.adjByState[state]!) {
+      if (!plan.open.has(edge.classId)) continue;
       const cell = mech.cells[edge.a]!;
-      const base = surface.sideStart[edge.a]!;
+      const base = on.sideStart[edge.a]!;
       for (let side = 0; side < cell.corners.length; side++) {
-        if (surface.classOf[base + side] !== edge.classId) continue;
+        if (on.classOf[base + side] !== edge.classId) continue;
         const a = applyPlacement(place[cell.piece]!, cell.corners[side]!);
         const b = applyPlacement(
           place[cell.piece]!, cell.corners[(side + 1) % cell.corners.length]!,
@@ -354,10 +365,28 @@ describe('the walls a pose has on show', () => {
     }
   });
 
-  it('would, if every cell were drawn — which is why the rule is there', () => {
-    // Not an aspiration: the object really does bury walls onto its own seams,
-    // so a version of this that drew every cell would be wrong on screen.
-    const total = mech.states.reduce((sum, _, state) => sum + walled(state, null), 0);
+  it('would, under the weaker welding, if every cell were drawn', () => {
+    // Not an aspiration: with the buried sides left to themselves, the object
+    // really does bury walls onto its own seams, and anything that drew every
+    // cell would put them across a passage.
+    const loose = buildSurface(mech, { maxStates: mech.states.length, weld: 'walkable' });
+    const found = searchAllStates(loose, { rng: createRng(2) }).design;
+    let total = 0;
+    for (let state = 0; state < loose.stateCount; state++) {
+      const place = mech.states[state]!;
+      const walls: [Vec3, Vec3][] = [];
+      kineticWalls(mech, loose, found, null).forEach((points, piece) => {
+        for (let i = 0; i < points.length; i += 2) {
+          walls.push([
+            applyPlacement(place[piece]!, points[i]!),
+            applyPlacement(place[piece]!, points[i + 1]!),
+          ]);
+        }
+      });
+      for (const door of doorways(state, loose, found)) {
+        if (walls.some(wall => blocks(wall, door))) total++;
+      }
+    }
     expect(total).toBeGreaterThan(0);
   });
 
