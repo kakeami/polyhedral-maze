@@ -37,6 +37,18 @@ export {
   pickPrintedEnds,
 } from './maze.ts';
 
+export type {
+  ContractedSearchOptions,
+  ContractedResult,
+  ContractedProgress,
+  ContractedSearch,
+} from './maze-contracted.ts';
+export {
+  contractedSearch,
+  createContractedSearch,
+  contractsCleanly,
+} from './maze-contracted.ts';
+
 export type { StackOptions, StackMechanism } from './mechanisms/stack.ts';
 export { createStack } from './mechanisms/stack.ts';
 

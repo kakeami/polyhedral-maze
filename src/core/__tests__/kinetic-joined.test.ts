@@ -199,7 +199,11 @@ describe('the joints on offer', () => {
         expect(found.rate.perfectStates).toHaveLength(closed.stateCount);
       }
     }
-  });
+    // Two dozen real searches at the finest rulings on offer, which is four
+    // and a half seconds of arithmetic on a quiet machine and more on a busy
+    // one. Said out loud rather than left to the default five, which it was
+    // already spending ninety per cent of.
+  }, 30000);
 });
 
 describe('the pair in the 3D view', () => {
