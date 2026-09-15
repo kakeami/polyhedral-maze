@@ -56,6 +56,16 @@ export interface FoldModel {
   readonly states: readonly KineticState[];
   /** Every shape it can close into, and the folds between them. */
   readonly graph: FoldGraph;
+  /**
+   * The walls on show in each pose, piece by piece (`kineticWalls`).
+   *
+   * The pieces carry every wall the object has, which is what the paper wants;
+   * a pose does not. Folded shut, two cubes press face to face, and the walls
+   * printed along the edges of those faces lie exactly on the seam the surface
+   * crosses there — so drawing them lays a wall across a passage, and the
+   * answer appears to walk through it.
+   */
+  readonly wallsByPose: readonly (readonly Vec3[][])[];
 }
 
 export interface FoldSceneContext {
@@ -116,6 +126,8 @@ export function createFoldScene(
   let distances: number[][] = [];
   let cameFrom = -1;
   let lineMaterials: LineMaterial[] = [];
+  /** Per piece: the walls it carries in each pose, and all of them. */
+  let wallSets: { all: THREE.Object3D | null; byPose: (THREE.Object3D | null)[] }[] = [];
   let solutionLine: Line2 | null = null;
   let solutionMaterial: LineMaterial | null = null;
   let solutionPath: readonly Vec3[] | null = null;
@@ -138,6 +150,7 @@ export function createFoldScene(
       disposeObject(child);
     }
     pieceGroups = [];
+    wallSets = [];
     lineMaterials = [];
   }
 
@@ -171,9 +184,21 @@ export function createFoldScene(
       group.add(new THREE.Mesh(geo, makeFaceMaterial(preset.material)));
       if (preset.rim) group.add(new THREE.Mesh(geo, makeRimMaterial(preset.rim)));
 
-      if (piece.walls.length > 0) {
-        group.add(makeSegments(piece.walls, lines.wallColor, lines.wallWidth, res, lineMaterials));
-      }
+      // Every pose's walls are built now and hidden until their pose comes
+      // round, rather than rebuilt at each fold: a fold is the one moment the
+      // object must not stutter.
+      const wallsOf = (points: readonly Vec3[]): THREE.Object3D | null => {
+        if (points.length === 0) return null;
+        const object = makeSegments(
+          [...points], lines.wallColor, lines.wallWidth, res, lineMaterials,
+        );
+        group.add(object);
+        return object;
+      };
+      wallSets.push({
+        all: wallsOf(piece.walls),
+        byPose: model.wallsByPose.map(byPiece => wallsOf(byPiece[piece.piece] ?? [])),
+      });
       if (piece.rim.length > 0) {
         const rim = makeSegments(
           piece.rim, lines.outlineColor, lines.outlineWidth, res, lineMaterials,
@@ -271,6 +296,24 @@ export function createFoldScene(
     if (!model) return;
     const state = model.states[pose];
     if (state) applyState(state);
+    showWalls(pose);
+  }
+
+  /**
+   * Which set of walls is on show.
+   *
+   * A pose buries whatever it presses together, and what is buried is not
+   * drawn. Mid-fold nothing is pressed anywhere in particular — the faces are
+   * coming apart — so the object carries all of its walls, which is also what
+   * a hand sees as it opens.
+   */
+  function showWalls(at: number | null) {
+    for (const set of wallSets) {
+      if (set.all) set.all.visible = at === null;
+      set.byPose.forEach((object, index) => {
+        if (object) object.visible = at === index;
+      });
+    }
   }
 
   function rebuildSolution() {
@@ -335,6 +378,7 @@ export function createFoldScene(
       return;
     }
     clearSolution(); // a route through a shape that is about to stop existing
+    showWalls(null);
     playing = { steps, step: 0, elapsed: 0, to: target };
   }
 

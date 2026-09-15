@@ -8,8 +8,11 @@
  * each piece's own body frame and is built once: to animate the object, the
  * scene moves the pieces, it does not rebuild the maze.
  *
- * The one thing that does depend on the state is the route from start to goal,
- * which is why `kineticSolutionPath` is separate and returns world coordinates.
+ * Two things do depend on the state, and both are separate functions here for
+ * that reason: the route from start to goal (`kineticSolutionPath`), and —
+ * only for a mechanism that folds shut on itself — which walls are on the
+ * surface at all (`kineticWalls`). A cell pressed against another piece is
+ * inside the object, and what is printed on it is inside with it.
  *
  * DOM-free and three-free, like `maze-geometry.ts`.
  */
@@ -137,10 +140,10 @@ export function buildKineticPieces(
 ): KineticPieceGeometry[] {
   const marked = markedCells(ends);
   const shrink = axialShrink(mech, options.axialGap ?? 0);
+  const walls = kineticWalls(mech, surface, design, null, options);
   const pieces: {
     positions: number[];
     normals: number[];
-    walls: Vec3[];
     rim: Vec3[];
     markers: MazeMarker[];
     radius: number;
@@ -149,13 +152,9 @@ export function buildKineticPieces(
     /** Every corner of the piece, kept only long enough to close its ends. */
     corners: Vec3[];
   }[] = Array.from({ length: mech.pieceCount }, () => ({
-    positions: [], normals: [], walls: [], rim: [], markers: [],
+    positions: [], normals: [], rim: [], markers: [],
     radius: 0, zMin: Infinity, zMax: -Infinity, corners: [] as Vec3[],
   }));
-
-  // An internal class is one wall shared by two cells of the same piece, so it
-  // would otherwise be drawn twice, in exactly the same place.
-  const drawnInternal = new Set<number>();
 
   mech.cells.forEach((cell, index) => {
     const piece = pieces[cell.piece]!;
@@ -179,19 +178,8 @@ export function buildKineticPieces(
 
     const base = surface.sideStart[index]!;
     for (let side = 0; side < corners.length; side++) {
-      const classId = surface.classOf[base + side]!;
-      const kind = surface.classKind[classId]!;
-      const a = corners[side]!;
-      const b = corners[(side + 1) % corners.length]!;
-      if (kind === 'rim') {
-        piece.rim.push(a, b);
-      } else if (!design.open.has(classId)) {
-        if (kind === 'internal') {
-          if (drawnInternal.has(classId)) continue;
-          drawnInternal.add(classId);
-        }
-        piece.walls.push(a, b);
-      }
+      if (surface.classKind[surface.classOf[base + side]!] !== 'rim') continue;
+      piece.rim.push(corners[side]!, corners[(side + 1) % corners.length]!);
     }
 
     const marker = marked.get(index);
@@ -217,7 +205,7 @@ export function buildKineticPieces(
     piece,
     positions: p.positions,
     normals: p.normals,
-    walls: p.walls,
+    walls: walls[piece]!,
     rim: p.rim,
     markers: p.markers,
     bounds: {
@@ -226,6 +214,54 @@ export function buildKineticPieces(
       zMax: p.zMax === -Infinity ? 0 : p.zMax,
     },
   }));
+}
+
+/**
+ * The closed sides of each piece, in its own body frame.
+ *
+ * A wall stands wherever a side's class is not open. Leaving out `visible`
+ * counts every cell, which is what the printed pattern wants: the paper
+ * carries the whole object, whatever shape it is folded into.
+ *
+ * Passing one state's `surface.visibleByState[state]` matters for a mechanism
+ * that folds shut on itself. A cell pressed against another piece is not on
+ * the surface there, and neither is what is printed on it — and the walls
+ * along the edge of that face lie exactly on the seam the surface crosses, so
+ * drawing them puts a wall across a passage the maze says is open. On screen
+ * that is an answer that walks through a wall.
+ */
+export function kineticWalls(
+  mech: Mechanism,
+  surface: KineticSurface,
+  design: Pick<KineticDesign, 'open'>,
+  visible?: Uint8Array | null,
+  options: KineticGeometryOptions = {},
+): Vec3[][] {
+  const shrink = axialShrink(mech, options.axialGap ?? 0);
+  const walls: Vec3[][] = Array.from({ length: mech.pieceCount }, () => []);
+  // An internal class is one wall shared by two cells of the same piece, so it
+  // would otherwise be drawn twice, in exactly the same place. Whichever of
+  // the two is on the surface draws it; a buried cell never gets that far.
+  const drawnInternal = new Set<number>();
+
+  mech.cells.forEach((cell, index) => {
+    if (visible && !visible[index]) return;
+    const base = surface.sideStart[index]!;
+    for (let side = 0; side < cell.corners.length; side++) {
+      const classId = surface.classOf[base + side]!;
+      const kind = surface.classKind[classId]!;
+      if (kind === 'rim' || design.open.has(classId)) continue;
+      if (kind === 'internal') {
+        if (drawnInternal.has(classId)) continue;
+        drawnInternal.add(classId);
+      }
+      walls[cell.piece]!.push(
+        shrink(cell.corners[side]!, cell.piece),
+        shrink(cell.corners[(side + 1) % cell.corners.length]!, cell.piece),
+      );
+    }
+  });
+  return walls;
 }
 
 /**

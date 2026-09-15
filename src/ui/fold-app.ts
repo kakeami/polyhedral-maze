@@ -42,7 +42,7 @@ import {
 import { buildFoldGraph } from '../core/kinetic/fold-path.ts';
 import type { FoldGraph } from '../core/kinetic/fold-path.ts';
 import {
-  buildKineticPieces, kineticSolutionPath, solutionLength,
+  buildKineticPieces, kineticSolutionPath, kineticWalls, solutionLength,
 } from '../render/kinetic-geometry.ts';
 import { exportFoldPDF } from '../render/pdf-fold-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
@@ -139,6 +139,10 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       pieces: buildKineticPieces(next.mech, next.surface, next.design, next.ends),
       states: next.mech.states,
       graph: next.graph,
+      // What each pose has on its surface. The pieces carry every wall, as the
+      // paper does; a pose that presses two cubes together does not.
+      wallsByPose: next.mech.states.map((_, state) =>
+        kineticWalls(next.mech, next.surface, next.design, next.surface.visibleByState[state])),
     });
     // Cut to the pose rather than fold to it: the object on screen a moment ago
     // was a different maze, so there was no journey.

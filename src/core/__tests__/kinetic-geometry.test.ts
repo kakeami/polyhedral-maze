@@ -1,14 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
+import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
 import { buildSurface } from '../kinetic/surface.ts';
 import { pickStartGoal, searchAllStates, stateStats } from '../kinetic/maze.ts';
 import { applyPlacement } from '../kinetic/types.ts';
 import { createRng } from '../prng.ts';
+import { dot } from '../vec3.ts';
+import type { Vec3 } from '../types.ts';
 import {
   buildKineticPieces,
   cellCentre,
   cellNormal,
   kineticSolutionPath,
+  kineticWalls,
   modelBounds,
   solutionCells,
   solutionLength,
@@ -271,5 +275,101 @@ describe('the closed ends of a ring', () => {
     // seam passage or move a wall.
     expect(closed.map(p => p.walls.length)).toEqual(open.map(p => p.walls.length));
     expect(closed.map(p => p.rim.length)).toEqual(open.map(p => p.rim.length));
+  });
+});
+
+/**
+ * A mechanism that folds shut on itself is the one case where the walls are
+ * not a property of the piece alone.
+ *
+ * Two cubes pressed face to face put those two faces inside the object, and
+ * the walls printed along the edges of them lie exactly on the seam the
+ * surface crosses from one cube to the next. Drawing them anyway lays a wall
+ * across a passage the maze says is open — which is what the answer walks
+ * through, on screen, for anyone to see.
+ */
+describe('the walls a pose has on show', () => {
+  const mech = createInfinityCube({ cells: 2 });
+  const surface = buildSurface(mech, { maxStates: mech.states.length });
+  const design = searchAllStates(surface, { rng: createRng(2) }).design;
+
+  /** The passages of one state, as the midpoint of each side walked through. */
+  function doorways(state: number): Vec3[] {
+    const place = mech.states[state]!;
+    const points: Vec3[] = [];
+    for (const edge of surface.adjByState[state]!) {
+      if (!design.open.has(edge.classId)) continue;
+      const cell = mech.cells[edge.a]!;
+      const base = surface.sideStart[edge.a]!;
+      for (let side = 0; side < cell.corners.length; side++) {
+        if (surface.classOf[base + side] !== edge.classId) continue;
+        const a = applyPlacement(place[cell.piece]!, cell.corners[side]!);
+        const b = applyPlacement(
+          place[cell.piece]!, cell.corners[(side + 1) % cell.corners.length]!,
+        );
+        points.push([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]);
+      }
+    }
+    return points;
+  }
+
+  /** Walls of one state, in world coordinates; `visible` null draws them all. */
+  function wallsInState(state: number, visible: Uint8Array | null): [Vec3, Vec3][] {
+    const place = mech.states[state]!;
+    const out: [Vec3, Vec3][] = [];
+    kineticWalls(mech, surface, design, visible).forEach((points, piece) => {
+      for (let i = 0; i < points.length; i += 2) {
+        out.push([
+          applyPlacement(place[piece]!, points[i]!),
+          applyPlacement(place[piece]!, points[i + 1]!),
+        ]);
+      }
+    });
+    return out;
+  }
+
+  /** Does the wall pass through the point, strictly between its own ends? */
+  function blocks([a, b]: [Vec3, Vec3], p: Vec3): boolean {
+    const ab: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const ap: Vec3 = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+    const t = dot(ap, ab) / dot(ab, ab);
+    if (t <= 1e-6 || t >= 1 - 1e-6) return false;
+    return Math.hypot(
+      a[0] + ab[0] * t - p[0], a[1] + ab[1] * t - p[1], a[2] + ab[2] * t - p[2],
+    ) < 1e-9;
+  }
+
+  function walled(state: number, visible: Uint8Array | null): number {
+    const walls = wallsInState(state, visible);
+    let count = 0;
+    for (const door of doorways(state)) {
+      if (walls.some(wall => blocks(wall, door))) count++;
+    }
+    return count;
+  }
+
+  it('never lays a wall across a passage', () => {
+    for (let state = 0; state < surface.stateCount; state++) {
+      expect(walled(state, surface.visibleByState[state]!)).toBe(0);
+    }
+  });
+
+  it('would, if every cell were drawn — which is why the rule is there', () => {
+    // Not an aspiration: the object really does bury walls onto its own seams,
+    // so a version of this that drew every cell would be wrong on screen.
+    const total = mech.states.reduce((sum, _, state) => sum + walled(state, null), 0);
+    expect(total).toBeGreaterThan(0);
+  });
+
+  it('keeps every wall the paper needs', () => {
+    // Nothing is lost by the rule: a cell buried in one pose is on show in
+    // another, and the pattern is drawn from all of them.
+    const pieces = buildKineticPieces(mech, surface, design);
+    const printed = pieces.reduce((sum, piece) => sum + piece.walls.length, 0);
+    const onShow = mech.states.map((_, state) =>
+      kineticWalls(mech, surface, design, surface.visibleByState[state]!)
+        .reduce((sum, points) => sum + points.length, 0),
+    );
+    for (const count of onShow) expect(count).toBeLessThan(printed);
   });
 });
