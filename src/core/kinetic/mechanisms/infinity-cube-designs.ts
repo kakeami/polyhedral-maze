@@ -77,6 +77,24 @@ export const INFINITY_CUBE_DESIGNS: readonly StoredDesign[] = [
   // 768 cells, walks 84-135
   { cells: 4, classCount: 1280,
     open: 'lNmJ-gAH9kngDPeR6Lwd9uSsnTFz8hObh1Mxi-7TOCuNN0w8hdRWX6GuVB9fq2LM65nrSVS5iS7NK_UWaqZObHhep8yU7DFjFSk9LyPNUY405gzWqTr6BrYKmI3MNjTfZQd4V-JmH5kzTWVdWfbARm1pqNWxo-G6yNTUI-sFP88wI6Opp-UmfKrpuRrzH9BjP1bvsSO0D0VrG6qtdQmtXA' },
+  // 1200 cells, walks 111-177
+  { cells: 5, classCount: 2080,
+    open: 'jxoylVuAWeJTqVVwu1UDos7oIoJzq6TuY1DLMrP6YdSXDXvBuyW1Ubijzsy1PPXc-PgV0XyHldTMWWR1fHLjhkyO0lkt_sA4YiVHpXVk9Ma0xrVBXmhS1ptjzJ_hh92LUb_o6DIVnW0tRs0MZ1VVzSxPlIXpS_04-Jzm1EtmK1ferc6ijo_QHzCq9y4gOfeQuClVeRaZVnBZxlzXVHQJX_EL7JEX-iLutVT-Aq1l7dotMWm0nGO1ab3JZEZcSZ-jZtl7jG603_IcubKNPsoan6I36Zx6jKvTyrjT4JjV16in2kabzXlXpls0Wzb7Kk8dqngv16RV9YXRVG1mmmMdRVWPfko' },
+  // 1200 cells, walks 110-162
+  { cells: 5, classCount: 2080,
+    open: 'wpFZv6waQyzs1svR-RVyxRjq14QDKc2vgWCvoXswy2ldpg-Y6SauaB5JnoLyJlW3WercSGm30vWM2UyrQWfu5TjPc3aJY7aauD6EOpar4uxkzv1OjKX0OaqucQNzrvacvhCo5UdGH_n9gLEYFNNsP8Xgd6ZDmXraUM-yjfY5TWllvMh2Gr5MUodaZnUT9hqGP0JVFNaMWXuh1OLRWl6OOu5YW0IfNX1TzIXvvZgyndSXI2cza37kU2UptVDWJ36LSfjQq6j5A6sSZ3oNbeRLVTB_MyaPHduq4hn_yOctNfSHZLyod8TWaw66H6nFMrU71cowvvhH8dRl1WS7ljaijaX2mdA' },
+  // 1200 cells, walks 107-145
+  { cells: 5, classCount: 2080,
+    open: '4oj5Ko8y0iQa5lF9RPdAya0KbW3sOVToS1-saHne-BDf2IeaUS2VlYlyzJrOUueHXmwr0arNHo4NW0U530vtYCrXws10o_zC6IhbiE5q1to2ZyTdJMRHG7u6knfXw3MYys60tbnPMdVaKXXMNerLB_tlDta1LGeWrydmVqNnh-ucNSsdY4um6KrW8VnhDHrVM6xK5UzZ2UgrUifTF-avoMv1WEtjD90zdLUf4Zpmwc6yjsQ8ftBMzD2dQZ7y03FPcbytO_SK3WyfUJ_yKX5C6x1cdmabdqyqqFXvpOdm4jqpNTXFXsb3lGkz03s1QXuJ22TqtZmEPuK4L6a2kTrWqFvNRlY' },
+  // 1200 cells, walks 106-183
+  { cells: 5, classCount: 2080,
+    open: 'KBrKlN40jSGacOa4SifQtGiNVYO32eLYzBmboq2gv-FVeY8b9JV5pP4O7kHSfNbS1Fz8KJT3BxJnlSNl-zI5jH3anrOMzYMa6Yx_aaRXmBTTrkpUXuzJhJTsQha9D-lOEcs-z3nmFGveZWjlzSYL0bbqOcixP6GX6B2Z-qruJjfGUtfoOTHs12hU_YFe6JOyIz1LmYk62nvwPBcNbVXVzXd0sDOX3It0DH-lkXFGV6BOJ-MaOm6Nau-tTuVcxTjZR_whWDYNlx9HztUQX9X0GRP_1soNLbVmntJLHeoppu4-vpPaOFbu9OiVOI2Pln-owy_ZMHxrsc4y8xzxlj0neJlrFnU' },
+  // 1200 cells, walks 105-189
+  { cells: 5, classCount: 2080,
+    open: 'Z0QK1fo4B2uD6NqbyVTFi0n3pEy31zWY5zrDaLQ1Fm0kbUxmr60KfQ7kyuHB3mGuOhkkNFk65VfFFjjz1ikPaaFzYuV12KekZvWT3ER0iXtJ87FVq8qYpO0y5iPTresw1mtU0sOTzmVWDhatbf0G-QsZdCx-jmKlDL2eSpeTrXtUs9q-wxj9pG5u6aPocRNNvYlQN3uJzbiYzFvI5pNYq5k3qNNSd2BTmabR7HxGuwMe6ylMbbZpoZcSVu8FHbeVNLWrN_IS4_VI98xE1cLaVZgfanHcxOw4jzeaubJRDexOOit3VMumm_SU8Nu0MTBq1jRnmbc9AndfCaKf6tAnXm9kgms' },
+  // 1200 cells, walks 97-141
+  { cells: 5, classCount: 2080,
+    open: 'NGHNymO1hiOcmBtbqBNO0WWTnmTIzr4BbDrnVOqNMEvKWpJP9YQXFZqosvZtEe4deBpxF5y5kL6MaKe6QPc7sDYy5uVzarqsk1K5tpto1qYqt1WPtg1shD-Wxu6Sl9Qm807LOhNTi4faJOHmzxpsuEVplsKc6VmW6aaGrjjF5vheBl0u8l6qzXjcTROHNuhHdi8CVuV4v4uIEjMyeUWzXNOc0SN1LTspMkjvYNXp0bGkx3E7px5l54JWj_BfUh9II-m89hhcHi891ROYifqCrOv4pvHkMF9Ut9pGPoo3Us3G1E6HpD7Mnpo2fJbdyZm21Uer0mp94iB9ZOFsTiqatxIby3s' },
 ];
 
 /** The rulings there are designs for, in the order the page should offer them. */
