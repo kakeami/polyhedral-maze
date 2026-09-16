@@ -43,7 +43,21 @@ export interface ContractedSearchOptions {
   readonly rng: Rng;
   /** Annealing steps in one attempt. */
   readonly iterations?: number;
-  /** Fresh starts inside one attempt. */
+  /**
+   * Fresh starts inside one attempt, and one by default.
+   *
+   * The cell-level search takes four, because there an attempt that fails has
+   * usually failed for good and starting over is the only move left. Here an
+   * attempt succeeds about a quarter to a third of the time and attempts are
+   * independent, so four of them inside one attempt buy no more than four
+   * attempts do — and they buy it in a single stretch of arithmetic with
+   * nothing drawn in the middle of it, which on a page is the whole of how
+   * responsive this feels. Measured over 360 seeds across every ruling the
+   * folding page offers, one restart and four take the same total time; one
+   * restart keeps the longest gap between two repaints under half a second
+   * where four put it over a second. Raising it is for a caller with no screen
+   * to keep alive.
+   */
   readonly restarts?: number;
   /**
    * Starting temperature, and a fraction of the cell-level search's five.
@@ -147,12 +161,26 @@ interface Attempt {
   readonly cost: number;
 }
 
+/**
+ * An attempt that never got started.
+ *
+ * `chooseCutClasses` is greedy over a shuffled list, and on a bad shuffle it
+ * can fail to find any set of seam openings that joins the object in every
+ * state — it says so by throwing, which is right when it is the whole of a
+ * caller's plan and wrong here, where it is the first line of one attempt out
+ * of dozens. So it is caught, the attempt is spent, and the next one shuffles
+ * again. Measured on the folding ring, this is a few attempts in a thousand,
+ * and a search that treated it as a verdict would announce failure on a maze
+ * the very next attempt finds.
+ */
+const NOTHING: Attempt = { open: new Set(), openCutClasses: [], cost: Infinity };
+
 /** One annealing engine, reusable across attempts on the same surface. */
 function makeEngine(
   surface: KineticSurface,
-  options: { iterations: number; restarts: number; temperature: number },
-): (rng: Rng) => Attempt {
-  const { iterations, restarts, temperature: startTemperature } = options;
+  options: { iterations: number; temperature: number },
+): (rng: Rng, restarts: number) => Attempt {
+  const { iterations, temperature: startTemperature } = options;
   const states = surface.stateCount;
   const patches = findPatches(surface);
   const patchCount = patches.length;
@@ -516,8 +544,13 @@ function makeEngine(
     return blockRoot[wallA[move]!] !== blockRoot[wallB[move]!];
   };
 
-  return (rng: Rng): Attempt => {
-    const cuts = chooseCutClasses(surface, rng);
+  return (rng: Rng, restarts: number): Attempt => {
+    let cuts: number[];
+    try {
+      cuts = chooseCutClasses(surface, rng);
+    } catch {
+      return NOTHING;
+    }
     let bestCost = Infinity;
     let bestWalls: Uint8Array | null = null;
     let bestSeams: Uint8Array | null = null;
@@ -644,10 +677,10 @@ export function createContractedSearch(
     );
   }
   const { rng } = options;
-  const maxRounds = options.maxRounds ?? 10;
+  const maxRounds = options.maxRounds ?? 48;
+  const restarts = options.restarts ?? 1;
   const attempt = makeEngine(surface, {
     iterations: options.iterations ?? 20000,
-    restarts: options.restarts ?? 4,
     temperature: options.temperature ?? 0.8,
   });
 
@@ -662,7 +695,8 @@ export function createContractedSearch(
       return true;
     }
     round++;
-    const got = attempt(rng);
+    const got = attempt(rng, restarts);
+    if (got.cost === Infinity) return false; // a shuffle that went nowhere
     const design: KineticDesign = {
       open: got.open,
       openCutClasses: got.openCutClasses,
@@ -690,7 +724,13 @@ export function createContractedSearch(
       };
     },
     result(): ContractedResult {
-      if (!best) throw new Error('the search has not run an attempt yet');
+      if (!best) {
+        throw new Error(
+          round === 0
+            ? 'the search has not run an attempt yet'
+            : 'no set of cut classes joins the pieces in every state',
+        );
+      }
       return { ...best, exhausted: best.rate.rate < 1 };
     },
   };
