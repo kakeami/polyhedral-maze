@@ -8,9 +8,17 @@
  * current one lit — and it is the same control on every page, in the same
  * place, so it stops being navigation and becomes part of the furniture.
  *
+ * It sits at the top of the panel, above the title, because it is the widest
+ * thing the panel decides: which object you are looking at. Everything below
+ * it is a setting of that object, and a switch you only meet after scrolling
+ * past all of them reads as an afterthought.
+ *
  * The three are siblings rather than a trunk and two branches, which is what
  * the arrows implied by pointing away from the polyhedral page. They are three
  * objects that happen to share a maze layer.
+ *
+ * The source link does not go with them: it leaves the site altogether, so it
+ * stays at the foot of the panel where a footer belongs.
  *
  * Links are relative because the site is served from a subdirectory
  * (`base: '/polyhedral-maze/'`) and there is no router: a page knows where it
@@ -63,20 +71,24 @@ function href(from: PageId, to: Page): string {
 }
 
 /**
- * The switch, plus the source link, as one block to drop at the foot of a panel.
+ * The switch, for the top of a panel.
  *
  * The current page is a link to itself rather than a dead span so that the row
  * keeps its shape and a keyboard can still land on it; `aria-current` is what
  * says which one it is, to a screen reader and to the stylesheet alike.
  */
-export function pageNavHTML(current: PageId): string {
+export function pageSwitchHTML(current: PageId): string {
   const tabs = PAGES.map(page => {
     const here = page.id === current;
     return `<a class="page-switch-tab" href="${href(current, page)}"`
       + `${here ? ' aria-current="page"' : ''} title="${esc(page.title)}">${esc(page.label)}</a>`;
   }).join('');
+  return `<nav class="page-switch" aria-label="Which maze">${tabs}</nav>`;
+}
+
+/** The way out of the site, for the foot of a panel. */
+export function sourceLinkHTML(): string {
   return `
-    <nav class="page-switch" aria-label="Which maze">${tabs}</nav>
     <a class="source-link" href="${GITHUB}" target="_blank" rel="noopener noreferrer">
       ${MARK}<span>Source on GitHub</span>
     </a>

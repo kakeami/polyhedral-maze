@@ -11,7 +11,7 @@ import {
 import type { ShapeCategory, ShapeDescriptor } from '../core/polyhedra/registry.ts';
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
-import { pageNavHTML } from './page-nav.ts';
+import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
 
 export interface ControlsContext {
   container: HTMLElement;
@@ -301,6 +301,8 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
   ].join('');
 
   return `
+    ${pageSwitchHTML('polyhedral')}
+
     <h2>Polyhedral Maze</h2>
     <p class="blurb">
       A maze across the whole surface of a solid, corridors running over the
@@ -375,7 +377,7 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
         any angle; the maze itself runs along the faces.</div>
     </div>
 
-    ${pageNavHTML('polyhedral')}
+    ${sourceLinkHTML()}
   `;
 }
 

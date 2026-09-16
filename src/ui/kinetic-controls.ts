@@ -26,7 +26,7 @@ import type { KineticParams, MechanismId } from './kinetic-param-codec.ts';
 import { JOINED_PAIRS, joinedPairById, DEFAULT_JOINED_PAIR } from '../core/kinetic/mechanisms/joined.ts';
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
-import { pageNavHTML } from './page-nav.ts';
+import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
 
 export interface KineticMetrics {
   cells: number;
@@ -340,6 +340,8 @@ function buildHTML(p: KineticParams): string {
   const L = KINETIC_LIMITS;
 
   return `
+    ${pageSwitchHTML('turning')}
+
     <h2>Turning Maze</h2>
     <p class="blurb" id="kin-blurb">
       ${esc(p.mechanism === 'pair' ? PAIR_BLURB : STACK_BLURB)}
@@ -430,7 +432,7 @@ function buildHTML(p: KineticParams): string {
         nothing.</div>
     </div>
 
-    ${pageNavHTML('turning')}
+    ${sourceLinkHTML()}
   `;
 }
 

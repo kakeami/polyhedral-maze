@@ -13,17 +13,17 @@
  *
  * Built like `controls.ts` and `kinetic-controls.ts`, and with their
  * vocabulary: a number is a slider with its value in the label, a named choice
- * is a select, and a seed is a number field with Shuffle next to it. So the
- * ruling is a slider, the seed is a field, and the pose — six shapes with
- * names — is a select.
+ * is a select, and a seed is a number field. So the ruling is a slider, the
+ * seed is a field, and the pose — six shapes with names — is a select.
  *
- * The pose is the odd one out, and is put last on purpose. It is not a
- * parameter of the object at all: it is where the object happens to be
- * standing, the same thing a hand on a ring decides on the kinetic page. It
- * sits below the things that describe the object, and it is set from the scene
- * as well as from the panel — because the object arrives in a pose a moment
- * after it is asked to, and because, left alone, it goes and folds itself into
- * another one.
+ * The order is theirs too, and it is why the pose is not last: every panel
+ * here ends with Seed and then Style, so those two are found in the same place
+ * whichever maze you are looking at. Above them go the things that describe
+ * this object, and the pose among them — which is a liberty, because the pose
+ * is not a parameter of the object at all but where it happens to be standing.
+ * It is set from the scene as well as from the panel, because the object
+ * arrives in a pose a moment after it is asked to, and because, left alone, it
+ * goes and folds itself into another one.
  *
  * The ruling slider runs over the *positions* in the list of rulings rather
  * than over the numbers themselves, so that a shipped set with a gap in it —
@@ -37,7 +37,7 @@
 
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
-import { pageNavHTML } from './page-nav.ts';
+import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
 import { FOLD_LIMITS } from './fold-param-codec.ts';
 import type { FoldParams } from './fold-param-codec.ts';
 
@@ -275,6 +275,8 @@ function buildHTML(p: FoldParams): string {
     `<option value="${esc(style.id)}"${style.id === p.style ? ' selected' : ''}>` +
     `${esc(style.label)}</option>`).join('');
   return `
+    ${pageSwitchHTML('folding')}
+
     <h2>Folding Maze</h2>
     <p class="blurb">${esc(BLURB)}</p>
 
@@ -282,12 +284,12 @@ function buildHTML(p: FoldParams): string {
       <input id="fold-cells" type="range" min="0" max="0" value="0" />
     </label>
 
-    <label>Maze seed <span class="hint" id="fold-seed-note"></span>
-      <input id="fold-seed" type="number" min="0" max="${FOLD_LIMITS.maxSeed}" value="${p.seed}" />
-    </label>
-
     <label>Pose <span class="hint">(it folds its way there)</span>
       <select id="fold-pose"></select>
+    </label>
+
+    <label>Seed <span class="hint" id="fold-seed-note"></span>
+      <input id="fold-seed" type="number" min="0" max="${FOLD_LIMITS.maxSeed}" value="${p.seed}" />
     </label>
 
     <label>Style <span class="hint">(3D view only)</span>
@@ -328,7 +330,7 @@ function buildHTML(p: FoldParams): string {
         the cube it is pressed against.</div>
     </div>
 
-    ${pageNavHTML('folding')}
+    ${sourceLinkHTML()}
   `;
 }
 

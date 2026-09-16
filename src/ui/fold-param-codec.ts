@@ -55,7 +55,10 @@ export const DEFAULT_FOLD_PARAMS: FoldParams = {
   // Five squares a face: the finest ruling that is still comfortably legible
   // as eight paper cubes, and coarse enough to read on screen at a glance.
   cells: INFINITY_CUBE_RULINGS.includes(5) ? 5 : (INFINITY_CUBE_RULINGS[0] ?? 5),
-  seed: 1,
+  // As on the polyhedral page. It is cached at every ruling, so the first
+  // thing anyone sees is drawn without a search, and so is the first thing
+  // they see after dragging the ruling slider.
+  seed: 42,
   pose: 0,
   showSolution: false,
   fold: true,
