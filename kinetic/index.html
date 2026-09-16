@@ -2,28 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kinetic Maze — Polyhedral Maze</title>
-    <meta name="description" content="A maze on an object that turns: rings threaded on a dowel, or two solids glued at a face. Every way of turning it is a different maze, and every one of them is solvable. Export the printable pieces as PDF." />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127922;</text></svg>" />
-    <!-- Open Graph -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Kinetic Maze — Polyhedral Maze" />
-    <meta property="og:description" content="A maze on an object that turns. Every way of turning it is a different maze, and every one of them is solvable." />
-    <meta property="og:image" content="https://kakeami.github.io/polyhedral-maze/og-image.png" />
-    <meta property="og:url" content="https://kakeami.github.io/polyhedral-maze/kinetic/" />
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@_kakeami" />
-    <meta name="twitter:title" content="Kinetic Maze — Polyhedral Maze" />
-    <meta name="twitter:description" content="A maze on an object that turns. Every way of turning it is a different maze, and every one of them is solvable." />
-    <meta name="twitter:image" content="https://kakeami.github.io/polyhedral-maze/og-image.png" />
+    <!--
+      This page moved to ../turning/ — "turning" is what the object does, where
+      "kinetic" was the name of the family it belongs to. Kept as a redirect
+      because links to it are out in the world, and a shared link that stops
+      working is worse than a name that was not quite right.
+    -->
+    <title>Turning Maze — Polyhedral Maze</title>
+    <link rel="canonical" href="https://kakeami.github.io/polyhedral-maze/turning/" />
+    <meta name="robots" content="noindex" />
+    <meta http-equiv="refresh" content="0; url=../turning/" />
+    <script>
+      // Carries the query string over, so an old link to a particular object
+      // still opens that object.
+      location.replace('../turning/' + location.search + location.hash);
+    </script>
   </head>
   <body>
-    <div id="app">
-      <div id="viewport"></div>
-      <div id="controls"></div>
-    </div>
-    <script type="module" src="/src/kinetic-main.ts"></script>
+    <p>This page is now at <a href="../turning/">Turning Maze</a>.</p>
   </body>
 </html>

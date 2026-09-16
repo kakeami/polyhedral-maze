@@ -26,6 +26,7 @@ import type { KineticParams, MechanismId } from './kinetic-param-codec.ts';
 import { JOINED_PAIRS, joinedPairById, DEFAULT_JOINED_PAIR } from '../core/kinetic/mechanisms/joined.ts';
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
+import { pageNavHTML } from './page-nav.ts';
 
 export interface KineticMetrics {
   cells: number;
@@ -339,7 +340,7 @@ function buildHTML(p: KineticParams): string {
   const L = KINETIC_LIMITS;
 
   return `
-    <h2>Kinetic Maze</h2>
+    <h2>Turning Maze</h2>
     <p class="blurb" id="kin-blurb">
       ${esc(p.mechanism === 'pair' ? PAIR_BLURB : STACK_BLURB)}
     </p>
@@ -418,18 +419,18 @@ function buildHTML(p: KineticParams): string {
     <div id="kin-metrics" class="metrics"></div>
 
     <div class="legend">
-      <span style="color:#22bb22;">&#9679;</span> Start
-      <span style="color:#dd2222; margin-left:0.8em;">&#9679;</span> Goal
+      <div class="key"><span class="dot" style="color:#22bb22;">&#9679;</span>
+        <span><b>Start</b> &mdash; where the walk begins</span></div>
+      <div class="key"><span class="dot" style="color:#dd2222;">&#9679;</span>
+        <span><b>Goal</b> &mdash; where it ends</span></div>
+      <div class="note">Both sit on a dead end of a free rim, and they stay put: the
+        object turns underneath them, so the two marks are printed once and mean the
+        same two squares however it is turned. The route between them is redrawn every
+        time it settles, and dimmed while it moves &mdash; mid-turn it would mean
+        nothing.</div>
     </div>
 
-    <div class="nav-links">
-      <a href="../">&#8592; Polyhedral maze</a>
-      <a href="../fold/" title="A maze on eight cubes taped into a ring — fold it and half the maze goes inside">Folding maze &#8594;</a>
-      <a class="github-link" href="https://github.com/kakeami/polyhedral-maze" target="_blank" rel="noopener noreferrer">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        GitHub
-      </a>
-    </div>
+    ${pageNavHTML('turning')}
   `;
 }
 

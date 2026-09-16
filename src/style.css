@@ -192,21 +192,90 @@ html, body {
   justify-content: space-between;
 }
 
-.nav-links {
+/* The switch between the three mazes: a segmented control, the same one on
+   every page. It says where you are as well as where you could go, which a row
+   of arrows could not. */
+.page-switch {
   display: flex;
-  gap: 16px;
-  margin-top: 16px;
+  gap: 2px;
+  margin-top: 20px;
+  padding: 3px;
+  background: #f0f0ec;
+  border-radius: 9px;
 }
 
-.nav-links a {
-  color: #555;
+.page-switch-tab {
+  flex: 1 1 0;
+  padding: 7px 8px;
+  border-radius: 7px;
+  color: #6a6a66;
   font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+}
+
+.page-switch-tab:hover {
+  color: #222;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.page-switch-tab[aria-current='page'] {
+  color: #111;
+  font-weight: 600;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.09), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+/* Not navigation between the mazes, so not in the switch with them. */
+.source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  color: #8a8a86;
+  font-size: 12px;
   text-decoration: none;
   transition: color 0.15s;
 }
 
-.nav-links a:hover {
+.source-link:hover {
   color: #111;
+}
+
+/* What the coloured marks on the object mean. */
+.legend {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: #fafaf8;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #555;
+}
+
+.legend .key {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.legend .key b {
+  color: #333;
+  font-weight: 600;
+}
+
+.legend .dot {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.legend .note {
+  margin-top: 6px;
+  color: #777;
 }
 
 /* The kinetic maze: a line of explanation above the controls, and a status
@@ -277,20 +346,6 @@ html, body {
 
 .metrics .warn b {
   color: #b06000;
-}
-
-.github-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #555;
-  font-size: 13px;
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.github-link:hover {
-  color: #111;
 }
 
 @media (max-width: 768px) {
