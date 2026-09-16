@@ -3,10 +3,15 @@
  *
  * Shorter than the other two pages' codecs, and for a reason worth saying out
  * loud: there is almost nothing to put in it. The object is fixed — one ring,
- * one taping, six poses — and the mazes are found offline and shipped with the
- * page, so a link cannot carry a seed, an effort or a shape. What it carries
- * is which maze off the shelf, how finely it is ruled, and where the object
+ * one taping, six poses — so there is no shape and no algorithm to name. What
+ * it carries is how finely the object is ruled, which maze, and where it
  * happens to be standing.
+ *
+ * The maze is a *seed*, as on the polyhedral page, rather than an index into a
+ * shelf. Searching for one takes about a second at any ruling the page offers
+ * (`maze-contracted.ts`), so there is no reason to ration them: a link can
+ * name any of a million mazes, and the few that are shipped are a cache in
+ * front of the search rather than the whole of what exists.
  *
  * The pose is in the URL even though it is not a property of the object. A
  * link to this page is a link to something someone was looking at, and half of
@@ -15,15 +20,13 @@
 
 import { DEFAULT_PRESET_ID, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
-import {
-  INFINITY_CUBE_RULINGS, infinityCubeDesigns,
-} from '../core/kinetic/mechanisms/infinity-cube-designs.ts';
+import { INFINITY_CUBE_RULINGS } from '../core/kinetic/mechanisms/infinity-cube-designs.ts';
 
 export interface FoldParams {
   /** Maze cells across one face of one cube. */
   cells: number;
-  /** Which of the shipped mazes at that ruling, counting from one. */
-  maze: number;
+  /** Which maze: the seed the search for it starts from. */
+  seed: number;
   /** Which shape it is standing in. */
   pose: number;
   showSolution: boolean;
@@ -35,6 +38,8 @@ export interface FoldParams {
 }
 
 export const FOLD_LIMITS = {
+  /** As on the polyhedral page, and for the same reason: it has to end somewhere. */
+  maxSeed: 999999,
   /**
    * Shapes the ring shuts into: four planks and two cubes.
    *
@@ -47,8 +52,10 @@ export const FOLD_LIMITS = {
 } as const;
 
 export const DEFAULT_FOLD_PARAMS: FoldParams = {
-  cells: INFINITY_CUBE_RULINGS.includes(3) ? 3 : (INFINITY_CUBE_RULINGS[0] ?? 3),
-  maze: 1,
+  // Five squares a face: the finest ruling that is still comfortably legible
+  // as eight paper cubes, and coarse enough to read on screen at a glance.
+  cells: INFINITY_CUBE_RULINGS.includes(5) ? 5 : (INFINITY_CUBE_RULINGS[0] ?? 5),
+  seed: 1,
   pose: 0,
   showSolution: false,
   fold: true,
@@ -66,10 +73,9 @@ export function nearestRuling(cells: number): number {
 
 export function clampFoldParams(p: FoldParams): FoldParams {
   const cells = nearestRuling(Math.round(p.cells));
-  const shelf = Math.max(1, infinityCubeDesigns(cells).length);
   return {
     cells,
-    maze: clamp(Math.round(p.maze), 1, shelf),
+    seed: clamp(Math.round(p.seed), 0, FOLD_LIMITS.maxSeed),
     pose: clamp(Math.round(p.pose), 0, FOLD_LIMITS.poses - 1),
     showSolution: p.showSolution,
     fold: p.fold,
@@ -82,7 +88,7 @@ export function encodeFoldParams(params: FoldParams): string {
   const d = DEFAULT_FOLD_PARAMS;
   const p = new URLSearchParams();
   if (params.cells !== d.cells) p.set('n', String(params.cells));
-  if (params.maze !== d.maze) p.set('maze', String(params.maze));
+  if (params.seed !== d.seed) p.set('seed', String(params.seed));
   if (params.pose !== d.pose) p.set('pose', String(params.pose));
   if (params.showSolution !== d.showSolution) p.set('solution', params.showSolution ? '1' : '0');
   if (params.fold !== d.fold) p.set('fold', params.fold ? '1' : '0');
@@ -97,7 +103,10 @@ export function decodeFoldParams(search: string): FoldParams {
   const d = DEFAULT_FOLD_PARAMS;
   return clampFoldParams({
     cells: number(p.get('n'), d.cells),
-    maze: number(p.get('maze'), d.maze),
+    // `maze` is what this used to be called, when it was an index into a shelf
+    // of six. The numbers happen to line up — the shelf is now the first few
+    // seeds — so an old link still opens a maze at the ruling it asked for.
+    seed: number(p.get('seed') || p.get('maze'), d.seed),
     pose: number(p.get('pose'), d.pose),
     showSolution: flag(p.get('solution'), d.showSolution),
     fold: flag(p.get('fold'), d.fold),
@@ -106,8 +115,10 @@ export function decodeFoldParams(search: string): FoldParams {
   });
 }
 
-function number(raw: string | null, fallback: number): number {
-  if (raw === null) return fallback;
+function number(raw: string | null | undefined, fallback: number): number {
+  // An empty value names nothing, and `Number('')` is 0 — which used to be
+  // hidden by a lower bound of one and is not, now that seed 0 is a real maze.
+  if (raw === null || raw === undefined || raw === '') return fallback;
   const value = Number(raw);
   return Number.isFinite(value) ? value : fallback;
 }

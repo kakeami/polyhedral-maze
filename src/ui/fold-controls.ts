@@ -2,14 +2,20 @@
  * The panel for the folding maze.
  *
  * Deliberately small. The object has one shape and one taping — both settled
- * by what folds rather than by anything a visitor would want to turn — and the
- * mazes are found offline and kept, so there is no seed to set either: there
- * is a handful of mazes at each ruling and a slider that moves along them.
+ * by what folds rather than by anything a visitor would want to turn — so what
+ * is left to set is how finely it is ruled and which maze.
+ *
+ * Which maze is a *seed*, and the two Shuffles beside it are the polyhedral
+ * page's, doing the same thing: one asks for a different maze on the same
+ * object, the other for a different everything. A seed is only affordable
+ * because a maze can now be found in about a second whatever the ruling; when
+ * the page shipped a shelf of six this was a slider that ran along them.
  *
  * Built like `controls.ts` and `kinetic-controls.ts`, and with their
  * vocabulary: a number is a slider with its value in the label, a named choice
- * is a select. So the ruling and which maze are sliders, and the pose — six
- * shapes with names — is a select.
+ * is a select, and a seed is a number field with Shuffle next to it. So the
+ * ruling is a slider, the seed is a field, and the pose — six shapes with
+ * names — is a select.
  *
  * The pose is the odd one out, and is put last on purpose. It is not a
  * parameter of the object at all: it is where the object happens to be
@@ -25,12 +31,14 @@
  * dragged somewhere there is no maze.
  *
  * What it does carry that the object does not: the style of the 3D view, and
- * the two buttons every page here ends with — a link to what is on screen, and
- * the pattern to print. Both are named as the other pages name them.
+ * the buttons every page here ends with — a link to what is on screen, and the
+ * pattern to print. All of them are named as the other pages name them.
  */
 
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
+import { pageNavHTML } from './page-nav.ts';
+import { FOLD_LIMITS } from './fold-param-codec.ts';
 import type { FoldParams } from './fold-param-codec.ts';
 
 export interface FoldPose {
@@ -50,7 +58,7 @@ export interface FoldMetrics {
   readonly cellsPerFace: number;
   /** Steps from the entrance to the exit in the pose on show. */
   readonly solutionLength: number;
-  /** Set when the maze on show was searched for rather than read off the shelf. */
+  /** Set when the maze on show was searched for rather than read off the cache. */
   readonly searched?: boolean;
 }
 
@@ -59,8 +67,10 @@ export interface FoldControlsContext {
   getParams(): FoldParams;
   /** The rulings there are mazes for, and which one is on show. */
   setRulings(rulings: readonly number[], current: number): void;
-  /** How many mazes this ruling has, and which of them is on show (from one). */
-  setMazes(count: number, current: number): void;
+  /** The seed of the maze on show, and whether it came off the cache. */
+  setSeed(seed: number, cached: boolean): void;
+  /** Used by Shuffle all, which picks a material as well as an object. */
+  setStyle(style: PresetId): void;
   setPoses(poses: readonly FoldPose[], current: number): void;
   /** Follows the object into a pose it has finished folding into. */
   setPose(index: number): void;
@@ -70,7 +80,7 @@ export interface FoldControlsContext {
   setBusy(busy: boolean): void;
   onPose(cb: (index: number) => void): void;
   onRuling(cb: (cells: number) => void): void;
-  onMaze(cb: (maze: number) => void): void;
+  onSeed(cb: (seed: number) => void): void;
   onAction(action: string, cb: () => void): void;
   isAutoRotating(): boolean;
   isAutoFolding(): boolean;
@@ -89,8 +99,8 @@ export function createFoldControls(
 
   const cellsSlider = el<HTMLInputElement>('fold-cells');
   const cellsValue = el<HTMLSpanElement>('fold-cells-val');
-  const mazeSlider = el<HTMLInputElement>('fold-maze');
-  const mazeValue = el<HTMLSpanElement>('fold-maze-val');
+  const seedInput = el<HTMLInputElement>('fold-seed');
+  const seedNote = el<HTMLSpanElement>('fold-seed-note');
   const poseSelect = el<HTMLSelectElement>('fold-pose');
   const metricsDiv = el<HTMLDivElement>('fold-metrics');
   const statusDiv = el<HTMLDivElement>('fold-status');
@@ -103,28 +113,32 @@ export function createFoldControls(
   const styleNote = el<HTMLDivElement>('fold-style-note');
   const exportBtn = el<HTMLButtonElement>('fold-export-pdf');
   const copyBtn = el<HTMLButtonElement>('fold-copy-url');
+  const shuffleSeedBtn = el<HTMLButtonElement>('fold-shuffle-seed');
+  const shuffleAllBtn = el<HTMLButtonElement>('fold-shuffle-all');
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   const actions = new Map<string, () => void>();
   let rulings: readonly number[] = [];
   let poseCallback: ((index: number) => void) | null = null;
   let rulingCallback: ((cells: number) => void) | null = null;
-  let mazeCallback: ((maze: number) => void) | null = null;
+  let seedCallback: ((seed: number) => void) | null = null;
 
   const rulingAt = (index: number) => rulings[index] ?? rulings[0] ?? 0;
 
-  // On `input` rather than `change`: a maze is read off the shelf and put on
-  // screen in a few milliseconds, so a slider can be dragged through them and
-  // the object keeps up. Neither of these sliders starts a search.
+  // On `input` rather than `change`: the first seeds at every ruling are kept
+  // with the page, so dragging this moves between objects that are already in
+  // hand and the search never starts. Land on a seed that is not kept and it
+  // does, which is what the progress bar is for.
   cellsSlider.addEventListener('input', () => {
     cellsValue.textContent = String(rulingAt(Number(cellsSlider.value)));
     rulingCallback?.(rulingAt(Number(cellsSlider.value)));
   });
 
-  mazeSlider.addEventListener('input', () => {
-    mazeValue.textContent = `${mazeSlider.value} of ${mazeSlider.max}`;
-    mazeCallback?.(Number(mazeSlider.value));
-  });
+  // On `change` rather than `input`: typing 1234 would otherwise ask for the
+  // maze at seed 1, then 12, then 123 on the way.
+  seedInput.addEventListener('change', () => seedCallback?.(Number(seedInput.value)));
+  shuffleSeedBtn.addEventListener('click', () => actions.get('shuffle-seed')?.());
+  shuffleAllBtn.addEventListener('click', () => actions.get('shuffle-all')?.());
 
   poseSelect.addEventListener('change', () => poseCallback?.(Number(poseSelect.value)));
 
@@ -143,7 +157,7 @@ export function createFoldControls(
     getParams() {
       return {
         cells: rulingAt(Number(cellsSlider.value)),
-        maze: Number(mazeSlider.value),
+        seed: Number(seedInput.value),
         pose: Number(poseSelect.value),
         showSolution: solution.checked,
         fold: autoFold.checked,
@@ -160,14 +174,15 @@ export function createFoldControls(
       cellsSlider.disabled = next.length < 2;
       cellsValue.textContent = String(rulingAt(at));
     },
-    setMazes(count, current) {
-      mazeSlider.min = '1';
-      mazeSlider.max = String(Math.max(1, count));
-      mazeSlider.value = String(Math.min(Math.max(1, current), Math.max(1, count)));
-      mazeSlider.disabled = count < 2;
-      mazeValue.textContent = count > 0
-        ? `${mazeSlider.value} of ${mazeSlider.max}`
-        : 'searched for';
+    setSeed(seed, cached) {
+      seedInput.value = String(seed);
+      // Said quietly, because it is about the page rather than about the maze:
+      // the same seed is the same maze either way.
+      seedNote.textContent = cached ? '' : 'searched';
+    },
+    setStyle(style) {
+      styleSelect.value = style;
+      styleNote.textContent = resolvePreset(style).note;
     },
     setPoses(poses, current) {
       poseSelect.innerHTML = poses.map((pose, index) =>
@@ -203,7 +218,9 @@ export function createFoldControls(
     },
     setBusy(busy) {
       cellsSlider.disabled = busy || rulings.length < 2;
-      mazeSlider.disabled = busy || Number(mazeSlider.max) < 2;
+      seedInput.disabled = busy;
+      shuffleSeedBtn.disabled = busy;
+      shuffleAllBtn.disabled = busy;
     },
     onPose(cb) {
       poseCallback = cb;
@@ -211,8 +228,8 @@ export function createFoldControls(
     onRuling(cb) {
       rulingCallback = cb;
     },
-    onMaze(cb) {
-      mazeCallback = cb;
+    onSeed(cb) {
+      seedCallback = cb;
     },
     onAction(action, cb) {
       actions.set(action, cb);
@@ -265,8 +282,8 @@ function buildHTML(p: FoldParams): string {
       <input id="fold-cells" type="range" min="0" max="0" value="0" />
     </label>
 
-    <label>Maze: <span id="fold-maze-val">1 of 1</span>
-      <input id="fold-maze" type="range" min="1" max="1" value="1" />
+    <label>Maze seed <span class="hint" id="fold-seed-note"></span>
+      <input id="fold-seed" type="number" min="0" max="${FOLD_LIMITS.maxSeed}" value="${p.seed}" />
     </label>
 
     <label>Pose <span class="hint">(it folds its way there)</span>
@@ -287,6 +304,8 @@ function buildHTML(p: FoldParams): string {
     </div>
 
     <div class="buttons">
+      <button id="fold-shuffle-seed" title="A different maze on the same object. Every seed is a maze that is perfect in all six poses; the first few at each ruling come with the page, the rest are found here and now">Shuffle seed</button>
+      <button id="fold-shuffle-all" title="A new ruling, seed, pose and material — everything except the Show solution, Cubes fold and Auto-rotate switches">Shuffle all</button>
       <button id="fold-copy-url" class="wide">Copy URL</button>
       <button id="fold-export-pdf" class="wide" title="Nine sheets: how the eight cubes go together, then one cube each, to print, cut and tape">Export cubes PDF</button>
     </div>
@@ -297,10 +316,19 @@ function buildHTML(p: FoldParams): string {
     <div class="status" id="fold-status" hidden></div>
     <div class="metrics" id="fold-metrics"></div>
 
-    <div class="nav-links">
-      <a href="../">&#8592; Polyhedral maze</a>
-      <a href="../kinetic/">Kinetic maze &#8594;</a>
+    <div class="legend">
+      <div class="key"><span class="dot" style="color:#22bb22;">&#9679;</span>
+        <span><b>Start</b> &mdash; where the walk begins</span></div>
+      <div class="key"><span class="dot" style="color:#dd2222;">&#9679;</span>
+        <span><b>Goal</b> &mdash; where it ends</span></div>
+      <div class="note">Each mark is printed on <b>two</b> squares, and exactly one of
+        the two is on the outside in any pose &mdash; no square of a ring of cubes is on
+        show in every one. Fold the object and the mark you were looking at goes inside
+        while its twin comes out. Both are drawn here, so the buried one is hidden in
+        the cube it is pressed against.</div>
     </div>
+
+    ${pageNavHTML('folding')}
   `;
 }
 

@@ -1,20 +1,18 @@
 /**
  * Wiring for the folding maze: mechanism -> design -> scene.
  *
- * Unlike the other two pages, this one does not search. Nothing about the
- * object varies — one taping, one ring, six poses — so the mazes were found
- * once, offline, and are read off the shelf here
- * (`core/kinetic/mechanisms/infinity-cube-designs.ts`). A search would be two
- * to seven seconds at three cells across a face and half a minute at four,
- * which is a wait nobody asked for and, at four, one most tries do not even
- * come back from.
+ * A maze is named by a ruling and a seed, exactly as on the polyhedral page,
+ * and found by searching for it (`maze-contracted.ts`, about a second at any
+ * ruling on offer). The first few seeds at every ruling come with the page
+ * (`core/kinetic/mechanisms/infinity-cube-designs.ts`) so that opening it, and
+ * dragging the ruling slider, never waits for anything; every other seed is
+ * searched for here, a round at a time with the browser handed back in
+ * between.
  *
- * What is kept from the searching version is the check and the fallback. A
- * stored design is a set of class numbers, and class numbers mean whatever the
- * surface says they mean; so every design is verified as it is decoded — a
+ * A stored design is a set of class numbers, and class numbers mean whatever
+ * the surface says they mean, so every one is verified as it is decoded — a
  * perfect maze in every pose, by the same arithmetic that would have judged a
- * fresh one — and if a design ever fails that, the page searches for one
- * instead of drawing something it cannot vouch for.
+ * fresh one — and a design that fails is searched for instead of drawn.
  *
  * The markers are the one thing this page cannot lift from the other two.
  * There is nowhere on a ring of cubes to print an entrance that is on show
@@ -31,14 +29,12 @@ import type { KineticSurface } from '../core/kinetic/surface.ts';
 import { createInfinityCube } from '../core/kinetic/mechanisms/infinity-cube.ts';
 import type { InfinityCubeMechanism } from '../core/kinetic/mechanisms/infinity-cube.ts';
 import {
-  INFINITY_CUBE_RULINGS, infinityCubeDesigns,
+  INFINITY_CUBE_RULINGS, infinityCubeDesign,
 } from '../core/kinetic/mechanisms/infinity-cube-designs.ts';
 import { decodeOpenClasses } from '../core/kinetic/stored-design.ts';
 import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
-import {
-  DEFAULT_SEARCH_EFFORT, createAllStatesSearch, longestWalk, pickPrintedEnds, stateStats,
-  treeRate,
-} from '../core/kinetic/maze.ts';
+import { longestWalk, pickPrintedEnds, stateStats, treeRate } from '../core/kinetic/maze.ts';
+import { createContractedSearch } from '../core/kinetic/maze-contracted.ts';
 import { buildFoldGraph } from '../core/kinetic/fold-path.ts';
 import type { FoldGraph } from '../core/kinetic/fold-path.ts';
 import {
@@ -48,21 +44,9 @@ import { exportFoldPDF } from '../render/pdf-fold-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
-import { decodeFoldParams, encodeFoldParams } from './fold-param-codec.ts';
+import { FOLD_LIMITS, decodeFoldParams, encodeFoldParams } from './fold-param-codec.ts';
 import type { FoldParams } from './fold-param-codec.ts';
-
-/**
- * What a search gets, on the rare occasion one is needed.
- *
- * More generous than the default on both counts. The default budget is set so
- * that asking for something impossible is refused in about a second, which is
- * right on a page where most requests are answerable; a request here is a hard
- * one — six poses of a folding object, all of which must come out perfect —
- * and stopping at a second would mean never finding anything at all.
- */
-const FOLD_EFFORT = DEFAULT_SEARCH_EFFORT * 12;
-const FOLD_ROUNDS = 12;
-const FOLD_RESTARTS = 4;
+import { SCENE_PRESETS } from '../render/scene-presets.ts';
 
 interface Build {
   mech: InfinityCubeMechanism;
@@ -73,9 +57,9 @@ interface Build {
   ends: PrintedEnds;
   poses: FoldPose[];
   perfectPoses: number;
-  /** Which of the stored mazes this is, counting from one; 0 when searched for. */
-  maze: number;
-  mazes: number;
+  /** The seed this maze is, and whether it came off the cache. */
+  seed: number;
+  cached: boolean;
 }
 
 /** Mechanism and surface, kept so that moving between mazes costs nothing. */
@@ -93,7 +77,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   const rulings = new Map<number, Ruling>();
   let build: Build | null = null;
   let cells = opening.cells;
-  let maze = opening.maze - 1;
+  let seed = opening.seed;
   let poseIndex = opening.pose;
   /** Bumped by every rebuild, so an older search knows it has been overtaken. */
   let buildToken = 0;
@@ -119,9 +103,8 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
    * pose* is asked of the geometry, exactly as it would be of a design found a
    * moment ago.
    */
-  function storedDesign(ruling: Ruling, index: number): KineticDesign | null {
-    const shelf = infinityCubeDesigns(ruling.mech.cellsPerFace);
-    const stored = shelf[index % Math.max(1, shelf.length)];
+  function storedDesign(ruling: Ruling, wanted: number): KineticDesign | null {
+    const stored = infinityCubeDesign(ruling.mech.cellsPerFace, wanted);
     if (!stored || stored.classCount !== ruling.surface.classCount) return null;
     const design: KineticDesign = {
       open: decodeOpenClasses(stored),
@@ -150,15 +133,19 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.setAutoRotate(controls.isAutoRotating());
     scene.setAutoFold(controls.isAutoFolding());
     controls.setPoses(next.poses, pose);
-    controls.setMazes(next.mazes, next.maze);
+    controls.setSeed(next.seed, next.cached);
     refreshPose();
     syncUrl();
   }
 
   /** The route and the numbers for whichever pose the object has landed in. */
   function syncUrl() {
-    const params: FoldParams = { ...controls.getParams(), cells, maze: maze + 1, pose: poseIndex };
-    history.replaceState(null, '', encodeFoldParams(params) || window.location.pathname);
+    history.replaceState(null, '', encodeFoldParams(currentParams()) || window.location.pathname);
+  }
+
+  /** The panel as it stands, with the things the panel does not hold. */
+  function currentParams(): FoldParams {
+    return { ...controls.getParams(), cells, seed, pose: poseIndex };
   }
 
   function refreshPose() {
@@ -178,11 +165,11 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       perfectPoses: build.perfectPoses,
       cellsPerFace: mech.cellsPerFace,
       solutionLength: solutionLength(surface, design, poseIndex, here),
-      searched: build.maze === 0,
+      searched: !build.cached,
     });
   }
 
-  function buildFrom(ruling: Ruling, design: KineticDesign, index: number, mazes: number) {
+  function buildFrom(ruling: Ruling, design: KineticDesign, from: number, cached: boolean) {
     const rate = treeRate(ruling.surface, design);
     return {
       mech: ruling.mech,
@@ -192,34 +179,34 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       ends: pickPrintedEnds(ruling.surface, design),
       poses: describePoses(ruling.mech, ruling.surface, design),
       perfectPoses: rate.perfectStates.length,
-      maze: index,
-      mazes,
+      seed: from,
+      cached,
     };
   }
 
-  /** Puts a maze on screen: off the shelf if it is there, searched for if not. */
+  /** Puts a maze on screen: off the cache if it is there, searched for if not. */
   function rebuild(keepPose: boolean) {
     const token = ++buildToken;
     const ruling = rulingFor(cells);
-    const shelf = infinityCubeDesigns(cells);
-    const design = storedDesign(ruling, maze);
+    const design = storedDesign(ruling, seed);
     if (design) {
       controls.setStatus('');
       controls.setProgress(null);
       controls.setBusy(false);
-      show(buildFrom(ruling, design, (maze % shelf.length) + 1, shelf.length), keepPose);
+      show(buildFrom(ruling, design, seed, true), keepPose);
       return;
     }
     searchInstead(ruling, token, keepPose);
   }
 
   /**
-   * The fallback: find one here and now, a round at a time.
+   * Find one here and now, an attempt at a time.
    *
-   * Only reached if the stored mazes have stopped describing the object — a
-   * change to how the surface is built, say. The page has one thread, so the
-   * search is walked a round per frame with the browser handed back in
-   * between, exactly as the kinetic page does it.
+   * The ordinary way to get a maze this page does not already have: any seed
+   * beyond the few that ship with it. The page has one thread, so the search
+   * is walked an attempt per frame with the browser handed back in between,
+   * exactly as the kinetic page does it. An attempt is half a second to a
+   * second, and usually the first one is enough.
    */
   function searchInstead(ruling: Ruling, token: number, keepPose: boolean) {
     controls.setBusy(true);
@@ -227,12 +214,11 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     controls.setProgress(0);
     requestAnimationFrame(() => setTimeout(() => {
       if (token !== buildToken) return;
-      const search = createAllStatesSearch(ruling.surface, {
-        rng: createRng(maze + 1),
-        effort: FOLD_EFFORT,
-        maxRounds: FOLD_ROUNDS,
-        restarts: FOLD_RESTARTS,
-      });
+      const wanted = seed;
+      // The budget is the search's own: an attempt is a few hundred
+      // milliseconds, three to five is the usual number, and the ceiling is
+      // there for the unlucky seed rather than for the hard ruling.
+      const search = createContractedSearch(ruling.surface, { rng: createRng(wanted) });
       const pump = () => {
         if (token !== buildToken) return;
         let done: boolean;
@@ -250,20 +236,20 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
           const byPoses = progress.perfectStates / Math.max(1, progress.stateCount);
           controls.setProgress(Math.max(byRounds, byPoses * 0.9));
           controls.setStatus(
-            `Round ${progress.rounds}: perfect in ${progress.perfectStates} of ` +
+            `Attempt ${progress.rounds}: perfect in ${progress.perfectStates} of ` +
             `${progress.stateCount} poses so far...`,
           );
           requestAnimationFrame(pump);
           return;
         }
         const found = search.result();
-        show(buildFrom(ruling, found.design, 0, 0), keepPose);
+        show(buildFrom(ruling, found.design, wanted, false), keepPose);
         controls.setProgress(null);
         controls.setBusy(false);
         controls.setStatus(
           found.rate.rate < 1
             ? `Best found: a perfect maze in ${found.rate.perfectStates.length} of ` +
-              `${ruling.surface.stateCount} poses. Try another maze.`
+              `${ruling.surface.stateCount} poses. Shuffle for another seed.`
             : '',
         );
       };
@@ -285,17 +271,43 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   controls.onRuling(next => {
     if (next === cells) return;
     cells = next;
-    // The mazes at one ruling have nothing to do with those at another, so
-    // there is no sense in which the third maze here is the third one there;
-    // what carries over is the position in the list, and only because moving
-    // the ruling should not also feel like changing the maze.
-    maze = Math.min(maze, Math.max(0, infinityCubeDesigns(next).length - 1));
+    // The seed carries over. A maze at one ruling has nothing to do with the
+    // maze at another, but a seed is a name rather than a description, and
+    // keeping it is what makes this slider feel like one control rather than
+    // two: the object gets finer, and nothing else was asked for.
     rebuild(true);
     scene.holdAutoFold();
   });
 
-  controls.onMaze(next => {
-    maze = Math.max(0, next - 1);
+  controls.onSeed(next => {
+    if (next === seed) return;
+    seed = next;
+    rebuild(true);
+    scene.holdAutoFold();
+  });
+
+  controls.onAction('shuffle-seed', () => {
+    seed = randomSeed();
+    rebuild(true);
+    scene.holdAutoFold();
+  });
+
+  // Everything that describes the object, plus where it is standing and what
+  // it is made of — but not the three switches, which are how the visitor has
+  // decided to look at it rather than what they are looking at.
+  controls.onAction('shuffle-all', () => {
+    const rulings = INFINITY_CUBE_RULINGS;
+    cells = rulings[Math.floor(Math.random() * rulings.length)] ?? cells;
+    seed = randomSeed();
+    poseIndex = Math.floor(Math.random() * FOLD_LIMITS.poses);
+    const style = SCENE_PRESETS[Math.floor(Math.random() * SCENE_PRESETS.length)];
+    if (style) {
+      controls.setStyle(style.id);
+      scene.setPreset(style.id);
+    }
+    controls.setRulings(rulings, cells);
+    // Keeping the pose, because the pose is one of the things just shuffled.
+    // `rebuild(false)` would go back to the first shape and undo it.
     rebuild(true);
     scene.holdAutoFold();
   });
@@ -311,8 +323,8 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   });
 
   controls.onAction('copy-url', () => {
-    const params: FoldParams = { ...controls.getParams(), cells, maze: maze + 1, pose: poseIndex };
-    const url = window.location.origin + window.location.pathname + encodeFoldParams(params);
+    const url = window.location.origin + window.location.pathname
+      + encodeFoldParams(currentParams());
     navigator.clipboard.writeText(url).then(
       () => controls.showToast('URL copied'),
       () => controls.showToast('Could not copy the URL'),
@@ -323,11 +335,11 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // so before the work starts rather than after it.
   controls.onAction('export-pdf', () => {
     if (!build) return;
-    const { mech, surface, design, ends, maze } = build;
+    const { mech, surface, design, ends, seed: from } = build;
     controls.setExportBusy(true);
     setTimeout(() => {
       try {
-        const plan = exportFoldPDF(mech, surface, design, maze, { ends });
+        const plan = exportFoldPDF(mech, surface, design, from, { ends });
         controls.showToast(
           `${plan.sheets.length} sheets — eight cubes ${plan.edgeMm.toFixed(0)} mm on a side, ` +
           `folding into a ${plan.cubeMm.toFixed(0)} mm cube`,
@@ -367,6 +379,11 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // Opened in the pose the link asked for, and cut to it rather than folded:
   // there is nothing to have come from.
   rebuild(true);
+}
+
+/** A seed to shuffle to, in the range a link can carry. */
+function randomSeed(): number {
+  return Math.floor(Math.random() * (FOLD_LIMITS.maxSeed + 1));
 }
 
 /**

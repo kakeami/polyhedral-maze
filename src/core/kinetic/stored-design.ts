@@ -23,6 +23,16 @@
 export interface StoredDesign {
   /** Cells across one face — which ruling of the object this design is for. */
   readonly cells: number;
+  /**
+   * The seed it was found from.
+   *
+   * What makes this a *cache* rather than a catalogue: a seed names a maze
+   * whether or not anyone has written it down, so a page can ask for any seed
+   * and only the ones kept here come back without a search. Which seeds are
+   * kept is a judgement about how long someone should wait, not about which
+   * mazes exist.
+   */
+  readonly seed: number;
   /** Side classes the surface had when this was found. */
   readonly classCount: number;
   /** One bit per class, base64. */
