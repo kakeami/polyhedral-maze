@@ -49,6 +49,32 @@ export function makeSegments(
   return new LineSegments2(geo, makeLineMaterial(color, width, resolution, outLineMaterials));
 }
 
+/**
+ * A piece's surface, in one colour it carries on its own vertices.
+ *
+ * The turning and folding views both want this and both want it the same way:
+ * the shared surface material reads vertex colours, so a piece is told apart
+ * from its neighbour by what is written on its vertices rather than by a
+ * material of its own — which is also what lets every piece share one
+ * material and one draw call's worth of state.
+ */
+export function makePieceGeometry(
+  positions: number[], normals: number[], colorHex: number,
+): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  const colour = new THREE.Color(colorHex);
+  const colours = new Float32Array(positions.length);
+  for (let i = 0; i < colours.length; i += 3) {
+    colours[i] = colour.r;
+    colours[i + 1] = colour.g;
+    colours[i + 2] = colour.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  return geo;
+}
+
 export function makeFaceMaterial(m: FaceMaterialSpec): THREE.Material {
   return new THREE.MeshStandardMaterial({
     vertexColors: true,

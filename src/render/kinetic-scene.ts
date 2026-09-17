@@ -25,6 +25,7 @@ import { BLOOM_LAYER } from './scene-bloom.ts';
 import {
   disposeObject,
   makeFaceMaterial,
+  makePieceGeometry,
   makePin,
   makeRimMaterial,
   makeSegments,
@@ -129,20 +130,12 @@ export function createKineticScene(
       const group = new THREE.Group();
       group.position.z = model.pieceZ[piece.piece] ?? 0;
 
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(piece.positions, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(piece.normals, 3));
-      // One colour per ring, written per vertex because the shared surface
-      // material reads vertex colours — and because a ring you can tell from
-      // its neighbour at a glance is the whole point of the palette here.
-      const colour = new THREE.Color(faceColorHex(preset.palette, piece.piece, pieceCount));
-      const colours = new Float32Array(piece.positions.length);
-      for (let i = 0; i < colours.length; i += 3) {
-        colours[i] = colour.r;
-        colours[i + 1] = colour.g;
-        colours[i + 2] = colour.b;
-      }
-      geo.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+      // One colour per ring: a ring you can tell from its neighbour at a
+      // glance is the whole point of the palette here.
+      const geo = makePieceGeometry(
+        piece.positions, piece.normals,
+        faceColorHex(preset.palette, piece.piece, pieceCount),
+      );
 
       const mesh = new THREE.Mesh(geo, makeFaceMaterial(preset.material));
       mesh.userData['ring'] = piece.piece;

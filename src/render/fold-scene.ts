@@ -41,6 +41,7 @@ import { BLOOM_LAYER } from './scene-bloom.ts';
 import {
   disposeObject,
   makeFaceMaterial,
+  makePieceGeometry,
   makePin,
   makeRimMaterial,
   makeSegments,
@@ -168,18 +169,11 @@ export function createFoldScene(
       // Driven by the pose, not by the usual position/rotation channels.
       group.matrixAutoUpdate = false;
 
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(piece.positions, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(piece.normals, 3));
       // One colour per cube, so that a cube can be followed through a fold.
-      const colour = new THREE.Color(faceColorHex(preset.palette, piece.piece, pieceCount));
-      const colours = new Float32Array(piece.positions.length);
-      for (let i = 0; i < colours.length; i += 3) {
-        colours[i] = colour.r;
-        colours[i + 1] = colour.g;
-        colours[i + 2] = colour.b;
-      }
-      geo.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+      const geo = makePieceGeometry(
+        piece.positions, piece.normals,
+        faceColorHex(preset.palette, piece.piece, pieceCount),
+      );
 
       group.add(new THREE.Mesh(geo, makeFaceMaterial(preset.material)));
       if (preset.rim) group.add(new THREE.Mesh(geo, makeRimMaterial(preset.rim)));
