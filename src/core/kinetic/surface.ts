@@ -2,6 +2,8 @@ import type { Mechanism, KineticState } from './types.ts';
 import { applyPlacement } from './types.ts';
 import { UnionFind } from '../graph.ts';
 import { VertexWelder } from './weld.ts';
+import type { Pairing, SurfaceParts } from './placement-pairs.ts';
+import { decomposeByPlacement, pairingsOfState } from './placement-pairs.ts';
 
 export type SideClassKind =
   /**
@@ -57,13 +59,6 @@ export interface KineticSurface {
   readonly alwaysVisible: readonly number[];
   /** Whether any cell is ever hidden: false for a mechanism that never folds shut. */
   readonly hidesCells: boolean;
-}
-
-interface Pairing {
-  sideA: number;
-  sideB: number;
-  cellA: number;
-  cellB: number;
 }
 
 /**
@@ -217,7 +212,16 @@ function touchingSides(
   return [...bySegment.values()];
 }
 
-export function buildSurface(mech: Mechanism, options: BuildSurfaceOptions = {}): KineticSurface {
+function sideStarts(mech: Mechanism): Int32Array {
+  const cellCount = mech.cells.length;
+  const sideStart = new Int32Array(cellCount + 1);
+  for (let i = 0; i < cellCount; i++) {
+    sideStart[i + 1] = sideStart[i]! + mech.cells[i]!.corners.length;
+  }
+  return sideStart;
+}
+
+function checkStateCount(mech: Mechanism, options: BuildSurfaceOptions): void {
   const maxStates = options.maxStates ?? 4096;
   if (mech.states.length === 0) throw new Error('mechanism has no states');
   if (mech.states.length > maxStates) {
@@ -226,12 +230,61 @@ export function buildSurface(mech: Mechanism, options: BuildSurfaceOptions = {})
         'pass a larger maxStates or sample a subset',
     );
   }
+}
+
+/** The side classes a set of pairings leaves, numbered by their first side. */
+function classify(uf: UnionFind<number>, sideCount: number): {
+  classOf: Int32Array;
+  classSides: number[][];
+} {
+  const classOf = new Int32Array(sideCount).fill(-1);
+  const classSides: number[][] = [];
+  for (let s = 0; s < sideCount; s++) {
+    const root = uf.find(s);
+    let id = classOf[root]!;
+    if (id === -1) {
+      id = classSides.length;
+      classSides.push([]);
+      classOf[root] = id;
+    }
+    classOf[s] = id;
+    classSides[id]!.push(s);
+  }
+  return { classOf, classSides };
+}
+
+/**
+ * The surface a mechanism carries, in every state it can be put in.
+ *
+ * Built out of pairs of pieces where the object allows it (`placement-pairs.ts`)
+ * and a state at a time where it does not. Which one runs is decided by the
+ * geometry and not by the mechanism's name: an object that buries a cell makes
+ * a state more than the sum of its pairs, and nothing else does. The two build
+ * the same surface, field for field, and a test holds them to it.
+ */
+export function buildSurface(mech: Mechanism, options: BuildSurfaceOptions = {}): KineticSurface {
+  checkStateCount(mech, options);
+  const sideStart = sideStarts(mech);
+  const parts = decomposeByPlacement(mech, sideStart);
+  return parts ? buildFromParts(mech, parts, sideStart) : buildSurfaceByState(mech, options);
+}
+
+/**
+ * The surface, welded once per state.
+ *
+ * What every mechanism used until the pairs above were worked out, and still
+ * the answer for one that folds shut on itself: with cells buried, which side
+ * a side is paired with depends on the whole state and not on two pieces of
+ * it. Exported so that a test can build a surface both ways and compare.
+ */
+export function buildSurfaceByState(
+  mech: Mechanism,
+  options: BuildSurfaceOptions = {},
+): KineticSurface {
+  checkStateCount(mech, options);
 
   const cellCount = mech.cells.length;
-  const sideStart = new Int32Array(cellCount + 1);
-  for (let i = 0; i < cellCount; i++) {
-    sideStart[i + 1] = sideStart[i]! + mech.cells[i]!.corners.length;
-  }
+  const sideStart = sideStarts(mech);
   const sideCount = sideStart[cellCount]!;
 
   const visibleByState = mech.states.map(state => visibleCells(mech, state));
@@ -276,19 +329,7 @@ export function buildSurface(mech: Mechanism, options: BuildSurfaceOptions = {})
     });
   }
 
-  const classOf = new Int32Array(sideCount).fill(-1);
-  const classSides: number[][] = [];
-  for (let s = 0; s < sideCount; s++) {
-    const root = uf.find(s);
-    let id = classOf[root]!;
-    if (id === -1) {
-      id = classSides.length;
-      classSides.push([]);
-      classOf[root] = id;
-    }
-    classOf[s] = id;
-    classSides[id]!.push(s);
-  }
+  const { classOf, classSides } = classify(uf, sideCount);
   const classCount = classSides.length;
 
   const kind: SideClassKind[] = new Array(classCount).fill('rim');
@@ -345,5 +386,117 @@ export function buildSurface(mech: Mechanism, options: BuildSurfaceOptions = {})
     visibleCount,
     alwaysVisible,
     hidesCells,
+  };
+}
+
+/**
+ * The same surface, assembled from pieces and pairs.
+ *
+ * Nothing here looks at a state's geometry: the pairings were worked out once
+ * per pair of pieces per relative placement, and a state only says which of
+ * them is in force. What is still proportional to the state count is the list
+ * of adjacencies laid out below — the next thing to go, and the reason a
+ * mechanism with a quarter of a million states is still out of reach.
+ */
+function buildFromParts(
+  mech: Mechanism,
+  parts: SurfaceParts,
+  sideStart: Int32Array,
+): KineticSurface {
+  const cellCount = mech.cells.length;
+  const sideCount = sideStart[cellCount]!;
+  const { stateCount } = parts;
+
+  const uf = new UnionFind<number>();
+  for (let s = 0; s < sideCount; s++) uf.find(s);
+  const everyPairing = function* (): Generator<[Pairing, boolean]> {
+    for (const list of parts.intra) for (const p of list) yield [p, true];
+    for (const pair of parts.pairs) {
+      for (const list of pair.byRel) for (const p of list) yield [p, false];
+    }
+  };
+  for (const [p] of everyPairing()) uf.union(p.sideA, p.sideB);
+
+  const { classOf, classSides } = classify(uf, sideCount);
+  const classCount = classSides.length;
+
+  const kind: SideClassKind[] = new Array(classCount).fill('rim');
+  for (const [p, intra] of everyPairing()) {
+    const classId = classOf[p.sideA]!;
+    if (!intra || classSides[classId]!.length !== 2) kind[classId] = 'cut';
+    else if (kind[classId] !== 'cut') kind[classId] = 'internal';
+  }
+  for (let c = 0; c < classCount; c++) {
+    if (kind[c] === 'internal' && classSides[c]!.length !== 2) {
+      throw new Error(`internal class ${c} has ${classSides[c]!.length} sides (expected 2)`);
+    }
+  }
+
+  const adjacency = (p: Pairing, intra: boolean): SurfaceAdjacency => ({
+    a: p.cellA,
+    b: p.cellB,
+    classId: classOf[p.sideA]!,
+    intra,
+  });
+
+  // An internal class is a line inside one piece, so it is in a piece's own
+  // list and needs no state to be found. Ordered by the side a scan over the
+  // cells would meet first, which is the order the state-at-a-time build
+  // produces — and a seeded shuffle of these walls names the maze.
+  const internal: { side: number; edge: SurfaceAdjacency }[] = [];
+  for (const list of parts.intra) {
+    for (const p of list) {
+      if (kind[classOf[p.sideA]!] !== 'internal') continue;
+      internal.push({ side: Math.min(p.sideA, p.sideB), edge: adjacency(p, true) });
+    }
+  }
+  internal.sort((x, y) => x.side - y.side);
+  const internalEdges = internal.map(x => x.edge);
+
+  const cutClasses: number[] = [];
+  for (let c = 0; c < classCount; c++) if (kind[c] === 'cut') cutClasses.push(c);
+
+  // One adjacency object per pairing, shared by every state it holds in, so
+  // that a state costs a list of references rather than a list of objects.
+  const intraAdj: SurfaceAdjacency[] = [];
+  for (const list of parts.intra) for (const p of list) intraAdj.push(adjacency(p, true));
+  const crossAdj = new Map<readonly Pairing[], SurfaceAdjacency[]>();
+  for (const pair of parts.pairs) {
+    for (const list of pair.byRel) crossAdj.set(list, list.map(p => adjacency(p, false)));
+  }
+  const adjByState: SurfaceAdjacency[][] = [];
+  for (let s = 0; s < stateCount; s++) {
+    const adj = intraAdj.slice();
+    for (const pair of parts.pairs) {
+      const cross = crossAdj.get(pairingsOfState(parts, pair, s))!;
+      for (const e of cross) adj.push(e);
+    }
+    adjByState.push(adj);
+  }
+
+  // Nothing is ever buried — that is what let the pairs decide the surface —
+  // so one row of ones serves every state.
+  const allVisible = new Uint8Array(cellCount).fill(1);
+  const visibleByState = new Array<Uint8Array>(stateCount).fill(allVisible);
+  const visibleCount = new Int32Array(stateCount).fill(cellCount);
+  const alwaysVisible = Array.from({ length: cellCount }, (_, i) => i);
+
+  return {
+    mechanism: mech,
+    cellCount,
+    stateCount,
+    sideStart,
+    sideCount,
+    classOf,
+    classCount,
+    classKind: kind,
+    classSides,
+    adjByState,
+    internalEdges,
+    cutClasses,
+    visibleByState,
+    visibleCount,
+    alwaysVisible,
+    hidesCells: false,
   };
 }

@@ -19,7 +19,14 @@ export class VertexWelder {
     this.eps = eps;
   }
 
-  id(p: Vec3): number {
+  /**
+   * The id of a point already here, or -1.
+   *
+   * Asking without adding is what lets one piece's points be indexed once and
+   * every other piece measured against them, which is how a surface is built
+   * from relative placements rather than from states.
+   */
+  find(p: Vec3): number {
     const { eps } = this;
     const gx = Math.floor(p[0] / eps);
     const gy = Math.floor(p[1] / eps);
@@ -40,9 +47,16 @@ export class VertexWelder {
         }
       }
     }
+    return -1;
+  }
+
+  id(p: Vec3): number {
+    const found = this.find(p);
+    if (found !== -1) return found;
+    const { eps } = this;
     const id = this.points.length;
     this.points.push(p);
-    const key = hashCell(gx, gy, gz);
+    const key = hashCell(Math.floor(p[0] / eps), Math.floor(p[1] / eps), Math.floor(p[2] / eps));
     const bucket = this.buckets.get(key);
     if (bucket) bucket.push(id);
     else this.buckets.set(key, [id]);
