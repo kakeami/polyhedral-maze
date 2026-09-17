@@ -1,11 +1,7 @@
-import type { Face, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { Dodecahedron } from '../platonic/dodecahedron.ts';
 import { augmentFaces, findFaceAtDistance } from './_augment.ts';
-import { gridForPolygonFace } from '../prismatic/_grid_dispatch.ts';
 
 function buildFaces() {
   const base = new Dodecahedron().faces();
@@ -24,18 +20,6 @@ function buildFaces() {
  * other (no two pyramids share an edge or sit antipodally). 24 faces
  * (15 triangles + 9 pentagons), 23 vertices, 45 edges.
  */
-export class TriaugmentedDodecahedron implements Polyhedron {
-  private _faces = normalizeFaces(buildFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return gridForPolygonFace(face, n);
-  }
+export class TriaugmentedDodecahedron extends Solid {
+  protected readonly _faces = normalizeFaces(buildFaces(), 1);
 }

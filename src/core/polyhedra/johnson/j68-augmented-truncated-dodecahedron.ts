@@ -1,11 +1,7 @@
-import type { Face, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { TruncatedDodecahedron } from '../archimedean/truncated-dodecahedron.ts';
 import { augmentWithCupola } from './_augment.ts';
-import { gridForPolygonFace } from '../prismatic/_grid_dispatch.ts';
 
 function buildFaces() {
   const base = new TruncatedDodecahedron().faces();
@@ -20,18 +16,6 @@ function buildFaces() {
  * 42 faces (25 triangles + 5 squares + 1 pentagon + 11 decagons),
  * 65 vertices, 105 edges.
  */
-export class AugmentedTruncatedDodecahedron implements Polyhedron {
-  private _faces = normalizeFaces(buildFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return gridForPolygonFace(face, n);
-  }
+export class AugmentedTruncatedDodecahedron extends Solid {
+  protected readonly _faces = normalizeFaces(buildFaces(), 1);
 }

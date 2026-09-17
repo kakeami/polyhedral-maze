@@ -1,10 +1,6 @@
-import type { Face, Vec3, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
-import { TriGrid } from '../grids/tri-grid.ts';
-import { DecGrid } from '../grids/dec-grid.ts';
+import type { Face, Vec3 } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { truncate } from './_truncation.ts';
 
 /**
@@ -63,20 +59,6 @@ function makeFaces(): Face[] {
   return truncate(V, F, t);
 }
 
-export class TruncatedDodecahedron implements Polyhedron {
-  private _faces = normalizeFaces(makeFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return face.vertices.length === 3
-      ? new TriGrid(face, n)
-      : new DecGrid(face, n);
-  }
+export class TruncatedDodecahedron extends Solid {
+  protected readonly _faces = normalizeFaces(makeFaces(), 1);
 }

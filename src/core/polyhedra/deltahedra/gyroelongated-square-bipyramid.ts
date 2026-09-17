@@ -1,9 +1,6 @@
-import type { Face, Vec3, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
-import { TriGrid } from '../grids/tri-grid.ts';
+import type { Face, Vec3 } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { makeFace } from '../archimedean/_utils.ts';
 
 function makeGyroelongatedSquareBipyramidFaces(): Face[] {
@@ -58,18 +55,6 @@ function makeGyroelongatedSquareBipyramidFaces(): Face[] {
  * 16 equilateral-triangle faces, 10 vertices, 24 edges.
  * D_4d symmetry — no central inversion → no antipodal faces.
  */
-export class GyroelongatedSquareBipyramid implements Polyhedron {
-  private _faces = normalizeFaces(makeGyroelongatedSquareBipyramidFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return new TriGrid(face, n);
-  }
+export class GyroelongatedSquareBipyramid extends Solid {
+  protected readonly _faces = normalizeFaces(makeGyroelongatedSquareBipyramidFaces(), 1);
 }

@@ -1,10 +1,7 @@
-import type { Face, FaceEdgeData, Vec3 } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
+import type { Face, Vec3 } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { makeFace } from '../archimedean/_utils.ts';
-import { gridForPolygonFace } from '../prismatic/_grid_dispatch.ts';
 import { convexHull } from './_convex_hull.ts';
 
 /**
@@ -40,18 +37,6 @@ function bilunabirotundaFaces(): Face[] {
   return convexHull(verts).map((f, id) => makeFace(id, f.vertices));
 }
 
-export class Bilunabirotunda implements Polyhedron {
-  private _faces = normalizeFaces(bilunabirotundaFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return gridForPolygonFace(face, n);
-  }
+export class Bilunabirotunda extends Solid {
+  protected readonly _faces = normalizeFaces(bilunabirotundaFaces(), 1);
 }

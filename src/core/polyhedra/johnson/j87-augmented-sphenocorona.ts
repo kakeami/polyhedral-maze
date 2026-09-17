@@ -1,11 +1,8 @@
-import type { Face, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
+import type { Face } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { augmentWithPyramid } from './_augment.ts';
 import { sphenocoronaFaces } from './j86-sphenocorona.ts';
-import { gridForPolygonFace } from '../prismatic/_grid_dispatch.ts';
 
 /**
  * Augmented Sphenocorona (J87). Sphenocorona (J86) with a square pyramid (J1)
@@ -24,18 +21,6 @@ function augmentedSphenocoronaFaces(): Face[] {
   return augmentWithPyramid(base, hostId);
 }
 
-export class AugmentedSphenocorona implements Polyhedron {
-  private _faces = normalizeFaces(augmentedSphenocoronaFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return gridForPolygonFace(face, n);
-  }
+export class AugmentedSphenocorona extends Solid {
+  protected readonly _faces = normalizeFaces(augmentedSphenocoronaFaces(), 1);
 }

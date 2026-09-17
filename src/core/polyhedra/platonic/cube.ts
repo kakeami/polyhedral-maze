@@ -1,10 +1,6 @@
 import type { Face } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import type { FaceEdgeData } from '../../types.ts';
-import { Graph } from '../../graph.ts';
-import { RectGrid } from '../grids/rect-grid.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 
 function makeCubeFaces(): Face[] {
   const h = 0.5;
@@ -72,18 +68,6 @@ function makeCubeFaces(): Face[] {
   ];
 }
 
-export class Cube implements Polyhedron {
-  private _faces = normalizeFaces(makeCubeFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return new RectGrid(face, n);
-  }
+export class Cube extends Solid {
+  protected readonly _faces = normalizeFaces(makeCubeFaces(), 1);
 }

@@ -1,9 +1,6 @@
-import type { Face, Vec3, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
-import { TriGrid } from '../grids/tri-grid.ts';
+import type { Face, Vec3 } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 
 function makeTetrahedronFaces(): Face[] {
   const v0: Vec3 = [1, 1, 1];
@@ -21,18 +18,6 @@ function makeTetrahedronFaces(): Face[] {
   ];
 }
 
-export class Tetrahedron implements Polyhedron {
-  private _faces = normalizeFaces(makeTetrahedronFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return new TriGrid(face, n);
-  }
+export class Tetrahedron extends Solid {
+  protected readonly _faces = normalizeFaces(makeTetrahedronFaces(), 1);
 }

@@ -1,9 +1,6 @@
-import type { Face, Vec3, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
-import { TriGrid } from '../grids/tri-grid.ts';
+import type { Face, Vec3 } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { makeFace } from '../archimedean/_utils.ts';
 
 function makeTriangularBipyramidFaces(): Face[] {
@@ -36,18 +33,6 @@ function makeTriangularBipyramidFaces(): Face[] {
  * 6 equilateral-triangle faces, 5 vertices, 9 edges.
  * D_3h symmetry, no central inversion → no antipodal faces (warp disabled).
  */
-export class TriangularBipyramid implements Polyhedron {
-  private _faces = normalizeFaces(makeTriangularBipyramidFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return new TriGrid(face, n);
-  }
+export class TriangularBipyramid extends Solid {
+  protected readonly _faces = normalizeFaces(makeTriangularBipyramidFaces(), 1);
 }

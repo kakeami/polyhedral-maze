@@ -1,12 +1,9 @@
-import type { Face, FaceEdgeData, Vec3 } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
+import type { Face, Vec3 } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { ICOSA_VERTEX } from './_diminish.ts';
 import { tridiminishedFaces } from './j63-tridiminished-icosahedron.ts';
 import { augmentWithPyramid } from './_augment.ts';
-import { gridForPolygonFace } from '../prismatic/_grid_dispatch.ts';
 
 const VERTEX_TOL = 1e-9;
 
@@ -46,18 +43,6 @@ function build(): Face[] {
   return augmentWithPyramid(tridim, targetId);
 }
 
-export class AugmentedTridiminishedIcosahedron implements Polyhedron {
-  private _faces = normalizeFaces(build(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return gridForPolygonFace(face, n);
-  }
+export class AugmentedTridiminishedIcosahedron extends Solid {
+  protected readonly _faces = normalizeFaces(build(), 1);
 }

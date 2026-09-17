@@ -1,11 +1,6 @@
-import type { Face, Vec3, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
-import { RectGrid } from '../grids/rect-grid.ts';
-import { HexGrid } from '../grids/hex-grid.ts';
-import { DecGrid } from '../grids/dec-grid.ts';
+import type { Face, Vec3 } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { cantitruncate } from './_cantitruncate.ts';
 
 /**
@@ -36,20 +31,6 @@ function makeFaces(): Face[] {
   return cantitruncate(V, F);
 }
 
-export class TruncatedIcosidodecahedron implements Polyhedron {
-  private _faces = normalizeFaces(makeFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    if (face.vertices.length === 4) return new RectGrid(face, n);
-    if (face.vertices.length === 6) return new HexGrid(face, n);
-    return new DecGrid(face, n);
-  }
+export class TruncatedIcosidodecahedron extends Solid {
+  protected readonly _faces = normalizeFaces(makeFaces(), 1);
 }

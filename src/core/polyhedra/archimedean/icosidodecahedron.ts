@@ -1,10 +1,6 @@
-import type { Face, Vec3, FaceEdgeData } from '../../types.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import { Graph } from '../../graph.ts';
-import { TriGrid } from '../grids/tri-grid.ts';
-import { PentGrid } from '../grids/pent-grid.ts';
+import type { Face, Vec3 } from '../../types.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 import { rectify } from './_rectify.ts';
 
 /**
@@ -27,20 +23,6 @@ function makeFaces(): Face[] {
   return rectify(V, F);
 }
 
-export class Icosidodecahedron implements Polyhedron {
-  private _faces = normalizeFaces(makeFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return face.vertices.length === 3
-      ? new TriGrid(face, n)
-      : new PentGrid(face, n);
-  }
+export class Icosidodecahedron extends Solid {
+  protected readonly _faces = normalizeFaces(makeFaces(), 1);
 }

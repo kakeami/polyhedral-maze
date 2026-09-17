@@ -1,11 +1,7 @@
 import type { Face, Vec3 } from '../../types.ts';
 import { sub, cross, normalize, dot, mean, scale } from '../../vec3.ts';
-import type { FaceGrid } from '../../face-grid.ts';
-import type { Polyhedron } from '../../polyhedron.ts';
-import { sharedEdgeVertices, buildFaceAdjacency, normalizeFaces } from '../../polyhedron.ts';
-import type { FaceEdgeData } from '../../types.ts';
-import { Graph } from '../../graph.ts';
-import { PentGrid } from '../grids/pent-grid.ts';
+import { Solid } from '../_solid.ts';
+import { normalizeFaces } from '../../polyhedron.ts';
 
 function makeDodecahedronFaces(): Face[] {
   const phi = (1 + Math.sqrt(5)) / 2;
@@ -65,18 +61,6 @@ function makeDodecahedronFaces(): Face[] {
   });
 }
 
-export class Dodecahedron implements Polyhedron {
-  private _faces = normalizeFaces(makeDodecahedronFaces(), 1);
-
-  faces(): Face[] {
-    return [...this._faces];
-  }
-
-  faceAdjacency(): Graph<string, Record<string, unknown>, FaceEdgeData> {
-    return buildFaceAdjacency(this._faces, sharedEdgeVertices);
-  }
-
-  gridForFace(face: Face, n: number): FaceGrid {
-    return new PentGrid(face, n);
-  }
+export class Dodecahedron extends Solid {
+  protected readonly _faces = normalizeFaces(makeDodecahedronFaces(), 1);
 }
