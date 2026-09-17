@@ -125,7 +125,8 @@ export function createFoldScene(
   let resting = 0;
   let holding = 0;
   let distances: number[][] = [];
-  let cameFrom = -1;
+  /** Shapes not yet shown this round, for the fold it chooses on its own. */
+  const unseen = new Set<number>();
   let lineMaterials: LineMaterial[] = [];
   /** Per piece: the walls it carries in each pose, and all of them. */
   let wallSets: { all: THREE.Object3D | null; byPose: (THREE.Object3D | null)[] }[] = [];
@@ -359,7 +360,6 @@ export function createFoldScene(
       arriveCallback?.(pose);
       return;
     }
-    cameFrom = pose;
     const steps = foldPath(model.graph, pose, target);
     if (!steps || steps.length === 0) {
       // No way there that this object allows — say so by arriving anyway
@@ -389,12 +389,7 @@ export function createFoldScene(
     resting += dt;
     if (resting < FOLD_SCENE.dwellSeconds) return;
     resting = 0;
-    const next = chooseNextPose({
-      distances,
-      from: pose,
-      cameFrom,
-      bias: FOLD_SCENE.nearnessBias,
-    });
+    const next = chooseNextPose({ distances, from: pose, unseen });
     if (next !== null) goTo(next, true);
   }
 
@@ -456,7 +451,8 @@ export function createFoldScene(
       playing = null;
       queued = null;
       resting = 0;
-      cameFrom = -1;
+      // A different object has different shapes: the round starts again.
+      unseen.clear();
       pose = 0;
       clearModel();
       buildModel();

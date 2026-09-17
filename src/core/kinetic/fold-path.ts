@@ -183,49 +183,76 @@ export function poseDistances(graph: FoldGraph): number[][] {
 /**
  * Where to fold next, left to itself.
  *
- * Weighted towards the poses that are near, because a four-fold journey is a
- * long time to watch and a single fold is the object at its most legible — but
- * never only the near ones, since a wanderer that took single folds alone
- * would leave half the poses unvisited for ever: of the fifteen pairs only
- * four are one fold apart, and those four do not join all six.
+ * **Every shape once a round, and the cheapest way round taken as it goes.**
+ * The caller keeps a bag of the shapes not yet shown; this takes one out of
+ * it, and fills the bag again when nothing in it can be reached. So each shape
+ * gets an equal share of the stops however far away it is.
  *
- * Where it has just come from is not forbidden, only made unlikely. Forbidding
- * it would strand the object wherever a pose has one near neighbour, and
- * "unlikely" is all that is wanted anyway: what it stops is the rocking
- * between two shapes that a plain nearest-first rule falls into.
+ * That replaced a weighting by 1/distance^2, and the reason is the twelve-cube
+ * ring. On the eight-cube ring every pair of shapes is one to four folds apart
+ * and the weighting was fine; on the twelve, the frame is seven to ten folds
+ * from three of the other four, so its weight was one part in fifty: it came
+ * up in 8% of the stops and 5% of the time on screen, and a visitor could
+ * watch for a minute without seeing the shape that object is *for*
+ * (`.dev/probe-fold-visits.ts`). With the bag it is a fifth of the stops.
+ *
+ * Which of the owed shapes to take is not simply the nearest, and the same
+ * object says why: plain nearest-first leaves the frame for last every round,
+ * and then has to reach it from wherever that lands — a ten-fold hop, when
+ * three would have done from the shape it was standing on two stops earlier.
+ * So a shape is judged by the fold it costs *and* by how far it is from the
+ * nearest shape still owed after it, which is enough to take the frame on the
+ * way past rather than at the end. Measured over the round, that is twenty
+ * folds a round down to ten.
+ *
+ * The shape it is standing on stays in the bag, since it cannot be chosen from
+ * nowhere; it is simply come back to later in the round. Dropping it instead
+ * would skip whichever shape a round happens to start on, which is uneven in
+ * exactly the way this is meant to fix.
  */
 export function chooseNextPose(options: {
   distances: readonly (readonly number[])[];
   from: number;
-  /** The pose it arrived from, if any: worth less than the others. */
-  cameFrom?: number;
-  /** How much a pose twice as far is worth: 1/distance to this power. */
-  bias?: number;
+  /** The shapes not yet shown this round. Emptied as they are, refilled here. */
+  unseen: Set<number>;
   random?: () => number;
 }): number | null {
-  const { distances, from } = options;
-  const bias = options.bias ?? 2;
+  const { distances, from, unseen } = options;
   const random = options.random ?? Math.random;
   const away = distances[from];
   if (!away) return null;
 
-  const weights = away.map((steps, pose) => {
-    if (pose === from || steps <= 0) return 0;
-    return (pose === options.cameFrom ? BACKTRACK_WORTH : 1) / Math.pow(steps, bias);
-  });
-  const total = weights.reduce((sum, worth) => sum + worth, 0);
-  if (total <= 0) return null;
-
-  let ticket = random() * total;
-  for (let pose = 0; pose < weights.length; pose++) {
-    ticket -= weights[pose]!;
-    if (ticket <= 0) return pose;
+  const canGo = (pose: number) => pose !== from && (away[pose] ?? -1) > 0;
+  if (![...unseen].some(canGo)) {
+    unseen.clear();
+    for (let pose = 0; pose < away.length; pose++) unseen.add(pose);
   }
-  return weights.length - 1;
-}
+  const owed = [...unseen].filter(canGo);
 
-/** What the pose it has just come from is worth, against any other at that distance. */
-const BACKTRACK_WORTH = 0.15;
+  let best = -1;
+  let cheapest = Infinity;
+  let tied = 0;
+  for (const pose of owed) {
+    // What it costs to go there, plus what it will cost to go on from there to
+    // the nearest shape still owed: enough lookahead to take a far shape on
+    // the way past rather than stranding it until last.
+    let onward = Infinity;
+    for (const next of owed) {
+      if (next !== pose) onward = Math.min(onward, distances[pose]![next] ?? 0);
+    }
+    const cost = away[pose]! + (Number.isFinite(onward) ? onward : 0);
+    if (cost < cheapest) {
+      cheapest = cost;
+      best = pose;
+      tied = 1;
+    } else if (cost === cheapest && random() < 1 / ++tied) {
+      // Shapes that cost the same are chosen between at random, which is most
+      // of the choosing on the eight-cube ring: it has ties everywhere.
+      best = pose;
+    }
+  }
+  return best < 0 ? null : (unseen.delete(best), best);
+}
 
 /**
  * The object part-way through a fold.

@@ -27,10 +27,4 @@ export const FOLD_SCENE = {
    * ruling or a maze. The same seven seconds the rings give on the other page.
    */
   pauseAfterAskingSeconds: 7,
-  /**
-   * How much a pose twice as far away is worth choosing, when it folds on its
-   * own: the weight is 1/distance to this power. Two keeps most journeys to
-   * one fold without ever shutting the far poses out.
-   */
-  nearnessBias: 2,
 } as const;

@@ -11,8 +11,9 @@
  * screenshot and most obvious in motion.
  */
 import { describe, it, expect } from 'vitest';
+import { createCubeRing } from '../kinetic/mechanisms/cube-ring.ts';
 import {
-  createInfinityCube, PLANK_RING,
+  FRAME_RING, createInfinityCube, PLANK_RING,
 } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import {
   buildFoldGraph, chooseNextPose, foldPath, poseDistances, stateDuringFold, sweepIsClear,
@@ -157,45 +158,75 @@ describe('folding on its own', () => {
     }
   });
 
-  it('mostly takes a single fold, and still visits every pose', () => {
+  it('shows every shape equally often, and mostly in single folds', () => {
     // The two halves of the point. Short journeys are what makes an object
     // left to itself legible; but of the fifteen pairs only four are a single
     // fold apart and those four do not join all six poses, so a rule that only
-    // ever took the nearest would strand it in three of them for ever.
+    // ever took the nearest would strand it in three of them for ever. Taking
+    // the nearest of what it is still *owed* gets both.
     const rng = createRng(4);
     const visits = new Array(mech.states.length).fill(0);
     const lengths: number[] = [];
+    const unseen = new Set<number>();
     let at = 0;
-    let cameFrom = -1;
-    for (let step = 0; step < 2000; step++) {
-      const next = chooseNextPose({
-        distances, from: at, cameFrom, random: () => rng.next(),
-      })!;
+    for (let step = 0; step < 2400; step++) {
+      const next = chooseNextPose({ distances, from: at, unseen, random: () => rng.next() })!;
       expect(next).not.toBe(at);
       visits[next]++;
       lengths.push(distances[at]![next]!);
-      cameFrom = at;
       at = next;
     }
-    for (const seen of visits) expect(seen).toBeGreaterThan(50);
+    // Exactly even, not merely often enough: a round shows each of the six.
+    for (const seen of visits) expect(seen).toBe(2400 / mech.states.length);
     const single = lengths.filter(n => n === 1).length / lengths.length;
     expect(single).toBeGreaterThan(0.5);
     expect(Math.max(...lengths)).toBeGreaterThan(1); // the far ones do come up
   });
 
-  it('turns back much less often than it goes on', () => {
+  it('rarely turns straight back, because a round owes it the rest', () => {
     const rng = createRng(11);
+    const unseen = new Set<number>();
     let back = 0;
-    let at = 1;
     let cameFrom = 0;
+    let at = 1;
     for (let step = 0; step < 2000; step++) {
-      const next = chooseNextPose({
-        distances, from: at, cameFrom, random: () => rng.next(),
-      })!;
+      const next = chooseNextPose({ distances, from: at, unseen, random: () => rng.next() })!;
       if (next === cameFrom) back++;
       cameFrom = at;
       at = next;
     }
-    expect(back / 2000).toBeLessThan(0.25);
+    // Nearest-first alone would ping-pong between the two nearest shapes for
+    // most of a round; what stops it is that the round is owed the others, and
+    // that a shape is judged by where it leads as well as by what it costs.
+    expect(back / 2000).toBeLessThan(0.15);
+  });
+
+  it('reaches the far shape of the twelve-cube ring as often as any other', () => {
+    // Why the rule changed. Weighted by 1/distance^2, the frame — seven to ten
+    // folds from three of the other four shapes — came up in 8% of stops; a
+    // visitor could watch for a minute without seeing the one shape that
+    // object is for.
+    const twelve = createCubeRing(FRAME_RING, { cells: 1 });
+    const far = poseDistances(twelve.foldGraph());
+    const frame = twelve.poses.findIndex(pose => pose.label.startsWith('Frame'));
+    expect(frame).toBeGreaterThanOrEqual(0);
+    const rng = createRng(5);
+    const visits = new Array(twelve.states.length).fill(0);
+    const unseen = new Set<number>();
+    let back = 0;
+    let cameFrom = -1;
+    let at = 0;
+    for (let step = 0; step < 2000; step++) {
+      const next = chooseNextPose({ distances: far, from: at, unseen, random: () => rng.next() })!;
+      if (next === cameFrom) back++;
+      visits[next]++;
+      cameFrom = at;
+      at = next;
+    }
+    expect(visits[frame]).toBe(2000 / twelve.states.length);
+    // And it does not bounce in and out of it either, which nearest-first on
+    // its own does: the frame is three folds from one shape and seven to ten
+    // from the rest, so the cheapest next step from it is always back.
+    expect(back).toBeLessThan(5);
   });
 });
