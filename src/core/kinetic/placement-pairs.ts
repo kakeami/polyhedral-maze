@@ -347,9 +347,3 @@ export function relOfState(parts: SurfaceParts, pair: PlacementPair, state: numb
   const b = parts.placeOfState[base + pair.upper]!;
   return pair.relOf[a * pair.stride + b]!;
 }
-
-/** The pairings between one pair of pieces in one state, or none. */
-export function pairingsOfState(parts: SurfaceParts, pair: PlacementPair, state: number): readonly Pairing[] {
-  const rel = relOfState(parts, pair, state);
-  return rel === -1 ? [] : pair.byRel[rel]!;
-}

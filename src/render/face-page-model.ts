@@ -474,11 +474,6 @@ function turn(p: Vec2, angle: number): Vec2 {
   return [p[0] * c - p[1] * s, p[0] * s + p[1] * c];
 }
 
-/** Bounding box of `pts` once turned by `angle`. */
-export function turnedBBoxSize(pts: Vec2[], angle: number): [number, number] {
-  return bboxSize(pts, angle);
-}
-
 function bboxSize(pts: Vec2[], angle: number): [number, number] {
   const [minX, minY, maxX, maxY] = bbox(pts, angle);
   return [maxX - minX, maxY - minY];

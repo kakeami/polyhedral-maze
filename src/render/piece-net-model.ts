@@ -208,7 +208,7 @@ export function drawPieceNet(request: PieceNetRequest): PageItem[] {
  * grid, and every grid answers differently. The geometry answers for all of
  * them at once.
  */
-export function faceEdgeUnder(
+function faceEdgeUnder(
   outline: readonly Vec2[], a: Vec2, b: Vec2, tol: number,
 ): number | null {
   for (let e = 0; e < outline.length; e++) {
@@ -240,7 +240,7 @@ function fractionAlong(p: Vec2, q: Vec2, x: Vec2): number {
 }
 
 /** The point of edge `e` at the same fraction along, on the inset outline. */
-export function onInset(
+function onInset(
   outline: readonly Vec2[], inset: readonly Vec2[], e: number, x: Vec2,
 ): Vec2 {
   const nv = outline.length;

@@ -251,7 +251,7 @@ export function stateDuringFold(step: FoldStep, at: number): KineticState {
  * *same* rigid motion (an arc is rigid); and that motion is a turn about a
  * line, not a turn and a slide along it (a hinge is a line, not a screw).
  */
-export function foldBetween(
+function foldBetween(
   from: KineticState,
   to: KineticState,
   mech: Pick<FoldableMechanism, 'pieceCount' | 'pieceHalfExtents'>,

@@ -158,7 +158,7 @@ export function makePin(
   return group;
 }
 
-export function makeSphere(pos: Vec3, color: number, radius: number): THREE.Mesh {
+function makeSphere(pos: Vec3, color: number, radius: number): THREE.Mesh {
   const geo = new THREE.SphereGeometry(radius, 12, 8);
   const mat = new THREE.MeshBasicMaterial({ color });
   const mesh = new THREE.Mesh(geo, mat);

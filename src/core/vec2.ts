@@ -17,10 +17,6 @@ export function len2(v: Vec2): number {
   return Math.sqrt(v[0] * v[0] + v[1] * v[1]);
 }
 
-export function dot2(a: Vec2, b: Vec2): number {
-  return a[0] * b[0] + a[1] * b[1];
-}
-
 export function centroid2(pts: readonly Vec2[]): Vec2 {
   let sx = 0, sy = 0;
   for (const p of pts) {

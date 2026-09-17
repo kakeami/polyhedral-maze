@@ -376,7 +376,7 @@ function hasSeparatingAxis(poly: Vec2[], other: Vec2[], eps: number): boolean {
 // ─── Segment coincidence helpers ───────────────────────────────────
 
 /** Length of the collinear overlap of segment cd with segment ab (0 if not collinear). */
-export function collinearOverlapLen(
+function collinearOverlapLen(
   a: Vec2, b: Vec2, c: Vec2, d: Vec2, tol: number,
 ): number {
   const abx = b[0] - a[0], aby = b[1] - a[1];
@@ -395,7 +395,7 @@ export function collinearOverlapLen(
 }
 
 /** True if segments ab and cd have the same endpoints (either orientation). */
-export function sameSegment(a: Vec2, b: Vec2, c: Vec2, d: Vec2, tol: number): boolean {
+function sameSegment(a: Vec2, b: Vec2, c: Vec2, d: Vec2, tol: number): boolean {
   const close = (p: Vec2, q: Vec2) =>
     Math.abs(p[0] - q[0]) <= tol && Math.abs(p[1] - q[1]) <= tol;
   return (close(a, c) && close(b, d)) || (close(a, d) && close(b, c));

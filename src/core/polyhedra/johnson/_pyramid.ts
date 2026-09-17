@@ -22,7 +22,7 @@ export interface PyramidGeometry {
  * exists with hexagonal or larger base. n = 3 produces the regular tetrahedron
  * (Platonic, not a Johnson solid); it's used here as a building block of J7.
  */
-export function pyramidVertices(
+function pyramidVertices(
   n: 3 | 4 | 5,
   options: { zBase?: number; topZSign?: 1 | -1 } = {},
 ): PyramidGeometry {
@@ -48,7 +48,7 @@ export function pyramidVertices(
  * Append the n lateral triangles of a pyramid to `faces`. `idRef.value` is
  * incremented for every face appended.
  */
-export function appendPyramidSides(
+function appendPyramidSides(
   faces: Face[],
   base: Vec3[],
   apex: Vec3,

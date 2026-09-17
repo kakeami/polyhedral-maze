@@ -10,7 +10,7 @@ import { makeFace } from '../archimedean/_utils.ts';
  * 2 = meta, 3 = para (for the regular dodecahedron, where the para face is
  * also the antipode).
  */
-export function faceDistancesFrom(
+function faceDistancesFrom(
   faces: Face[],
   fromFaceId: number,
 ): Map<number, number> {

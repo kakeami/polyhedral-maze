@@ -57,7 +57,7 @@ export interface TapeSeam {
   readonly ends: readonly [readonly [Vec3, Vec3], readonly [Vec3, Vec3]];
 }
 
-export function tapeSeamsOf(
+function tapeSeamsOf(
   ring: readonly Lattice[],
   hinges: readonly number[],
 ): TapeSeam[] {
