@@ -9,7 +9,11 @@ import {
 } from '../kinetic/mechanisms/joined.ts';
 import { buildSurface } from '../kinetic/surface.ts';
 import { buildKineticPieces, modelBounds } from '../../render/kinetic-geometry.ts';
-import { searchAllStates, pickStartGoal, treeRate, stateStats } from '../kinetic/maze.ts';
+import {
+  searchAllStates, pickStartGoal, treeRate, stateStats, expandCutClasses,
+} from '../kinetic/maze.ts';
+import { contractedSearch, contractedSuits } from '../kinetic/maze-contracted.ts';
+import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { createRng } from '../prng.ts';
 
 const N = 3;
@@ -191,18 +195,61 @@ describe('the joints on offer', () => {
     // What `maxN` is for. It was arrived at with a larger sample of seeds than
     // a test suite should sit through; two is enough to catch a search that has
     // got worse, which is the thing that would make the number a lie.
+    //
+    // Searched the way the page searches it — contracted, since a pair is a
+    // handful of states over hundreds of cells — because a ceiling measured
+    // against one search says nothing about another. At these rulings the
+    // cell-level search does not reach, which is why the numbers moved.
     for (const choice of JOINED_PAIRS) {
       const built = createJoinedPair({ shape: choice.shape, gon: choice.gon, n: choice.maxN });
       const closed = buildSurface(built);
+      expect(contractedSuits(closed)).toBe(true);
       for (const seed of [42, 7]) {
-        const found = searchAllStates(closed, { rng: createRng(seed) });
+        const rng = createRng(seed);
+        const openCutClasses = expandCutClasses(closed, { rng, extra: 0 });
+        const found = contractedSearch(closed, { rng, openCutClasses, maxRounds: 48 });
         expect(found.rate.perfectStates).toHaveLength(closed.stateCount);
       }
     }
-    // Two dozen real searches at the finest rulings on offer, which is four
-    // and a half seconds of arithmetic on a quiet machine and more on a busy
-    // one. Said out loud rather than left to the default five, which it was
-    // already spending ninety per cent of.
+  }, 30000);
+});
+
+describe('which search a turning mechanism wants', () => {
+  it('sends everything that turns to the contracted search', () => {
+    // For a while the stack did not want it: the engine rescored every state
+    // after every move, and a stack has hundreds where the folding ring has
+    // six. It does not rescore them all any more — the chain walk scores every
+    // state in one pass along the line of pieces — so what is left to ask is
+    // only whether the contraction applies at all.
+    const pair = buildSurface(createJoinedPair({ shape: 'j3', gon: 6, n: 4 }));
+    expect(contractedSuits(pair)).toBe(true);
+    for (const layers of [4, 5]) {
+      const stack = buildSurface(createStack({ sides: 6, layers, cols: 3, rows: 3 }));
+      expect(contractedSuits(stack)).toBe(true);
+    }
+  });
+
+  it('leaves the seam openings exactly where the caller put them', () => {
+    // `k` — how many passages cross a seam over the minimum — is the page's
+    // difficulty control, so the search may not quietly choose its own. On the
+    // folding ring it must; there the seam set is half the arrangement.
+    const surface = buildSurface(createJoinedPair({ shape: 'j3', gon: 6, n: 3 }));
+    for (const extra of [0, 2]) {
+      const rng = createRng(11);
+      const openCutClasses = expandCutClasses(surface, { rng, extra });
+      const found = contractedSearch(surface, { rng, openCutClasses, maxRounds: 48 });
+      expect([...found.design.openCutClasses].sort()).toEqual([...openCutClasses].sort());
+      expect(found.rate.perfectStates).toHaveLength(surface.stateCount);
+    }
+  });
+
+  it('reaches a ruling the cell-level search does not', () => {
+    // The measurement the new ceilings rest on, at one ruling and one seed.
+    const surface = buildSurface(createJoinedPair({ shape: 'j3', gon: 6, n: 8 }));
+    const rng = createRng(1000);
+    const openCutClasses = expandCutClasses(surface, { rng, extra: 0 });
+    const found = contractedSearch(surface, { rng, openCutClasses, maxRounds: 48 });
+    expect(found.rate.perfectStates).toHaveLength(surface.stateCount);
   }, 30000);
 });
 

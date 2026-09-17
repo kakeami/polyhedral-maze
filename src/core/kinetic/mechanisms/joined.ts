@@ -85,30 +85,38 @@ export interface JoinedPairChoice {
  *
  * `maxN` is the largest ruling at which a design perfect in *every* state was
  * found on every seed of a sample, at the default search effort. It is measured
- * rather than derived, because the boundary moves by a whole grid step between
- * joints of much the same size: what makes one hard is not how many cells it
- * has but how many states one wall has to satisfy at once. Two rotundas, ten
- * states over sixteen faces a half, run out at two cells to an edge; two
- * tetrahedra, three states over three faces, are still comfortable at eleven.
- * Past `maxN` a design usually still exists and the search often still finds
- * it — that is what the effort ladder is for — but a slider should not put
- * anyone there without being asked.
+ * rather than derived.
+ *
+ * These are the second set of numbers. The first were measured against the
+ * cell-level search, which on this mechanism is the wrong one — a pair has a
+ * handful of states and hundreds of cells, which is what the contracted search
+ * is for (`contractedSuits`) — and they turned out to say how far *it* got
+ * rather than how far the object goes: two rotundas were held at two cells to
+ * an edge and go to three, two triangular cupolas at six and go to nine, and
+ * at the old ceilings the contracted search comes back in two to five
+ * milliseconds where the cell-level one took the better part of a second and
+ * at eight cells to an edge failed on every seed.
+ *
+ * What stops them now is not the search at all. Every joint here runs out
+ * either at `KINETIC_LIMITS.pairCells` — a cell too small to print — or at the
+ * top of the slider. Past `maxN` a design usually still exists, but a slider
+ * should not put anyone there without being asked.
  */
 export const JOINED_PAIRS: readonly JoinedPairChoice[] = [
   { id: 'j3@6', shape: 'j3', gon: 6, label: 'Triangular cupolas',
-    becomes: 'a cuboctahedron and J27, turn about', maxN: 6 },
+    becomes: 'a cuboctahedron and J27, turn about', maxN: 9 },
   { id: 'j4@8', shape: 'j4', gon: 8, label: 'Square cupolas',
-    becomes: 'J28 and J29, turn about', maxN: 6 },
+    becomes: 'J28 and J29, turn about', maxN: 8 },
   { id: 'j5@10', shape: 'j5', gon: 10, label: 'Pentagonal cupolas',
-    becomes: 'J30 and J31, turn about', maxN: 4 },
+    becomes: 'J30 and J31, turn about', maxN: 6 },
   { id: 'j6@10', shape: 'j6', gon: 10, label: 'Pentagonal rotundas',
-    becomes: 'an icosidodecahedron and J42, turn about', maxN: 2 },
+    becomes: 'an icosidodecahedron and J42, turn about', maxN: 3 },
   { id: 'tetrahedron@3', shape: 'tetrahedron', gon: 3, label: 'Tetrahedra',
-    becomes: 'a triangular bipyramid, whatever the turn', maxN: 11 },
+    becomes: 'a triangular bipyramid, whatever the turn', maxN: 12 },
   { id: 'j1@4', shape: 'j1', gon: 4, label: 'Square pyramids',
-    becomes: 'an octahedron, whatever the turn', maxN: 9 },
+    becomes: 'an octahedron, whatever the turn', maxN: 12 },
   { id: 'j2@5', shape: 'j2', gon: 5, label: 'Pentagonal pyramids',
-    becomes: 'a pentagonal bipyramid, whatever the turn', maxN: 9 },
+    becomes: 'a pentagonal bipyramid, whatever the turn', maxN: 11 },
   { id: 'octahedron@3', shape: 'octahedron', gon: 3, label: 'Octahedra',
     becomes: 'the same pair of octahedra, whatever the turn', maxN: 9 },
 ];

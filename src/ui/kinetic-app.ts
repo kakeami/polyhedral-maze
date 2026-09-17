@@ -18,13 +18,14 @@ import { createJoinedPair, joinedPairById, DEFAULT_JOINED_PAIR }
 import type { JoinedPairMechanism } from '../core/kinetic/mechanisms/joined.ts';
 import type { TurnableMechanism } from '../core/kinetic/types.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
-import type { KineticDesign, StartGoal } from '../core/kinetic/maze.ts';
+import type { KineticDesign, StartGoal, TreeRate } from '../core/kinetic/maze.ts';
 import {
   DEFAULT_SEARCH_EFFORT,
   createAllStatesSearch,
   expandCutClasses,
   pickStartGoal,
 } from '../core/kinetic/maze.ts';
+import { contractedSuits, createContractedSearch } from '../core/kinetic/maze-contracted.ts';
 import {
   buildKineticPieces,
   kineticSolutionPath,
@@ -39,6 +40,35 @@ import { A4_SHEET, STACK_SHEET_DEFAULTS } from '../render/kinetic-sheet-constant
 import { createKineticControls } from './kinetic-controls.ts';
 import { decodeKineticParams, encodeKineticParams, isMaxEffort } from './kinetic-param-codec.ts';
 import type { KineticParams } from './kinetic-param-codec.ts';
+
+/**
+ * What the page needs of a search, which both of them offer.
+ *
+ * The two differ in what they anneal over and in what they report about the
+ * arithmetic they spent; they agree on being handed out a round at a time, on
+ * saying how many states are perfect so far, and on the design at the end.
+ * That is all the loop below reads, so it reads it structurally.
+ */
+interface KineticSearch {
+  step(): boolean;
+  readonly progress: {
+    readonly rounds: number;
+    readonly maxRounds: number;
+    readonly perfectStates: number;
+    readonly stateCount: number;
+  };
+  result(): { design: KineticDesign; rate: TreeRate };
+}
+
+/**
+ * Attempts the contracted search is given, before "Search harder" multiplies it.
+ *
+ * Its own default, and the right shape of knob for it: what a longer anneal
+ * buys on this search is nothing, and what more attempts buy is everything
+ * (`.dev/2026-09-15-fold-contracted-search.md`). The cell-level search takes
+ * `effort` instead, which is a budget of arithmetic rather than a count.
+ */
+const CONTRACTED_ROUNDS = 48;
 
 interface Build {
   mech: TurnableMechanism;
@@ -78,18 +108,28 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
     const surface = buildSurface(mech, { maxStates: mech.states.length });
     const rng = createRng(p.seed);
     const openCutClasses = expandCutClasses(surface, { rng, extra: p.k });
-    const search = createAllStatesSearch(surface, {
-      rng,
-      openCutClasses,
-      effort: DEFAULT_SEARCH_EFFORT * p.effort,
-    });
+    // Two searches, and which one suits is arithmetic rather than a choice of
+    // mechanism: see `contractedSuits`. A glued pair has a handful of states
+    // and hundreds of cells and belongs to the contracted one; a stack has
+    // hundreds of states and belongs to the other.
+    const search: KineticSearch = contractedSuits(surface)
+      ? createContractedSearch(surface, {
+          rng,
+          openCutClasses,
+          maxRounds: CONTRACTED_ROUNDS * p.effort,
+        })
+      : createAllStatesSearch(surface, {
+          rng,
+          openCutClasses,
+          effort: DEFAULT_SEARCH_EFFORT * p.effort,
+        });
     return { mech, surface, search };
   }
 
   function finishBuild(
     mech: TurnableMechanism,
     surface: KineticSurface,
-    found: ReturnType<ReturnType<typeof createAllStatesSearch>['result']>,
+    found: { design: KineticDesign; rate: TreeRate },
     p: KineticParams,
   ): Build {
     const ends = pickStartGoal(surface, found.design);

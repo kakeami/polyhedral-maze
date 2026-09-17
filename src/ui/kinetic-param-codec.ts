@@ -63,8 +63,18 @@ export const KINETIC_LIMITS = {
   seed: { min: 0, max: 999999 },
   /** Effort multipliers the "Search harder" button steps through. */
   effortSteps: [1, 2, 4, 8] as readonly number[],
-  /** Past this the mechanism has more configurations than anyone can feel. */
-  maxStates: 1296,
+  /**
+   * States a mechanism may have.
+   *
+   * It used to say "past this the mechanism has more configurations than
+   * anyone can feel", which was a judgement about hands rather than about
+   * arithmetic, and it was the wrong judgement: a stack is *meant* to have
+   * more turns than anyone will try, and what a visitor feels is that the
+   * maze holds up whatever they do with it. What it guards now is the one
+   * thing left that still counts states one at a time — `buildSurface`, which
+   * welds each state's cells separately and keeps the passages it finds.
+   */
+  maxStates: 32768,
   /** Past this the cells are too small to read on screen anyway. */
   maxCells: 720,
   /** Cells along a face edge of a glued pair. */
@@ -74,25 +84,40 @@ export const KINETIC_LIMITS = {
    *
    * What actually bounds a pair is `maxN` on the joint itself, measured per
    * joint because nothing simpler predicts it. This is here for a joint added
-   * to the catalogue before anyone has measured one: a rebuild of this many
-   * cells still comes back in about a second and a half, and still prints at
-   * 7 mm a cell. Its own number rather than `maxCells` because the two
+   * to the catalogue before anyone has measured one, and what it now says is
+   * that the cells still print at 7 mm: the second reason it once gave, that
+   * a rebuild of this many comes back in a second and a half, stopped being
+   * true when the pair went over to the contracted search and the same
+   * rebuild started coming back in five milliseconds. Its own number rather
+   * than `maxCells` because the two
    * mechanisms are not costly in the same way — a stack has hundreds of states
    * and a few cells each, a pair has a few states and all of its cost in the
    * cells, so `states x cells` never comes near binding here.
    */
   pairCells: 1250,
   /**
-   * The real limit, and the reason the sliders bound each other.
+   * What a rebuild may cost, counted in state-cells.
    *
-   * The search scores a candidate design by walking every cell of every state,
-   * so what a rebuild costs is states x cells, not either alone. Measured on
-   * this code, 160k of them comes back in well under a second, while the same
-   * budget spent at the corners of the two limits above (1296 states of 720
-   * cells) takes the better part of a minute. Either bound alone would let the
-   * page hang; this one is what keeps a slider a slider.
+   * It is no longer the search's number. The search stopped scoring a design
+   * state by state when the chain walk went in (`chainScore`): a stack of five
+   * six-sided rings went from 47 seconds to 115 milliseconds, and its cost
+   * stopped growing with the number of states at all.
+   *
+   * What is left is `buildSurface`, which still welds every state's cells
+   * separately and keeps a list of passages for each. Measured on this code it
+   * runs at about 1.2 microseconds a state-cell, near enough flat from 47
+   * thousand of them to five million, so this is a rebuild of about three
+   * seconds at the worst corner of the sliders and well under one at the
+   * corners anybody visits. Nine times what it was, because it used to have to
+   * pay for the search out of the same budget.
+   *
+   * Removing it altogether is a job on `buildSurface`, not on this file: it
+   * would have to learn what the search now knows — that the pieces sit in a
+   * line, so whether two cells meet depends on their own two pieces' relative
+   * turn and not on the state — and hand out a state's passages on demand
+   * rather than keeping all of them.
    */
-  maxWork: 160000,
+  maxWork: 1_500_000,
 } as const;
 
 export const DEFAULT_KINETIC_PARAMS: KineticParams = {
@@ -194,11 +219,12 @@ export function pairStateCount(pairId: string): number {
 /**
  * How finely a pair may be ruled.
  *
- * The joint's own measured ceiling first, then the cost guards. Stopping where
- * the search stops succeeding rather than where the arithmetic stops being
- * quick is the difference between a slider that offers a maze and one that
- * offers a search that usually fails; the effort ladder is still there for
- * anyone who wants to push past it by hand.
+ * The joint's own measured ceiling first, then the cost guards. Since the pair
+ * went over to the contracted search the two nearly coincide: `maxN` is itself
+ * now bounded by the cell limit rather than by the search running out, so what
+ * stops the slider is a cell too small to print rather than a search that
+ * usually fails. The effort ladder is still there for anyone who wants to push
+ * past it by hand.
  */
 export function maxPairN(pairId: string): number {
   const choice = joinedPairById(pairId) ?? DEFAULT_JOINED_PAIR;
