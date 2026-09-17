@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { createJoinedPair } from '../kinetic/mechanisms/joined.ts';
 import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
-import { buildSurface } from '../kinetic/surface.ts';
+import { buildSurface, buildSurfaceByState } from '../kinetic/surface.ts';
 import type { KineticSurface } from '../kinetic/surface.ts';
 import { chainOf } from '../kinetic/chain.ts';
 import { chainBlocks, chainScore } from '../kinetic/chain-cost.ts';
 import { contractedSearch } from '../kinetic/maze-contracted.ts';
-import { expandCutClasses } from '../kinetic/maze.ts';
+import { expandCutClasses, rateByState, stateStats, treeRate } from '../kinetic/maze.ts';
 import { createRng } from '../prng.ts';
 
 /** Block of each cell under the open internal classes, named by a root cell. */
@@ -36,6 +36,10 @@ function oneAtATime(surface: KineticSurface, open: ReadonlySet<number>, blockRoo
   for (let cell = 0; cell < surface.cellCount; cell++) roots.add(blockRoot[cell]!);
   let cost = 0;
   let perfect = 0;
+  let componentSum = 0;
+  let cycleSum = 0;
+  let passages = -1;
+  let passagesVary = false;
   for (let s = 0; s < surface.stateCount; s++) {
     const parent = new Map<number, number>();
     const find = (x: number): number => {
@@ -45,8 +49,10 @@ function oneAtATime(surface: KineticSurface, open: ReadonlySet<number>, blockRoo
     };
     let components = roots.size;
     let cycles = 0;
+    let opened = 0;
     for (const e of surface.adjByState[s]!) {
       if (surface.classKind[e.classId] !== 'cut' || !open.has(e.classId)) continue;
+      opened++;
       const ra = find(blockRoot[e.a]!);
       const rb = find(blockRoot[e.b]!);
       if (ra === rb) cycles++;
@@ -57,9 +63,13 @@ function oneAtATime(surface: KineticSurface, open: ReadonlySet<number>, blockRoo
     }
     const own = components - 1 + cycles;
     cost += own;
+    componentSum += components;
+    cycleSum += cycles;
+    if (passages === -1) passages = opened;
+    else if (opened !== passages) passagesVary = true;
     if (own === 0) perfect++;
   }
-  return { cost, perfect };
+  return { cost, perfect, componentSum, cycleSum, passages: passages === -1 ? 0 : passages, passagesVary };
 }
 
 describe('a turning mechanism as a line of pieces', () => {
@@ -81,6 +91,35 @@ describe('a turning mechanism as a line of pieces', () => {
     expect(chain!.pieceOrder).toHaveLength(2);
     expect(chain!.seams).toHaveLength(1);
     expect(chain!.seams[0]!.byTurn).toHaveLength(6);
+  });
+
+  it('reads the same line off the pieces as off the states', () => {
+    // The line is read off `surface.parts` — a seam is a pair of pieces and a
+    // turn is a relative placement — where the older way grouped every state's
+    // passages to find it. The two number the turns as they meet them, so what
+    // has to agree is what each state's seams actually do.
+    const mech = createStack({ sides: 5, layers: 4, cols: 2, rows: 2 });
+    const fromPairs = chainOf(buildSurface(mech))!;
+    const fromStates = chainOf(buildSurfaceByState(mech))!;
+    expect(fromPairs).not.toBeNull();
+    expect(fromStates).not.toBeNull();
+    expect(fromPairs.pieceOrder).toEqual(fromStates.pieceOrder);
+    expect(fromPairs.seams).toHaveLength(fromStates.seams.length);
+
+    const passages = (chain: typeof fromPairs, state: number, seam: number): string => {
+      const turn = chain.turnOfState[state * chain.seams.length + seam]!;
+      const flat = chain.seams[seam]!.byTurn[turn]!;
+      const triples: string[] = [];
+      for (let k = 0; k < flat.length; k += 3) {
+        triples.push(`${flat[k]}-${flat[k + 1]}#${flat[k + 2]}`);
+      }
+      return triples.sort().join(' ');
+    };
+    for (let state = 0; state < fromPairs.stateCount; state++) {
+      for (let seam = 0; seam < fromPairs.seams.length; seam++) {
+        expect(passages(fromPairs, state, seam)).toBe(passages(fromStates, state, seam));
+      }
+    }
   });
 
   it('says no to a mechanism that folds shut on itself', () => {
@@ -123,9 +162,46 @@ describe('scoring every state by walking the line once', () => {
         expect(walk.cost).toBe(want.cost);
         expect(walk.perfect).toBe(want.perfect);
         expect(walk.witness >= 0).toBe(want.perfect < surface.stateCount);
+        // The three tallies `chooseCutClasses` and `treeRate` now run on,
+        // in place of a pass over every state apiece.
+        expect(walk.components).toBe(want.componentSum);
+        expect(walk.cycles).toBe(want.cycleSum);
+        expect(walk.passagesVary).toBe(want.passagesVary);
+        if (!want.passagesVary) expect(walk.passages).toBe(want.passages);
       }
     });
   }
+
+  it('rates a design the same way the walk does and the states do', () => {
+    // `treeRate` takes the walk where there is a line to walk, and counts the
+    // states one at a time where there is not. Neither is allowed to be the
+    // more generous of the two.
+    const cases: [string, KineticSurface][] = [
+      ['stack', buildSurface(createStack({ sides: 6, layers: 4, cols: 2, rows: 2 }))],
+      ['pair', buildSurface(createJoinedPair({ shape: 'j3', gon: 6, n: 3 }))],
+    ];
+    for (const [label, surface] of cases) {
+      const rng = createRng(909);
+      for (let trial = 0; trial < 6; trial++) {
+        const design = { open: new Set<number>(), targetState: 0, openCutClasses: [] };
+        const chance = 0.4 + 0.4 * rng.next();
+        for (let c = 0; c < surface.classCount; c++) if (rng.next() < chance) design.open.add(c);
+        const walked = treeRate(surface, design);
+        const counted = rateByState(surface, design).rate;
+        const { witness: walkedWitness, ...walkedRest } = walked;
+        const { witness: countedWitness, ...countedRest } = counted;
+        expect(`${label} ${JSON.stringify(walkedRest)}`).toBe(`${label} ${JSON.stringify(countedRest)}`);
+        // The two name different states on purpose — the walk points at the
+        // worst one it met, the count at the first — so what is asked of a
+        // witness is only that it be one.
+        expect(walkedWitness === -1).toBe(walked.rate === 1);
+        expect(countedWitness === -1).toBe(counted.rate === 1);
+        for (const witness of [walkedWitness, countedWitness]) {
+          if (witness !== -1) expect(stateStats(surface, design, witness).perfect).toBe(false);
+        }
+      }
+    }
+  });
 
   it('scores a maze that survives every turn at zero, and names no witness', () => {
     const surface = buildSurface(createStack({ sides: 6, layers: 4, cols: 3, rows: 3 }));

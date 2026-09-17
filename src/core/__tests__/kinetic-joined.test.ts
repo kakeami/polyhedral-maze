@@ -96,11 +96,11 @@ describe('joined pair mechanism', () => {
   it('carries the same number of passages however it is turned', () => {
     const rate = treeRate(surface, gamma.design);
     expect(rate.edgeCountInvariant).toBe(true);
-    expect(new Set(rate.edgeCounts)).toEqual(new Set([surface.cellCount - 1]));
+    expect(rate.passages).toBe(surface.cellCount - 1);
   });
 
   it('is a perfect maze in all six states', () => {
-    expect(gamma.rate.perfectStates).toHaveLength(surface.stateCount);
+    expect(gamma.rate.perfect).toBe(surface.stateCount);
     for (let state = 0; state < surface.stateCount; state++) {
       const stats = stateStats(surface, gamma.design, state);
       expect(stats.perfect).toBe(true);
@@ -187,7 +187,7 @@ describe('the joints on offer', () => {
       const built = createJoinedPair({ shape: choice.shape, gon: choice.gon, n: 2 });
       const closed = buildSurface(built);
       const found = searchAllStates(closed, { rng: createRng(7) });
-      expect(found.rate.perfectStates).toHaveLength(closed.stateCount);
+      expect(found.rate.perfect).toBe(closed.stateCount);
     }
   });
 
@@ -208,7 +208,7 @@ describe('the joints on offer', () => {
         const rng = createRng(seed);
         const openCutClasses = expandCutClasses(closed, { rng, extra: 0 });
         const found = contractedSearch(closed, { rng, openCutClasses, maxRounds: 48 });
-        expect(found.rate.perfectStates).toHaveLength(closed.stateCount);
+        expect(found.rate.perfect).toBe(closed.stateCount);
       }
     }
   }, 30000);
@@ -239,7 +239,7 @@ describe('which search a turning mechanism wants', () => {
       const openCutClasses = expandCutClasses(surface, { rng, extra });
       const found = contractedSearch(surface, { rng, openCutClasses, maxRounds: 48 });
       expect([...found.design.openCutClasses].sort()).toEqual([...openCutClasses].sort());
-      expect(found.rate.perfectStates).toHaveLength(surface.stateCount);
+      expect(found.rate.perfect).toBe(surface.stateCount);
     }
   });
 
@@ -249,7 +249,7 @@ describe('which search a turning mechanism wants', () => {
     const rng = createRng(1000);
     const openCutClasses = expandCutClasses(surface, { rng, extra: 0 });
     const found = contractedSearch(surface, { rng, openCutClasses, maxRounds: 48 });
-    expect(found.rate.perfectStates).toHaveLength(surface.stateCount);
+    expect(found.rate.perfect).toBe(surface.stateCount);
   }, 30000);
 });
 

@@ -830,7 +830,7 @@ export function createContractedSearch(
     const score = chain
       ? chainScore(chain, blocksOfDesign(surface, chain, design.open), c => design.open.has(c))
       : null;
-    const perfect = score ? score.perfect : treeRate(surface, design).perfectStates.length;
+    const perfect = score ? score.perfect : treeRate(surface, design).perfect;
     if (!best || perfect > best.perfect) best = { design, perfect, rounds: round };
     if (perfect === surface.stateCount) {
       finished = true;

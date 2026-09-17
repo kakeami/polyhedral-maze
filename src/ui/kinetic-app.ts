@@ -139,8 +139,8 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
       surface,
       design: found.design,
       ends,
-      perfectStates: rate.perfectStates.length,
-      passages: rate.edgeCounts[0] ?? 0,
+      perfectStates: rate.perfect,
+      passages: rate.passages,
       seamPassages: found.design.openCutClasses.length,
       params: p,
     };

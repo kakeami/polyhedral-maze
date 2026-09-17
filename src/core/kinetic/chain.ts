@@ -24,6 +24,7 @@
  */
 
 import type { KineticSurface } from './surface.ts';
+import type { PlacementPair, SurfaceParts } from './placement-pairs.ts';
 
 export interface ChainSeam {
   /** The two pieces this seam joins, in the order the chain visits them. */
@@ -79,11 +80,96 @@ export function chainOf(surface: KineticSurface): Chain | null {
   return found;
 }
 
+/**
+ * The line, read off the pieces rather than off the states.
+ *
+ * A seam of a turning mechanism *is* a pair of pieces and one of its turns
+ * *is* a relative placement, so when the surface was built out of those
+ * (`placement-pairs.ts`) the line is already there to be read: which pairs
+ * ever touch says where the seams are, and how many placements a pair takes
+ * says how many turns the seam has. All that is left to check is the thing
+ * that makes the states a product — that a tuple of turns names exactly one
+ * state — and that is integer work, no passage grouping at all.
+ */
+function chainFromParts(surface: KineticSurface, parts: SurfaceParts): Chain | null {
+  const pieceCount = parts.pieceCount;
+  if (pieceCount < 2) return null;
+
+  // A seam inside one piece would put the partition into blocks in a seam's
+  // hands as well; the pairs cannot produce one, but say so out loud.
+  for (const list of parts.intra) {
+    for (const p of list) {
+      if (surface.classKind[surface.classOf[p.sideA]!] === 'cut') return null;
+    }
+  }
+
+  const joints = parts.pairs.filter(pair => pair.byRel.some(list => list.length > 0));
+  if (joints.length !== pieceCount - 1) return null;
+
+  const near: number[][] = Array.from({ length: pieceCount }, () => []);
+  for (const joint of joints) {
+    near[joint.lower]!.push(joint.upper);
+    near[joint.upper]!.push(joint.lower);
+  }
+  if (near.some(list => list.length > 2)) return null;
+  const ends = near.map((list, p) => [p, list.length] as const).filter(([, d]) => d === 1);
+  if (ends.length !== 2) return null;
+  const pieceOrder: number[] = [];
+  const seen = new Uint8Array(pieceCount);
+  let at = ends[0]![0];
+  while (true) {
+    pieceOrder.push(at);
+    seen[at] = 1;
+    const next = near[at]!.find(p => !seen[p]);
+    if (next === undefined) break;
+    at = next;
+  }
+  if (pieceOrder.length !== pieceCount) return null;
+
+  const jointOf = new Map<string, PlacementPair>();
+  for (const joint of joints) jointOf.set(seamKey(joint.lower, joint.upper), joint);
+  const seamCount = pieceCount - 1;
+  const ordered: PlacementPair[] = [];
+  for (let i = 0; i < seamCount; i++) {
+    const lower = Math.min(pieceOrder[i]!, pieceOrder[i + 1]!);
+    const upper = Math.max(pieceOrder[i]!, pieceOrder[i + 1]!);
+    const joint = jointOf.get(seamKey(lower, upper));
+    if (!joint) return null;
+    ordered.push(joint);
+  }
+
+  // A turn is a relative placement, so the passages of each are already
+  // grouped; all that is needed is the pair of cells and the class.
+  const byTurn: Int32Array[][] = ordered.map(joint =>
+    joint.byRel.map(list => {
+      const flat: number[] = [];
+      for (const p of list) flat.push(p.cellA, p.cellB, surface.classOf[p.sideA]!);
+      return Int32Array.from(flat);
+    }),
+  );
+
+  const turnOfState = new Int32Array(surface.stateCount * seamCount);
+  for (let s = 0; s < surface.stateCount; s++) {
+    const base = s * pieceCount;
+    for (let i = 0; i < seamCount; i++) {
+      const joint = ordered[i]!;
+      const a = parts.placeOfState[base + joint.lower]!;
+      const b = parts.placeOfState[base + joint.upper]!;
+      const rel = joint.relOf[a * joint.stride + b]!;
+      if (rel === -1) return null; // two pieces of a seam that miss each other
+      turnOfState[s * seamCount + i] = rel;
+    }
+  }
+
+  return assemble(surface, pieceOrder, byTurn, turnOfState);
+}
+
 function findChain(surface: KineticSurface): Chain | null {
   // A buried cell would make the blocks depend on the state, and then the
   // whole reduction below is false rather than merely slow.
   if (surface.hidesCells) return null;
   if (surface.stateCount === 0) return null;
+  if (surface.parts) return chainFromParts(surface, surface.parts);
 
   const cells = surface.mechanism.cells;
   const pieceCount = surface.mechanism.pieceCount;
@@ -172,10 +258,24 @@ function findChain(surface: KineticSurface): Chain | null {
     }
   }
 
-  // --- 4. is a state exactly a tuple of turns? -----------------------------
-  // Every combination has to name one state and every state a distinct
-  // combination; without that the seams are not independent and the pass below
-  // would score states the mechanism cannot be put in.
+  return assemble(surface, pieceOrder, turnsOfSeam, turnOfState);
+}
+
+/**
+ * The line, once its seams and their turns are known.
+ *
+ * The check that matters is the last one: every combination of turns has to
+ * name one state and every state a distinct combination. Without it the seams
+ * are not independent, and a walk along the line would score states the
+ * mechanism cannot be put in.
+ */
+function assemble(
+  surface: KineticSurface,
+  pieceOrder: readonly number[],
+  turnsOfSeam: readonly (readonly Int32Array[])[],
+  turnOfState: Int32Array,
+): Chain | null {
+  const seamCount = turnsOfSeam.length;
   let product = 1;
   for (let i = 0; i < seamCount; i++) product *= turnsOfSeam[i]!.length;
   if (product !== surface.stateCount) return null;

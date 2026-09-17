@@ -49,7 +49,7 @@ describe('searchAllStates', () => {
     const surface = smallStack();
     const result = searchAllStates(surface, { rng: createRng(20260912) });
     expect(result.rate.rate).toBe(1);
-    expect(result.rate.perfectStates.length).toBe(surface.stateCount);
+    expect(result.rate.perfect).toBe(surface.stateCount);
     for (let s = 0; s < surface.stateCount; s++) {
       expect(stateStats(surface, result.design, s).perfect).toBe(true);
     }

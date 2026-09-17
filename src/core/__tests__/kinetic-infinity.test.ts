@@ -135,7 +135,7 @@ describe('gamma on the infinity cube', () => {
 
   it('is a perfect maze in every pose', () => {
     expect(result.rate.rate).toBe(1);
-    expect(result.rate.perfectStates.length).toBe(surface.stateCount);
+    expect(result.rate.perfect).toBe(surface.stateCount);
   });
 
   it('spends one passage fewer than it has cells on show — a different number per pose', () => {

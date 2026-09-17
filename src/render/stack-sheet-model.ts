@@ -183,7 +183,7 @@ export function buildStackSheets(
   });
   cursorY += S.titleSize + 2.5;
 
-  const perfect = rate.perfectStates.length;
+  const perfect = rate.perfect;
   const puzzleLine =
     perfect === surface.stateCount
       ? `Every one of the ${surface.stateCount} ways to turn the rings is a perfect maze.`
@@ -381,7 +381,7 @@ export function buildStackSheets(
     barrelHeightMm: mech.layers * bandHeight,
     cellMm: cell,
     bulkheadCount,
-    perfectStates: rate.perfectStates.length,
+    perfectStates: rate.perfect,
     stateCount: surface.stateCount,
   };
 }

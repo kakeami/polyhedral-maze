@@ -173,7 +173,7 @@ export function buildPairSheets(
   });
   cursorY += S.titleSize + 2.5;
 
-  const perfect = rate.perfectStates.length;
+  const perfect = rate.perfect;
   const puzzleLine = perfect === surface.stateCount
     ? `Every one of the ${surface.stateCount} ways to turn the halves is a perfect maze.`
     : `${perfect} of the ${surface.stateCount} ways to turn the halves make a perfect maze — find one.`;

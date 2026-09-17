@@ -59,6 +59,17 @@ export interface KineticSurface {
   readonly alwaysVisible: readonly number[];
   /** Whether any cell is ever hidden: false for a mechanism that never folds shut. */
   readonly hidesCells: boolean;
+  /**
+   * The pieces and the placements they take relative to one another, where the
+   * surface was built out of those (`placement-pairs.ts`), and null where it
+   * had to be welded a state at a time.
+   *
+   * Kept because it says more than the states do: a seam of a turning
+   * mechanism *is* a pair of pieces, and one of its turns *is* a relative
+   * placement, so `chainOf` reads the line off this rather than grouping every
+   * state's passages to find it again.
+   */
+  readonly parts: SurfaceParts | null;
 }
 
 /**
@@ -386,6 +397,7 @@ export function buildSurfaceByState(
     visibleCount,
     alwaysVisible,
     hidesCells,
+    parts: null,
   };
 }
 
@@ -498,5 +510,6 @@ function buildFromParts(
     visibleCount,
     alwaysVisible,
     hidesCells: false,
+    parts,
   };
 }

@@ -5,6 +5,7 @@ import {
   costOverStates,
   generateKineticMaze,
   optimizeForStates,
+  rateByState,
   stateStats,
   treeRate,
 } from '../kinetic/maze.ts';
@@ -39,7 +40,7 @@ describe('optimizing for several states at once', () => {
     expect(result.cost).toBe(0);
     const rate = treeRate(smallSurface, result.design);
     expect(rate.rate).toBe(1);
-    expect(rate.perfectStates.length).toBe(smallSurface.stateCount);
+    expect(rate.perfect).toBe(smallSurface.stateCount);
   });
 
   it('still spends exactly N-1 passages, in every state', () => {
@@ -51,7 +52,7 @@ describe('optimizing for several states at once', () => {
     });
     const rate = treeRate(smallSurface, result.design);
     expect(rate.edgeCountInvariant).toBe(true);
-    for (const n of rate.edgeCounts) expect(n).toBe(smallSurface.cellCount - 1);
+    expect(rate.passages).toBe(smallSurface.cellCount - 1);
   });
 
   it('leaves the openings alone, since they set the budget', () => {
@@ -141,9 +142,10 @@ describe('optimizing for several states at once', () => {
 describe('costOverStates', () => {
   it('is zero exactly when every listed state is a perfect maze', () => {
     const design = generateKineticMaze(smallSurface, { rng: createRng(20260912) });
-    const perfect = treeRate(smallSurface, design).perfectStates;
+    const flags = rateByState(smallSurface, design).perfect;
+    const perfect = allSmallStates.filter(s => flags[s]);
     expect(costOverStates(smallSurface, design, perfect)).toBe(0);
-    const imperfect = allSmallStates.filter(s => !perfect.includes(s));
+    const imperfect = allSmallStates.filter(s => !flags[s]);
     expect(costOverStates(smallSurface, design, imperfect)).toBeGreaterThan(0);
   });
 });

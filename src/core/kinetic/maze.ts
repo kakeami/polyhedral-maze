@@ -1,6 +1,68 @@
 import type { Rng } from '../prng.ts';
 import { UnionFind } from '../graph.ts';
 import type { KineticSurface, SurfaceAdjacency } from './surface.ts';
+import type { Chain } from './chain.ts';
+import { chainOf } from './chain.ts';
+import type { ChainBlocks } from './chain-cost.ts';
+import { chainBlocks, chainScore } from './chain-cost.ts';
+
+/**
+ * Blocks of the cells, with the internal classes a design leaves open already
+ * joined up, ready for a walk along the line (`chain-cost.ts`).
+ *
+ * Everything that asks a question about *every* state goes through here: on a
+ * mechanism whose pieces sit in a line, a walk answers it without visiting a
+ * state, and the two questions asked below — how many pieces the maze falls
+ * into, and whether the seams alone close a loop — are the ones that used to
+ * cost a pass over every state apiece.
+ */
+function blocksOfDesign(
+  surface: KineticSurface,
+  chain: Chain,
+  isOpenInternal: (classId: number) => boolean,
+): ChainBlocks {
+  const parent = new Int32Array(surface.cellCount);
+  for (let cell = 0; cell < surface.cellCount; cell++) parent[cell] = cell;
+  const find = (x: number): number => {
+    let root = x;
+    while (parent[root] !== root) root = parent[root] = parent[parent[root]!]!;
+    return root;
+  };
+  for (const e of surface.internalEdges) {
+    if (!isOpenInternal(e.classId)) continue;
+    const ra = find(e.a);
+    const rb = find(e.b);
+    if (ra !== rb) parent[ra] = rb;
+  }
+  const root = new Int32Array(surface.cellCount);
+  for (let cell = 0; cell < surface.cellCount; cell++) root[cell] = find(cell);
+  return chainBlocks(chain, cell => surface.mechanism.cells[cell]!.piece, surface.cellCount, root);
+}
+
+/**
+ * The two block sets that do not depend on the design, worked out once.
+ *
+ * `patches` has every internal class open — the pieces cut into the patches of
+ * surface they carry — and `cells` has none of them, which is the graph the
+ * seam openings alone live on. `chooseCutClasses` asks for both once per
+ * candidate class, and on a stack there are hundreds of candidates.
+ */
+interface FixedBlocks {
+  readonly patches: ChainBlocks;
+  readonly cells: ChainBlocks;
+}
+const fixedBlocks = new WeakMap<KineticSurface, FixedBlocks>();
+function blocksFor(surface: KineticSurface, chain: Chain): FixedBlocks {
+  let had = fixedBlocks.get(surface);
+  if (!had) {
+    had = {
+      patches: blocksOfDesign(surface, chain, () => true),
+      cells: blocksOfDesign(surface, chain, () => false),
+    };
+    fixedBlocks.set(surface, had);
+  }
+  return had;
+}
 
 /**
  * A design is a set of open side classes. Because a class is shared by every
@@ -111,6 +173,12 @@ export function longestWalk(
  * state whether the design wants it or not.
  */
 function staysForest(surface: KineticSurface, open: ReadonlySet<number>): boolean {
+  const chain = chainOf(surface);
+  if (chain) {
+    // The seam openings alone, over the cells: a forest in every state is the
+    // same thing as no state closing a loop, which the walk counts.
+    return chainScore(chain, blocksFor(surface, chain).cells, c => open.has(c)).cycles === 0;
+  }
   for (let s = 0; s < surface.stateCount; s++) {
     const uf = new UnionFind<number>();
     for (const e of surface.adjByState[s]!) {
@@ -136,7 +204,11 @@ function staysForest(surface: KineticSurface, open: ReadonlySet<number>): boolea
  * patch the two counts agree, so this picks what it always picked.
  */
 export function chooseCutClasses(surface: KineticSurface, rng: Rng): number[] {
+  const chain = chainOf(surface);
   const patchComponents = (open: Set<number>): number => {
+    // Over the patches, a state's components are what the walk carries: the
+    // internal classes are all open, so they are inside the blocks already.
+    if (chain) return chainScore(chain, blocksFor(surface, chain).patches, c => open.has(c)).components;
     let total = 0;
     for (let s = 0; s < surface.stateCount; s++) {
       const uf = new UnionFind<number>();
@@ -221,29 +293,73 @@ export function generateKineticMaze(
 }
 
 export interface TreeRate {
-  /** Indices of the states that are perfect mazes. */
-  readonly perfectStates: readonly number[];
+  /** How many of the states are perfect mazes. */
+  readonly perfect: number;
   readonly rate: number;
-  /** Passage count per state; constant by the edge-count invariance theorem. */
-  readonly edgeCounts: readonly number[];
+  /** Passages in a state; the same in every one by the invariance theorem. */
+  readonly passages: number;
+  /** Whether that held — it is a theorem, so a false here is a broken build. */
   readonly edgeCountInvariant: boolean;
+  /** A state that is not a perfect maze, or -1 when every one is. */
+  readonly witness: number;
 }
 
-/** Difficulty, measured over every state the mechanism can reach. */
+/**
+ * Difficulty, measured over every state the mechanism can reach.
+ *
+ * A count rather than a list of states, because on a mechanism whose pieces
+ * sit in a line it is worked out without visiting one: the walk along the line
+ * carries how many states end up in each shape, and a quarter of a million of
+ * them would be a list nobody reads. What wants the list is the cell-level
+ * search, which visits every state anyway — `rateByState` hands it both.
+ */
 export function treeRate(surface: KineticSurface, design: Pick<KineticDesign, 'open'>): TreeRate {
-  const perfectStates: number[] = [];
-  const edgeCounts: number[] = [];
+  const chain = chainOf(surface);
+  if (!chain) return rateByState(surface, design).rate;
+
+  const blocks = blocksOfDesign(surface, chain, c => design.open.has(c));
+  const score = chainScore(chain, blocks, c => design.open.has(c));
+  // The walk counts the passages at the seams; the walls a design opens inside
+  // a piece are the same in every state, so they are added rather than walked.
+  let openWalls = 0;
+  for (const e of surface.internalEdges) if (design.open.has(e.classId)) openWalls++;
+  return {
+    perfect: score.perfect,
+    rate: score.perfect / surface.stateCount,
+    passages: openWalls + score.passages,
+    edgeCountInvariant: !score.passagesVary,
+    witness: score.witness,
+  };
+}
+
+/** The same, one state at a time, and which of them came out perfect. */
+export function rateByState(
+  surface: KineticSurface,
+  design: Pick<KineticDesign, 'open'>,
+): { rate: TreeRate; perfect: Uint8Array } {
+  const perfect = new Uint8Array(surface.stateCount);
+  let count = 0;
+  let passages = 0;
+  let invariant = true;
+  let witness = -1;
   for (let s = 0; s < surface.stateCount; s++) {
     const stats = stateStats(surface, design, s);
-    edgeCounts.push(stats.edges);
-    if (stats.perfect) perfectStates.push(s);
+    if (s === 0) passages = stats.edges;
+    else if (stats.edges !== passages) invariant = false;
+    if (stats.perfect) {
+      perfect[s] = 1;
+      count++;
+    } else if (witness === -1) witness = s;
   }
-  const first = edgeCounts[0];
   return {
-    perfectStates,
-    rate: perfectStates.length / surface.stateCount,
-    edgeCounts,
-    edgeCountInvariant: edgeCounts.every(n => n === first),
+    rate: {
+      perfect: count,
+      rate: surface.stateCount === 0 ? 0 : count / surface.stateCount,
+      passages,
+      edgeCountInvariant: invariant,
+      witness,
+    },
+    perfect,
   };
 }
 
@@ -1235,8 +1351,8 @@ export function createAllStatesSearch(
     // it is the growing working set, not the annealing, that gets there.
     spent += attempt.steps * working.size * surface.cellCount;
 
-    const rate = treeRate(surface, attempt.design);
-    if (!best || rate.perfectStates.length > best.rate.perfectStates.length) {
+    const { rate, perfect: perfectStates } = rateByState(surface, attempt.design);
+    if (!best || rate.perfect > best.rate.perfect) {
       best = {
         design: attempt.design, rate, rounds: round,
         workingStates: working.size, exhausted: false,
@@ -1249,9 +1365,8 @@ export function createAllStatesSearch(
 
     // Feed the states it got wrong back in, so the next anneal has to answer
     // for them. Sampling rather than adding them all keeps a step cheap.
-    const perfect = new Set(rate.perfectStates);
     const failed: number[] = [];
-    for (let s = 0; s < surface.stateCount; s++) if (!perfect.has(s)) failed.push(s);
+    for (let s = 0; s < surface.stateCount; s++) if (!perfectStates[s]) failed.push(s);
     if (failed.length === 0) {
       finished = true;
       return true;
@@ -1268,7 +1383,7 @@ export function createAllStatesSearch(
         maxRounds,
         spent,
         effort,
-        perfectStates: best?.rate.perfectStates.length ?? 0,
+        perfectStates: best?.rate.perfect ?? 0,
         stateCount: surface.stateCount,
       };
     },

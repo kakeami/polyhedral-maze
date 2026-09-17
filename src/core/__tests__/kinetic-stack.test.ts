@@ -98,7 +98,7 @@ describe('kinetic maze on the stack', () => {
   it('keeps the passage count constant across every state (edge invariance)', () => {
     const rate = treeRate(surface, design);
     expect(rate.edgeCountInvariant).toBe(true);
-    for (const n of rate.edgeCounts) expect(n).toBe(CELLS - 1);
+    expect(rate.passages).toBe(CELLS - 1);
   });
 
   it('turns "connected" into "perfect maze" in every state', () => {
@@ -113,10 +113,10 @@ describe('kinetic maze on the stack', () => {
 
   it('measures difficulty as the share of states that are perfect', () => {
     const rate = treeRate(surface, design);
-    expect(rate.perfectStates).toContain(design.targetState);
+    expect(stateStats(surface, design, design.targetState).perfect).toBe(true);
     expect(rate.rate).toBeGreaterThan(0);
     expect(rate.rate).toBeLessThan(1);
-    expect(rate.rate).toBeCloseTo(rate.perfectStates.length / STATES, 12);
+    expect(rate.rate).toBeCloseTo(rate.perfect / STATES, 12);
   });
 
   it('is deterministic for a fixed seed', () => {
@@ -129,7 +129,7 @@ describe('kinetic maze on the stack', () => {
 describe('design search', () => {
   it('finds a harder design than a single draw', () => {
     const hard = searchDesign(surface, { rng: createRng(5), attempts: 12, targetRate: 0 });
-    expect(hard.treeRate.perfectStates).toContain(hard.design.targetState);
+    expect(stateStats(surface, hard.design, hard.design.targetState).perfect).toBe(true);
     expect(hard.treeRate.edgeCountInvariant).toBe(true);
     // 12 draws should beat the median draw; assert it is at least not worse
     // than the plain generator on the same seed.
@@ -157,8 +157,8 @@ describe('other stack sizes', () => {
     const rate = treeRate(s, d);
     expect(s.cellCount).toBe(opts.sides * opts.layers * opts.cols * opts.rows);
     expect(rate.edgeCountInvariant).toBe(true);
-    expect(rate.edgeCounts[0]).toBe(s.cellCount - 1);
-    expect(rate.perfectStates).toContain(0);
+    expect(rate.passages).toBe(s.cellCount - 1);
+    expect(stateStats(s, d, 0).perfect).toBe(true);
   });
 
   it('rejects degenerate stacks', () => {

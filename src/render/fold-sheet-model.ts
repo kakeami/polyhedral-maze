@@ -302,7 +302,7 @@ export function buildFoldSheets(
 
   sheets.push({
     piece: null,
-    items: assemblySheet(mech, surface, design, ends, seams, sheet, edge, rate.perfectStates.length),
+    items: assemblySheet(mech, surface, design, ends, seams, sheet, edge, rate.perfect),
   });
 
   for (let piece = 0; piece < mech.pieceCount; piece++) {
@@ -321,7 +321,7 @@ export function buildFoldSheets(
     edgeMm: edge,
     cellMm: edge / cells,
     cubeMm: edge * 2,
-    perfectStates: rate.perfectStates.length,
+    perfectStates: rate.perfect,
     stateCount: surface.stateCount,
     hingesOffBoundary: offBoundary,
   };

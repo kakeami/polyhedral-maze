@@ -35,6 +35,17 @@ export interface ChainScore {
   readonly perfect: number;
   /** A state that is not, or -1 when they all are. */
   readonly witness: number;
+  /** Summed over every state: how many pieces its maze falls into. */
+  readonly components: number;
+  /** Summed over every state: how many open passages close a loop. */
+  readonly cycles: number;
+  /**
+   * Open seam passages in a state — the same number in every state whenever
+   * the openings are decided per side class, which is the whole point of the
+   * construction. `passagesVary` says whether that held here.
+   */
+  readonly passages: number;
+  readonly passagesVary: boolean;
 }
 
 /** What the walk carries: a partition of the piece in hand, and its tally. */
@@ -235,6 +246,10 @@ export function chainScore(
 
   let cost = 0;
   let perfect = 0;
+  let componentSum = 0;
+  let cycleSum = 0;
+  let passages = -1;
+  let passagesVary = false;
   let worstNode = -1;
   let worstCost = 0;
   for (let node = 0; node < level.length; node++) {
@@ -244,6 +259,12 @@ export function chainScore(
     const components = end.closed + parts;
     const own = 2 * components + end.edges - blockCount - 1;
     cost += own * end.count;
+    componentSum += components * end.count;
+    // What is left of the cost once the pieces are counted is the loops:
+    // `cost = (components - 1) + cycles` is where the whole scoring started.
+    cycleSum += (own - (components - 1)) * end.count;
+    if (passages === -1) passages = end.edges;
+    else if (end.edges !== passages) passagesVary = true;
     if (own === 0) perfect += end.count;
     else if (own > worstCost) {
       worstCost = own;
@@ -262,5 +283,13 @@ export function chainScore(
     }
     witness = chain.stateOfTurns(turns);
   }
-  return { cost, perfect, witness };
+  return {
+    cost,
+    perfect,
+    witness,
+    components: componentSum,
+    cycles: cycleSum,
+    passages: passages === -1 ? 0 : passages,
+    passagesVary,
+  };
 }

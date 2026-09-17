@@ -178,7 +178,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       design,
       ends: pickPrintedEnds(ruling.surface, design),
       poses: describePoses(ruling.mech, ruling.surface, design),
-      perfectPoses: rate.perfectStates.length,
+      perfectPoses: rate.perfect,
       seed: from,
       cached,
     };
@@ -248,7 +248,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
         controls.setBusy(false);
         controls.setStatus(
           found.rate.rate < 1
-            ? `Best found: a perfect maze in ${found.rate.perfectStates.length} of ` +
+            ? `Best found: a perfect maze in ${found.rate.perfect} of ` +
               `${ruling.surface.stateCount} poses. Shuffle for another seed.`
             : '',
         );
