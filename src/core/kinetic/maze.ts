@@ -75,6 +75,23 @@ export interface KineticDesign {
   readonly targetState: number;
 }
 
+/**
+ * Is the maze open across side `side` of cell `cell`?
+ *
+ * The sides of every cell lie end to end in one array, so a cell's sides start
+ * at `sideStart[cell]`; which class a side belongs to is what a design opens
+ * or closes. Every drawing of a pattern asks this, and asks it of the cell
+ * rather than of the class, so it is worth a name.
+ */
+export function isSideOpen(
+  surface: KineticSurface,
+  design: Pick<KineticDesign, 'open'>,
+  cell: number,
+  side: number,
+): boolean {
+  return design.open.has(surface.classOf[surface.sideStart[cell]! + side]!);
+}
+
 export interface StateStats {
   readonly edges: number;
   readonly components: number;

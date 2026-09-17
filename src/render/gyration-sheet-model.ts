@@ -20,23 +20,24 @@
  * the only openings are the cuts.
  */
 
-import type { Vec2 } from '../core/vec2.ts';
 import type { PageItem } from './face-page-model.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { GyrationMechanism } from '../core/kinetic/mechanisms/gyration.ts';
-import { pickStartGoal, treeRate } from '../core/kinetic/maze.ts';
+import { isSideOpen, pickStartGoal, treeRate } from '../core/kinetic/maze.ts';
 import { dot, norm, sub } from '../core/vec3.ts';
 import { buildEdgeIndex } from './edge-index.ts';
 import { drawPieceNet, layOutPiece } from './piece-net-model.ts';
 import type { PieceLayout } from './piece-net-model.ts';
-import { bulkheadTabQuads, circlePoly, polygonPoints } from './stack-sheet-model.ts';
-import type { SheetBox } from './stack-sheet-model.ts';
+import type { SheetBox } from './kinetic-sheet-constants.ts';
 import {
   STACK_SHEET_STYLE as S,
   STACK_SHEET_DEFAULTS as D,
   A4_SHEET,
 } from './kinetic-sheet-constants.ts';
+import {
+  SheetFlow, bulkheadItems, discItems, fitCellMm, turningLine,
+} from './kinetic-sheet-parts.ts';
 
 export interface GyrationSheetOptions {
   cellMm?: number;
@@ -109,19 +110,16 @@ export function buildGyrationSheets(
   const usableHeight = sheet.height - 2 * sheet.margin - 2 * tab;
   const widest = Math.max(...pieces.map(p => p.width));
   const tallest = Math.max(...pieces.map(p => p.height));
-  const wanted = options.cellMm ?? D.cellMm;
-  const fits = Math.min(
-    usableWidth / (widest / unitsPerCell),
-    usableHeight / (tallest / unitsPerCell),
-  );
-  const cellMm = Math.min(wanted, fits);
-  if (cellMm < D.minCellMm) {
-    const maxN = Math.max(1, Math.floor(mech.n * (cellMm / D.minCellMm)));
-    throw new Error(
-      `these pieces need cells of ${cellMm.toFixed(1)} mm to fit the sheet, under the ` +
-        `${D.minCellMm} mm a knife can follow; try n of ${maxN} or fewer`,
-    );
-  }
+  const cellMm = fitCellMm({
+    wanted: options.cellMm ?? D.cellMm,
+    unitsPerCell,
+    netWidth: widest,
+    netHeight: tallest,
+    usableWidth,
+    usableHeight,
+    n: mech.n,
+    refusal: 'these pieces need',
+  });
   const scale = cellMm / unitsPerCell;
   const edgeMm = edgeUnits * scale;
 
@@ -161,35 +159,17 @@ export function buildGyrationSheets(
     cellIndexOf.set(`${source.piece}:${source.faceId}:${source.cell}`, i);
   }
   const isOpen = (cellIndex: number, side: number): boolean =>
-    design.open.has(surface.classOf[surface.sideStart[cellIndex]! + side]!);
+    isSideOpen(surface, design, cellIndex, side);
 
-  const sheets: { items: PageItem[] }[] = [];
-  let items: PageItem[] = [];
-  let cursorY = sheet.margin;
-  const pushSheet = () => {
-    if (items.length > 0) sheets.push({ items });
-    items = [];
-    cursorY = sheet.margin;
-  };
-  const ensure = (height: number) => {
-    if (cursorY > sheet.margin && cursorY + height > sheet.height - sheet.margin) pushSheet();
-  };
+  const flow = new SheetFlow(sheet);
 
   // ---- Header -------------------------------------------------------------
-  const title = options.title ??
-    `Cut solid — a ${mech.shapeName} in ${mech.pieceCount} pieces`;
-  items.push({
-    kind: 'text', at: [sheet.margin, cursorY + S.titleSize], text: title,
-    size: S.titleSize, color: S.titleColor, align: 'left', bold: true,
-  });
-  cursorY += S.titleSize + 2.5;
+  flow.title(options.title ?? `Cut solid — a ${mech.shapeName} in ${mech.pieceCount} pieces`);
 
   const perfect = rate.perfect;
   const cuts = mech.axis.seams.length;
-  const puzzleLine = perfect === surface.stateCount
-    ? `Every one of the ${surface.stateCount} ways to turn the pieces is a perfect maze.`
-    : `${perfect} of the ${surface.stateCount} ways to turn the pieces make a perfect maze — find one.`;
-  for (const note of [
+  const puzzleLine = turningLine(perfect, surface.stateCount, 'the pieces');
+  flow.notes([
     'Print at 100%. Glue the sheets to thin card, then cut.',
     '1. Cut each piece on the dashed outline, round the shaded tabs.',
     '2. Fold along every seam between two faces, all one way — the heavy lines inside a piece ' +
@@ -204,31 +184,22 @@ export function buildGyrationSheets(
       'bulkhead into the piece above, disc inside.',
     '7. Nothing else is glued: the pieces have to turn against each other.',
     puzzleLine,
-  ]) {
-    items.push({
-      kind: 'text', at: [sheet.margin, cursorY + S.noteSize], text: note,
-      size: S.noteSize, color: S.noteColor, align: 'left',
-    });
-    cursorY += S.noteLeading;
-  }
-  cursorY += gap;
+  ]);
+  flow.y += gap;
 
   // ---- The pieces ---------------------------------------------------------
   pieces.forEach((piece, index) => {
     const netWidth = piece.width * scale;
     const netHeight = piece.height * scale;
-    ensure(netHeight + 2 * tab + S.labelSize + 2.5);
-    items.push({
-      kind: 'text', at: [sheet.margin, cursorY + S.labelSize],
-      text: `${pieceName(index, pieces.length)} (${index + 1} of ${pieces.length}) — ` +
+    flow.ensure(netHeight + 2 * tab + S.labelSize + 2.5);
+    flow.label(
+      `${pieceName(index, pieces.length)} (${index + 1} of ${pieces.length}) — ` +
         `${piece.faces.length} faces`,
-      size: S.labelSize, color: S.labelColor, align: 'left',
-    });
-    cursorY += S.labelSize + 2.5;
+    );
 
     const originX = sheet.margin + tab + Math.max(0, (usableWidth - netWidth) / 2);
-    const originY = cursorY + tab;
-    items.push(...drawPieceNet({
+    const originY = flow.y + tab;
+    flow.add(...drawPieceNet({
       piece,
       polyhedron: mech.polyhedron,
       edgeIndex,
@@ -242,7 +213,7 @@ export function buildGyrationSheets(
       start,
       goal,
     }));
-    cursorY += netHeight + 2 * tab + gap;
+    flow.y += netHeight + 2 * tab + gap;
   });
 
   // ---- Bulkheads ----------------------------------------------------------
@@ -280,34 +251,14 @@ export function buildGyrationSheets(
     const heading = `Bulkheads (2) for ${which} — ${seam.loop}-gon, ${dowel} mm hole`;
     for (let placed = 0; placed < 2; ) {
       const inRow = Math.min(perRow, 2 - placed);
-      const wasOn = sheets.length;
-      ensure(2 * across + S.labelSize + 2.5);
-      if (placed === 0 || sheets.length !== wasOn) {
-        items.push({
-          kind: 'text', at: [sheet.margin, cursorY + S.labelSize], text: heading,
-          size: S.labelSize, color: S.labelColor, align: 'left',
-        });
-        cursorY += S.labelSize + 2.5;
-      }
+      const turned = flow.ensure(2 * across + S.labelSize + 2.5);
+      if (placed === 0 || turned) flow.label(heading);
       for (let i = 0; i < inRow; i++) {
         const cx = sheet.margin + across + i * (2 * across + gap);
-        const cy = cursorY + across;
-        const points = polygonPoints([cx, cy], radiusMm, seam.loop);
-        for (const quad of bulkheadTabQuads(points, bulkheadTab)) {
-          items.push({ kind: 'poly', pts: quad, fill: S.glueFill });
-        }
-        for (let e = 0; e < points.length; e++) {
-          items.push({
-            kind: 'line', a: points[e]!, b: points[(e + 1) % points.length]!,
-            stroke: S.foldColor, width: S.foldWidth, dash: S.foldDash,
-          });
-        }
-        items.push({
-          kind: 'poly', pts: circlePoly([cx, cy], (dowel + D.dowelClearanceMm) / 2),
-          stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
-        });
+        const cy = flow.y + across;
+        flow.add(...bulkheadItems([cx, cy], radiusMm, seam.loop, bulkheadTab, dowel));
       }
-      cursorY += 2 * across + gap;
+      flow.y += 2 * across + gap;
       placed += inRow;
     }
   });
@@ -317,31 +268,17 @@ export function buildGyrationSheets(
   // a bulkhead.
   const discRadius = 1.5 * dowel;
   const discs = 2 * mech.axis.seams.length;
-  ensure(2 * discRadius + S.labelSize + 2.5);
-  items.push({
-    kind: 'text', at: [sheet.margin, cursorY + S.labelSize],
-    text: `Retaining discs (${discs}) — ${dowel} mm hole, no clearance`,
-    size: S.labelSize, color: S.labelColor, align: 'left',
-  });
-  cursorY += S.labelSize + 2.5;
+  flow.ensure(2 * discRadius + S.labelSize + 2.5);
+  flow.label(`Retaining discs (${discs}) — ${dowel} mm hole, no clearance`);
   for (let i = 0; i < discs; i++) {
     const cx = sheet.margin + discRadius + i * (2 * discRadius + gap);
-    const cy = cursorY + discRadius;
-    const circle: Vec2 = [cx, cy];
-    items.push({
-      kind: 'poly', pts: circlePoly(circle, discRadius),
-      stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
-    });
-    items.push({
-      kind: 'poly', pts: circlePoly(circle, dowel / 2),
-      stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
-    });
+    const cy = flow.y + discRadius;
+    flow.add(...discItems([cx, cy], discRadius, dowel));
   }
-  cursorY += 2 * discRadius;
-  pushSheet();
+  flow.y += 2 * discRadius;
 
   return {
-    sheets,
+    sheets: flow.finish(),
     cellMm,
     edgeMm,
     seamWidthMm,

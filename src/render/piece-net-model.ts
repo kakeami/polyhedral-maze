@@ -24,7 +24,7 @@ import { computeNetLayout } from './net-layout.ts';
 import type { NetLayout } from './net-layout.ts';
 import { cellVerts2d } from './net-cell-geometry.ts';
 import type { EdgeIndex } from './edge-index.ts';
-import { glueTabQuad } from './stack-sheet-model.ts';
+import { glueTabQuad } from './kinetic-sheet-parts.ts';
 import { STACK_SHEET_STYLE as S } from './kinetic-sheet-constants.ts';
 
 /** A piece's faces, unfolded, and the numbering the unfolder used. */

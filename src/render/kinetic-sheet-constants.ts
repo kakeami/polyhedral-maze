@@ -123,4 +123,11 @@ export const STACK_SHEET_DEFAULTS = {
   gapMm: 8,
 } as const;
 
-export const A4_SHEET = { width: 210, height: 297, margin: 10 } as const;
+/** The page a pattern is laid out on, in millimetres. */
+export interface SheetBox {
+  readonly width: number;
+  readonly height: number;
+  readonly margin: number;
+}
+
+export const A4_SHEET: SheetBox = { width: 210, height: 297, margin: 10 };

@@ -13,22 +13,18 @@
  */
 
 import type { Vec2 } from '../core/vec2.ts';
-import { centroid2 } from '../core/vec2.ts';
 import type { PageItem } from './face-page-model.ts';
-// Which way is out of a piece is decided by the same helper the printed faces
-// of a solid use, never by the order a polygon's points happen to come in.
-import { offsetOutward } from './face-page-model.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { StackMechanism } from '../core/kinetic/mechanisms/stack.ts';
-import { pickStartGoal, treeRate } from '../core/kinetic/maze.ts';
-import { STACK_SHEET_STYLE as S, STACK_SHEET_DEFAULTS as D, A4_SHEET } from './kinetic-sheet-constants.ts';
-
-export interface SheetBox {
-  readonly width: number;
-  readonly height: number;
-  readonly margin: number;
-}
+import { isSideOpen, pickStartGoal, treeRate } from '../core/kinetic/maze.ts';
+import type { SheetBox } from './kinetic-sheet-constants.ts';
+import {
+  STACK_SHEET_STYLE as S,
+  STACK_SHEET_DEFAULTS as D,
+  A4_SHEET,
+} from './kinetic-sheet-constants.ts';
+import { SheetFlow, bulkheadItems, turningLine } from './kinetic-sheet-parts.ts';
 
 export interface StackSheetOptions {
   cellMm?: number;
@@ -60,75 +56,6 @@ export interface StackSheetPlan {
   readonly stateCount: number;
 }
 
-const TAU = Math.PI * 2;
-
-export function circlePoly(center: Vec2, radius: number, segments = 40): Vec2[] {
-  return Array.from({ length: segments }, (_, i) => {
-    const a = (i / segments) * TAU;
-    return [center[0] + radius * Math.cos(a), center[1] + radius * Math.sin(a)] as Vec2;
-  });
-}
-
-/** Regular polygon with a flat side at the bottom, centred on `center`. */
-export function polygonPoints(center: Vec2, circumradius: number, sides: number): Vec2[] {
-  const offset = Math.PI / 2 + Math.PI / sides;
-  return Array.from({ length: sides }, (_, i) => {
-    const a = offset + (i / sides) * TAU;
-    return [center[0] + circumradius * Math.cos(a), center[1] + circumradius * Math.sin(a)] as Vec2;
-  });
-}
-
-
-/**
- * Glue tabs standing off each edge of a bulkhead, as closed quads.
- *
- * Each tab is cut back from both ends of its edge, or the flat patterns of two
- * tabs meeting at a corner would overlap and could not both be cut out. The
- * cut-back is the tab height over the tangent of half the interior angle — the
- * familiar 45 degrees on a square box, less on a hexagon — plus a little
- * clearance so the folded tabs do not rub.
- */
-export function bulkheadTabQuads(
-  points: readonly Vec2[],
-  tabHeight: number,
-  clearance: number = D.tabClearanceMm,
-): Vec2[][] {
-  const sides = points.length;
-  const interiorAngle = (Math.PI * (sides - 2)) / sides;
-  const inside = centroid2(points);
-  return points.map((a, i) => {
-    const b = points[(i + 1) % sides]!;
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const taper = Math.min(tabHeight / Math.tan(interiorAngle / 2) + clearance, len / 2.5);
-    return glueTabQuad(a, b, tabHeight, taper, inside);
-  });
-}
-
-/**
- * A tapered tab standing off the edge a->b, on the far side from `inside`.
- *
- * Which side is out is settled by `inside` and never by the order the points
- * come in, because the callers do not agree on it: a bulkhead is a polygon
- * generated right here, a half of a glued pair is a face handed over by the
- * net unfolder and then flipped into page coordinates, which reverses its
- * winding. A tab that reads the winding is a tab that stands outside one of
- * them and folds into the maze on the other.
- */
-export function glueTabQuad(
-  a: Vec2, b: Vec2, height: number, taper: number, inside: Vec2,
-): Vec2[] {
-  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-  const ux = (b[0] - a[0]) / len;
-  const uy = (b[1] - a[1]) / len;
-  const [oa, ob] = offsetOutward(a, b, inside, height);
-  return [
-    a,
-    [oa[0] + ux * taper, oa[1] + uy * taper],
-    [ob[0] - ux * taper, ob[1] - uy * taper],
-    b,
-  ];
-}
-
 export function buildStackSheets(
   mech: StackMechanism,
   surface: KineticSurface,
@@ -155,7 +82,7 @@ export function buildStackSheets(
   }
 
   const open = (cellIndex: number, side: number): boolean =>
-    design.open.has(surface.classOf[surface.sideStart[cellIndex]! + side]!);
+    isSideOpen(surface, design, cellIndex, side);
 
   const rate = treeRate(surface, design);
   const circumradius = cell * mech.cols / (2 * Math.sin(Math.PI / mech.sides));
@@ -163,31 +90,13 @@ export function buildStackSheets(
   const start = options.start ?? ends.start;
   const goal = options.goal ?? ends.goal;
 
-  const sheets: StackSheet[] = [];
-  let items: PageItem[] = [];
-  let cursorY = sheet.margin;
-  const pushSheet = () => {
-    if (items.length > 0) sheets.push({ items });
-    items = [];
-    cursorY = sheet.margin;
-  };
-  const ensure = (height: number) => {
-    if (cursorY + height > sheet.height - sheet.margin) pushSheet();
-  };
+  const flow = new SheetFlow(sheet);
 
   // ---- Header and instructions -------------------------------------------
-  const title = options.title ?? `Stack maze — ${mech.sides}-gon, ${mech.layers} layers`;
-  items.push({
-    kind: 'text', at: [sheet.margin, cursorY + S.titleSize], text: title,
-    size: S.titleSize, color: S.titleColor, align: 'left', bold: true,
-  });
-  cursorY += S.titleSize + 2.5;
+  flow.title(options.title ?? `Stack maze — ${mech.sides}-gon, ${mech.layers} layers`);
 
   const perfect = rate.perfect;
-  const puzzleLine =
-    perfect === surface.stateCount
-      ? `Every one of the ${surface.stateCount} ways to turn the rings is a perfect maze.`
-      : `${perfect} of the ${surface.stateCount} ways to turn the rings make a perfect maze — find one.`;
+  const puzzleLine = turningLine(perfect, surface.stateCount, 'the rings');
   const notes = [
     'Print at 100%. Glue the sheet to thin card, then cut.',
     '1. Score each band down the line between the ticks above it and below it — one score a crease.',
@@ -198,14 +107,8 @@ export function buildStackSheets(
     '6. Cap the dowel above and below so the rings cannot slide off.',
     puzzleLine,
   ];
-  for (const note of notes) {
-    items.push({
-      kind: 'text', at: [sheet.margin, cursorY + S.noteSize], text: note,
-      size: S.noteSize, color: S.noteColor, align: 'left',
-    });
-    cursorY += S.noteLeading;
-  }
-  cursorY += gap;
+  flow.notes(notes);
+  flow.y += gap;
 
   // ---- Bands --------------------------------------------------------------
   //
@@ -214,26 +117,21 @@ export function buildStackSheets(
   for (let printed = 0; printed < mech.layers; printed++) {
     const layer = mech.layers - 1 - printed;
     const blockHeight = bandHeight + S.labelSize + 2.5;
-    ensure(blockHeight + gap);
+    flow.ensure(blockHeight + gap);
     const x0 = sheet.margin;
-    const labelY = cursorY + S.labelSize;
-    const y0 = labelY + 2.5; // top of the band
-    const xOf = (u: number) => x0 + u * cell;
-    const yOf = (v: number) => y0 + (mech.rows - v) * cell;
-
     const role =
       layer === 0 ? 'bottom' : layer === mech.layers - 1 ? 'top' : `${layer + 1} from bottom`;
-    items.push({
-      kind: 'text', at: [x0, labelY], text: `Ring ${layer + 1} (${role})`,
-      size: S.labelSize, color: S.labelColor, align: 'left',
-    });
+    flow.label(`Ring ${layer + 1} (${role})`);
+    const y0 = flow.y; // top of the band
+    const xOf = (u: number) => x0 + u * cell;
+    const yOf = (v: number) => y0 + (mech.rows - v) * cell;
 
     // The glue tab, first so that everything else is drawn over it. A fill and
     // no outline: its silhouette is the cut, and the edge it stands on is the
     // fold, which a single outline could not tell apart.
     const tabTop = y0 + D.tabTaperMm;
     const tabBottom = y0 + bandHeight - D.tabTaperMm;
-    items.push({
+    flow.add({
       kind: 'poly',
       pts: [
         [xOf(columns), y0], [xOf(columns) + bandTab, tabTop],
@@ -250,7 +148,7 @@ export function buildStackSheets(
       [[x0, y0 + bandHeight], [xOf(columns), y0 + bandHeight]],
       [[x0, y0], [x0, y0 + bandHeight]],
     ] as [Vec2, Vec2][]) {
-      items.push({ kind: 'line', a, b, stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash });
+      flow.add({ kind: 'line', a, b, stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash });
     }
 
     // Where the band creases into the prism's edges, marked by a tick above
@@ -268,7 +166,7 @@ export function buildStackSheets(
         [y0 - S.creaseTickMm, y0],
         [y0 + bandHeight, y0 + bandHeight + S.creaseTickMm],
       ] as [number, number][]) {
-        items.push({
+        flow.add({
           kind: 'line', a: [x, from], b: [x, to],
           stroke: S.foldColor, width: S.creaseTickWidth,
         });
@@ -290,9 +188,9 @@ export function buildStackSheets(
         for (let row = 0; row < mech.rows; row++) {
           const index = mech.cellIndex(layer, face, row, col);
           const wall = (a: Vec2, b: Vec2) =>
-            items.push({ kind: 'line', a, b, stroke: S.wallColor, width: S.wallWidth, cap: 'round' });
+            flow.add({ kind: 'line', a, b, stroke: S.wallColor, width: S.wallWidth, cap: 'round' });
           const rim = (a: Vec2, b: Vec2) =>
-            items.push({
+            flow.add({
               kind: 'line', a, b, stroke: S.boundaryColor, width: S.boundaryWidth, cap: 'round',
             });
           const bottomIsRim = row === 0;
@@ -312,7 +210,7 @@ export function buildStackSheets(
           }
           if (index === start || index === goal) {
             const inset = cell * 0.18;
-            items.push({
+            flow.add({
               kind: 'poly',
               pts: [
                 [xOf(u) + inset, yOf(row + 1) + inset], [xOf(u + 1) - inset, yOf(row + 1) + inset],
@@ -320,7 +218,7 @@ export function buildStackSheets(
               ],
               fill: index === start ? S.startColor : S.goalColor,
             });
-            items.push({
+            flow.add({
               kind: 'text',
               // The painter already sets the middle baseline, so the anchor is
               // the cell's centre and nothing else.
@@ -332,7 +230,7 @@ export function buildStackSheets(
         }
       }
     }
-    cursorY = y0 + bandHeight + gap;
+    flow.y = y0 + bandHeight + gap;
   }
 
   // ---- Bulkheads ----------------------------------------------------------
@@ -342,41 +240,24 @@ export function buildStackSheets(
   const perRow = Math.max(1, Math.floor((usableWidth + gap) / (bulkheadSpan + gap)));
   let placed = 0;
   while (placed < bulkheadCount) {
-    ensure(bulkheadSpan + S.labelSize + 2.5 + gap);
-    const rowTop = cursorY + S.labelSize + 2.5;
+    flow.ensure(bulkheadSpan + S.labelSize + 2.5 + gap);
     if (placed === 0) {
-      items.push({
-        kind: 'text', at: [sheet.margin, cursorY + S.labelSize],
-        text: `Bulkheads — cut ${bulkheadCount} (two per ring); the hole takes the ${dowel} mm dowel`,
-        size: S.labelSize, color: S.labelColor, align: 'left',
-      });
+      flow.label(
+        `Bulkheads — cut ${bulkheadCount} (two per ring); the hole takes the ${dowel} mm dowel`,
+      );
+    } else {
+      flow.y += S.labelSize + 2.5;
     }
+    const rowTop = flow.y;
     for (let i = 0; i < perRow && placed < bulkheadCount; i++, placed++) {
       const cx = sheet.margin + bulkheadSpan / 2 + i * (bulkheadSpan + gap);
       const cy = rowTop + bulkheadSpan / 2;
-      const pts = polygonPoints([cx, cy], bulkheadRadius, mech.sides);
-      const tabs = bulkheadTabQuads(pts, bulkheadTab);
-      // Filled, not outlined: the tab's own silhouette is what the knife
-      // follows, and the edge it stands on is a fold rather than a cut.
-      for (const quad of tabs) items.push({ kind: 'poly', pts: quad, fill: S.glueFill });
-      for (let e = 0; e < pts.length; e++) {
-        items.push({
-          kind: 'line', a: pts[e]!, b: pts[(e + 1) % pts.length]!,
-          stroke: S.foldColor, width: S.foldWidth, dash: S.foldDash,
-        });
-      }
-      items.push({
-        kind: 'poly',
-        pts: circlePoly([cx, cy], (dowel + D.dowelClearanceMm) / 2),
-        stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
-      });
+      flow.add(...bulkheadItems([cx, cy], bulkheadRadius, mech.sides, bulkheadTab, dowel));
     }
-    cursorY = rowTop + bulkheadSpan + gap;
+    flow.y = rowTop + bulkheadSpan + gap;
   }
-  pushSheet();
-
   return {
-    sheets,
+    sheets: flow.finish(),
     barrelWidthMm: 2 * circumradius,
     barrelHeightMm: mech.layers * bandHeight,
     cellMm: cell,

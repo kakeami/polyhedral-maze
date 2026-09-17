@@ -16,22 +16,23 @@
  * cells, so each gets its own walls.
  */
 
-import type { Face } from '../core/types.ts';
 import type { PageItem } from './face-page-model.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { JoinedPairMechanism } from '../core/kinetic/mechanisms/joined.ts';
-import { pickStartGoal, treeRate } from '../core/kinetic/maze.ts';
-import { sub, scale as scale3, dot } from '../core/vec3.ts';
+import { isSideOpen, pickStartGoal, treeRate } from '../core/kinetic/maze.ts';
+import { sub, scale as scale3, dot, mean, norm } from '../core/vec3.ts';
 import { buildEdgeIndex } from './edge-index.ts';
 import { drawPieceNet, layOutPiece } from './piece-net-model.ts';
-import { bulkheadTabQuads, circlePoly, polygonPoints } from './stack-sheet-model.ts';
-import type { SheetBox } from './stack-sheet-model.ts';
+import type { SheetBox } from './kinetic-sheet-constants.ts';
 import {
   STACK_SHEET_STYLE as S,
   STACK_SHEET_DEFAULTS as D,
   A4_SHEET,
 } from './kinetic-sheet-constants.ts';
+import {
+  SheetFlow, bulkheadItems, discItems, fitCellMm, turningLine,
+} from './kinetic-sheet-parts.ts';
 
 export interface PairSheetOptions {
   /** One maze cell, measured along an edge of the solid. */
@@ -81,24 +82,21 @@ export function buildPairSheets(
 
   // Net units to millimetres. One cell is one edge of the solid over n, and
   // the whole net has to land inside the sheet with room for the glue tabs.
-  const edgeUnits = length2(joint.vertices[0]!, joint.vertices[1]!, true);
+  const edgeUnits = norm(sub(joint.vertices[0]!, joint.vertices[1]!));
   const unitsPerCell = edgeUnits / mech.n;
   const tab = bulkheadTab;
   const usableWidth = sheet.width - 2 * sheet.margin - 2 * tab;
   const usableHeight = sheet.height - 2 * sheet.margin - 2 * tab;
-  const wanted = options.cellMm ?? D.cellMm;
-  const fits = Math.min(
-    usableWidth / (layout.width / unitsPerCell),
-    usableHeight / (layout.height / unitsPerCell),
-  );
-  const cellMm = Math.min(wanted, fits);
-  if (cellMm < D.minCellMm) {
-    const maxN = Math.max(1, Math.floor(mech.n * (cellMm / D.minCellMm)));
-    throw new Error(
-      `this net needs cells of ${cellMm.toFixed(1)} mm to fit the sheet, under the ` +
-        `${D.minCellMm} mm a knife can follow; try n of ${maxN} or fewer`,
-    );
-  }
+  const cellMm = fitCellMm({
+    wanted: options.cellMm ?? D.cellMm,
+    unitsPerCell,
+    netWidth: layout.width,
+    netHeight: layout.height,
+    usableWidth,
+    usableHeight,
+    n: mech.n,
+    refusal: 'this net needs',
+  });
   const scale = cellMm / unitsPerCell;
   const edgeMm = edgeUnits * scale;
 
@@ -106,7 +104,7 @@ export function buildPairSheets(
   // lives between the two bulkheads and must not reach the far end, because
   // that end carries maze: a hole through it would cost a cell, and a 6 mm
   // dowel through a 10 mm cell costs the whole cell.
-  const jointCentre = centroid3(joint);
+  const jointCentre = mean(joint.vertices);
   const into = scale3(joint.normal, -1);
   let depthUnits = 0;
   for (const face of carrying) {
@@ -128,33 +126,16 @@ export function buildPairSheets(
     cellIndexOf.set(`${source.piece}:${source.faceId}:${source.cell}`, i);
   }
   const isOpen = (cellIndex: number, side: number): boolean =>
-    design.open.has(surface.classOf[surface.sideStart[cellIndex]! + side]!);
+    isSideOpen(surface, design, cellIndex, side);
 
-  const sheets: { items: PageItem[] }[] = [];
-  let items: PageItem[] = [];
-  let cursorY = sheet.margin;
-  const pushSheet = () => {
-    if (items.length > 0) sheets.push({ items });
-    items = [];
-    cursorY = sheet.margin;
-  };
-  const ensure = (height: number) => {
-    if (cursorY > sheet.margin && cursorY + height > sheet.height - sheet.margin) pushSheet();
-  };
+  const flow = new SheetFlow(sheet);
 
   // ---- Header -------------------------------------------------------------
-  const title = options.title ?? `Glued pair — two ${mech.shapeName}s at a ${mech.gon}-gon`;
-  items.push({
-    kind: 'text', at: [sheet.margin, cursorY + S.titleSize], text: title,
-    size: S.titleSize, color: S.titleColor, align: 'left', bold: true,
-  });
-  cursorY += S.titleSize + 2.5;
+  flow.title(options.title ?? `Glued pair — two ${mech.shapeName}s at a ${mech.gon}-gon`);
 
   const perfect = rate.perfect;
-  const puzzleLine = perfect === surface.stateCount
-    ? `Every one of the ${surface.stateCount} ways to turn the halves is a perfect maze.`
-    : `${perfect} of the ${surface.stateCount} ways to turn the halves make a perfect maze — find one.`;
-  for (const note of [
+  const puzzleLine = turningLine(perfect, surface.stateCount, 'the halves');
+  flow.notes([
     'Print at 100%. Glue the sheets to thin card, then cut.',
     '1. Cut each half on the dashed outline, round the shaded tabs.',
     '2. Fold along every seam between two faces, all one way — the heavy lines inside a piece ' +
@@ -168,31 +149,20 @@ export function buildPairSheets(
       'into the second half with the disc inside.',
     '7. Nothing else is glued: the two halves have to turn against each other.',
     puzzleLine,
-  ]) {
-    items.push({
-      kind: 'text', at: [sheet.margin, cursorY + S.noteSize], text: note,
-      size: S.noteSize, color: S.noteColor, align: 'left',
-    });
-    cursorY += S.noteLeading;
-  }
-  cursorY += gap;
+  ]);
+  flow.y += gap;
 
   // ---- The two halves -----------------------------------------------------
   const netWidth = layout.width * scale;
   const netHeight = layout.height * scale;
   const blockHeight = netHeight + 2 * tab + S.labelSize + 2.5;
   for (let half = 0; half < 2; half++) {
-    ensure(blockHeight);
-    items.push({
-      kind: 'text', at: [sheet.margin, cursorY + S.labelSize],
-      text: half === 0 ? 'Lower half (1 of 2)' : 'Upper half (2 of 2)',
-      size: S.labelSize, color: S.labelColor, align: 'left',
-    });
-    cursorY += S.labelSize + 2.5;
+    flow.ensure(blockHeight);
+    flow.label(half === 0 ? 'Lower half (1 of 2)' : 'Upper half (2 of 2)');
 
     const originX = sheet.margin + tab + Math.max(0, (usableWidth - netWidth) / 2);
-    const originY = cursorY + tab;
-    items.push(...drawPieceNet({
+    const originY = flow.y + tab;
+    flow.add(...drawPieceNet({
       piece,
       polyhedron: mech.polyhedron,
       edgeIndex,
@@ -206,11 +176,11 @@ export function buildPairSheets(
       start,
       goal,
     }));
-    cursorY += netHeight + 2 * tab + gap;
+    flow.y += netHeight + 2 * tab + gap;
   }
 
   // ---- Bulkheads ----------------------------------------------------------
-  const jointCircumUnits = length2(joint.vertices[0]!, centroid3(joint), true);
+  const jointCircumUnits = norm(sub(joint.vertices[0]!, mean(joint.vertices)));
   const jointRadiusMm = jointCircumUnits * scale - D.bulkheadInsetMm;
   const jointWidthMm = 2 * (jointCircumUnits * scale);
   // Both halves need one, and a wide joint puts two of them past the edge of
@@ -229,58 +199,30 @@ export function buildPairSheets(
   const heading = `Bulkheads (2) and retaining discs (2) — ${mech.gon}-gon, ${dowel} mm hole`;
   for (let placed = 0; placed < 2; ) {
     const inRow = Math.min(perRow, 2 - placed);
-    const wasOn = sheets.length;
-    ensure(2 * across + S.labelSize + 2.5);
-    if (placed === 0 || sheets.length !== wasOn) {
-      items.push({
-        kind: 'text', at: [sheet.margin, cursorY + S.labelSize], text: heading,
-        size: S.labelSize, color: S.labelColor, align: 'left',
-      });
-      cursorY += S.labelSize + 2.5;
-    }
+    const turned = flow.ensure(2 * across + S.labelSize + 2.5);
+    if (placed === 0 || turned) flow.label(heading);
     for (let i = 0; i < inRow; i++) {
       const cx = sheet.margin + across + i * (2 * across + gap);
-      const cy = cursorY + across;
-      const points = polygonPoints([cx, cy], jointRadiusMm, mech.gon);
-      for (const quad of bulkheadTabQuads(points, bulkheadTab)) {
-        items.push({ kind: 'poly', pts: quad, fill: S.glueFill });
-      }
-      for (let e = 0; e < points.length; e++) {
-        items.push({
-          kind: 'line', a: points[e]!, b: points[(e + 1) % points.length]!,
-          stroke: S.foldColor, width: S.foldWidth, dash: S.foldDash,
-        });
-      }
-      items.push({
-        kind: 'poly', pts: circlePoly([cx, cy], (dowel + D.dowelClearanceMm) / 2),
-        stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
-      });
+      const cy = flow.y + across;
+      flow.add(...bulkheadItems([cx, cy], jointRadiusMm, mech.gon, bulkheadTab, dowel));
     }
-    cursorY += 2 * across + gap;
+    flow.y += 2 * across + gap;
     placed += inRow;
   }
 
   // The discs that stop the halves lifting off the dowel. Their holes get no
   // clearance: one is glued to the dowel, the other turns against a bulkhead.
   const discRadius = 1.5 * dowel;
-  ensure(2 * discRadius + S.labelSize);
+  flow.ensure(2 * discRadius + S.labelSize);
   for (let i = 0; i < 2; i++) {
     const cx = sheet.margin + discRadius + i * (2 * discRadius + gap);
-    const cy = cursorY + discRadius;
-    items.push({
-      kind: 'poly', pts: circlePoly([cx, cy], discRadius),
-      stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
-    });
-    items.push({
-      kind: 'poly', pts: circlePoly([cx, cy], dowel / 2),
-      stroke: S.cutColor, width: S.cutWidth, dash: S.cutDash,
-    });
+    const cy = flow.y + discRadius;
+    flow.add(...discItems([cx, cy], discRadius, dowel));
   }
-  cursorY += 2 * discRadius;
-  pushSheet();
+  flow.y += 2 * discRadius;
 
   return {
-    sheets,
+    sheets: flow.finish(),
     cellMm,
     edgeMm,
     jointWidthMm,
@@ -288,25 +230,4 @@ export function buildPairSheets(
     perfectStates: perfect,
     stateCount: surface.stateCount,
   };
-}
-
-function centroid3(face: Face): [number, number, number] {
-  let x = 0;
-  let y = 0;
-  let z = 0;
-  for (const v of face.vertices) {
-    x += v[0];
-    y += v[1];
-    z += v[2];
-  }
-  const k = face.vertices.length;
-  return [x / k, y / k, z / k];
-}
-
-function length2(
-  a: readonly number[], b: readonly number[], threeD = false,
-): number {
-  return threeD
-    ? Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!)
-    : Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!);
 }
