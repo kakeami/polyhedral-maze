@@ -11,6 +11,7 @@
 
 import {
   KINETIC_LIMITS,
+  randomSeed,
   clampKineticParams,
   harderEffort,
   isMaxEffort,
@@ -31,6 +32,7 @@ import { GYRATIONS, gyrationById, DEFAULT_GYRATION } from '../core/kinetic/mecha
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
 import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
+import { byId, esc, randomIndex, randomWithinSlider, showToast } from './panel.ts';
 
 export interface KineticMetrics {
   cells: number;
@@ -67,7 +69,7 @@ export function createKineticControls(
   initial: KineticParams,
 ): KineticControlsContext {
   container.innerHTML = buildHTML(initial);
-  const el = <T extends HTMLElement>(id: string) => container.querySelector<T>(`#${id}`)!;
+  const el = byId(container);
 
   const mechSelect = el<HTMLSelectElement>('kin-mech');
   const pairSelect = el<HTMLSelectElement>('kin-pair');
@@ -238,24 +240,24 @@ export function createKineticControls(
   el('kin-shuffle-all').addEventListener('click', () => {
     effort = 1;
     if (mechSelect.value === 'pair') {
-      pairSelect.selectedIndex = Math.floor(Math.random() * pairSelect.options.length);
+      pairSelect.selectedIndex = randomIndex(pairSelect.options.length);
       syncBounds();
-      pairNSlider.value = String(randomInRange(pairNSlider));
+      pairNSlider.value = String(randomWithinSlider(pairNSlider));
     } else if (mechSelect.value === 'cut') {
-      cutSelect.selectedIndex = Math.floor(Math.random() * cutSelect.options.length);
+      cutSelect.selectedIndex = randomIndex(cutSelect.options.length);
       syncBounds();
-      cutNSlider.value = String(randomInRange(cutNSlider));
+      cutNSlider.value = String(randomWithinSlider(cutNSlider));
     } else {
-      sidesSlider.value = String(randomInRange(sidesSlider));
+      sidesSlider.value = String(randomWithinSlider(sidesSlider));
       syncBounds();
-      layersSlider.value = String(randomInRange(layersSlider));
+      layersSlider.value = String(randomWithinSlider(layersSlider));
       syncBounds();
-      colsSlider.value = String(randomInRange(colsSlider));
+      colsSlider.value = String(randomWithinSlider(colsSlider));
       syncBounds();
-      rowsSlider.value = String(randomInRange(rowsSlider));
+      rowsSlider.value = String(randomWithinSlider(rowsSlider));
     }
     syncBounds();
-    kSlider.value = String(randomInRange(kSlider));
+    kSlider.value = String(randomWithinSlider(kSlider));
     seedInput.value = String(randomSeed());
     syncBounds();
     fire();
@@ -265,19 +267,6 @@ export function createKineticControls(
   const exportBtn = el<HTMLButtonElement>('kin-export-pdf');
   exportBtn.addEventListener('click', () => actions.get('export-pdf')?.());
 
-  let toastTimer: ReturnType<typeof setTimeout> | null = null;
-  function showToast(message: string) {
-    let toast = document.querySelector<HTMLDivElement>('.toast');
-    if (!toast) {
-      toast = document.createElement('div');
-      toast.className = 'toast';
-      document.body.appendChild(toast);
-    }
-    toast.textContent = message;
-    toast.classList.add('show');
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast?.classList.remove('show'), 2600);
-  }
 
   syncBounds();
 
@@ -337,17 +326,6 @@ export function createKineticControls(
         : mechSelect.value === 'stack' ? 'Export rings PDF' : 'Export pieces PDF';
     },
   };
-}
-
-function randomSeed(): number {
-  return Math.floor(Math.random() * 1000000);
-}
-
-/** A value in the slider's own range, so the bounds stay declared in one place. */
-function randomInRange(slider: HTMLInputElement): number {
-  const min = Number(slider.min);
-  const max = Number(slider.max);
-  return min + Math.floor(Math.random() * (max - min + 1));
 }
 
 const STACK_BLURB =
@@ -501,12 +479,3 @@ function buildHTML(p: KineticParams): string {
   `;
 }
 
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, ch => (
-    ch === '&' ? '&amp;' :
-    ch === '<' ? '&lt;' :
-    ch === '>' ? '&gt;' :
-    ch === '"' ? '&quot;' :
-    '&#39;'
-  ));
-}

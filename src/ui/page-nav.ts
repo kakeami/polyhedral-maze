@@ -25,6 +25,8 @@
  * is by which id it asks for.
  */
 
+import { esc } from './panel.ts';
+
 export type PageId = 'polyhedral' | 'turning' | 'folding';
 
 interface Page {
@@ -95,8 +97,3 @@ export function sourceLinkHTML(): string {
   `;
 }
 
-function esc(text: string): string {
-  return text.replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!
-  ));
-}

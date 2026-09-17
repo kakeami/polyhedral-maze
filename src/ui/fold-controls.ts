@@ -38,6 +38,7 @@
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
 import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
+import { byId, esc, showToast } from './panel.ts';
 import { FOLD_LIMITS } from './fold-param-codec.ts';
 import type { FoldParams } from './fold-param-codec.ts';
 
@@ -95,7 +96,7 @@ export function createFoldControls(
   initial: FoldParams,
 ): FoldControlsContext {
   container.innerHTML = buildHTML(initial);
-  const el = <T extends HTMLElement>(id: string) => container.querySelector<T>(`#${id}`)!;
+  const el = byId(container);
 
   const cellsSlider = el<HTMLInputElement>('fold-cells');
   const cellsValue = el<HTMLSpanElement>('fold-cells-val');
@@ -115,7 +116,6 @@ export function createFoldControls(
   const copyBtn = el<HTMLButtonElement>('fold-copy-url');
   const shuffleSeedBtn = el<HTMLButtonElement>('fold-shuffle-seed');
   const shuffleAllBtn = el<HTMLButtonElement>('fold-shuffle-all');
-  let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   const actions = new Map<string, () => void>();
   let rulings: readonly number[] = [];
@@ -246,18 +246,7 @@ export function createFoldControls(
     style() {
       return styleSelect.value as PresetId;
     },
-    showToast(message) {
-      let toast = document.querySelector<HTMLDivElement>('.toast');
-      if (!toast) {
-        toast = document.createElement('div');
-        toast.className = 'toast';
-        document.body.appendChild(toast);
-      }
-      toast.textContent = message;
-      toast.classList.add('show');
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toast?.classList.remove('show'), 2600);
-    },
+    showToast,
     setExportBusy(busy) {
       exportBtn.disabled = busy;
       exportBtn.textContent = busy ? 'Exporting...' : 'Export cubes PDF';
@@ -334,8 +323,3 @@ function buildHTML(p: FoldParams): string {
   `;
 }
 
-function esc(text: string): string {
-  return text.replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!
-  ));
-}

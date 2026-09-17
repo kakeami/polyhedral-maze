@@ -1,4 +1,5 @@
 import type { MazeParams } from './param-codec.ts';
+import { randomSeed } from './param-codec.ts';
 import type { Algorithm } from '../core/maze.ts';
 import type { MazeMetrics } from '../core/metrics.ts';
 import {
@@ -12,6 +13,7 @@ import type { ShapeCategory, ShapeDescriptor } from '../core/polyhedra/registry.
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
 import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
+import { byId, esc, randomIndex, randomWithinSlider, showToast } from './panel.ts';
 
 export interface ControlsContext {
   container: HTMLElement;
@@ -44,7 +46,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
 
   container.innerHTML = buildHTML(initial, initialCategory);
 
-  const el = <T extends HTMLElement>(id: string) => container.querySelector<T>(`#${id}`)!;
+  const el = byId(container);
 
   const categorySelect = el<HTMLSelectElement>('ctrl-category');
   const shapeSelect = el<HTMLSelectElement>('ctrl-shape');
@@ -217,19 +219,6 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
 
   renderShapeOptions(initialShape.id);
 
-  let toastTimer: ReturnType<typeof setTimeout> | null = null;
-  function showToast(message: string) {
-    let toast = document.querySelector<HTMLDivElement>('.toast');
-    if (!toast) {
-      toast = document.createElement('div');
-      toast.className = 'toast';
-      document.body.appendChild(toast);
-    }
-    toast.textContent = message;
-    toast.classList.add('show');
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast?.classList.remove('show'), 1800);
-  }
 
   const exportBtn = el<HTMLButtonElement>('btn-export-pdf');
   function setExportBusy(busy: boolean) {
@@ -252,25 +241,12 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     getAutoRotate() { return autoRotateCheck.checked; },
     onChange(cb) { callbacks.push(cb); },
     onAction(action, cb) { actions.set(action, cb); },
-    showToast,
+    // Shorter than the default: what this panel says is "URL copied", where
+    // the turning and folding panels report measurements worth reading twice.
+    showToast: message => showToast(message, 1800),
     setExportBusy,
     setFacePagesBusy,
   };
-}
-
-function randomIndex(count: number): number {
-  return Math.floor(Math.random() * count);
-}
-
-function randomSeed(): number {
-  return Math.floor(Math.random() * 1000000);
-}
-
-/** A value in the slider's own range, so the bounds stay declared in one place. */
-function randomWithinSlider(slider: HTMLInputElement): number {
-  const min = Number(slider.min);
-  const max = Number(slider.max);
-  return min + randomIndex(max - min + 1);
 }
 
 /**
@@ -381,12 +357,3 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
   `;
 }
 
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, ch => (
-    ch === '&' ? '&amp;' :
-    ch === '<' ? '&lt;' :
-    ch === '>' ? '&gt;' :
-    ch === '"' ? '&quot;' :
-    '&#39;'
-  ));
-}

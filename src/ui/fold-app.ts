@@ -44,7 +44,9 @@ import { exportFoldPDF } from '../render/pdf-kinetic-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
-import { FOLD_LIMITS, decodeFoldParams, encodeFoldParams } from './fold-param-codec.ts';
+import {
+  FOLD_LIMITS, decodeFoldParams, encodeFoldParams, randomSeed,
+} from './fold-param-codec.ts';
 import type { FoldParams } from './fold-param-codec.ts';
 import { SCENE_PRESETS } from '../render/scene-presets.ts';
 
@@ -379,11 +381,6 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // Opened in the pose the link asked for, and cut to it rather than folded:
   // there is nothing to have come from.
   rebuild(true);
-}
-
-/** A seed to shuffle to, in the range a link can carry. */
-function randomSeed(): number {
-  return Math.floor(Math.random() * (FOLD_LIMITS.maxSeed + 1));
 }
 
 /**

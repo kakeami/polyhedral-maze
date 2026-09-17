@@ -16,6 +16,14 @@ export interface MazeParams {
 
 const ALGORITHMS: readonly Algorithm[] = ['KRUSKAL', 'DFS', 'WILSON'];
 
+/** The largest seed a link can carry, and so the largest one to shuffle to. */
+const MAX_SEED = 999999;
+
+/** A seed to shuffle to, in the range the URL keeps. */
+export function randomSeed(): number {
+  return Math.floor(Math.random() * (MAX_SEED + 1));
+}
+
 export const DEFAULT_PARAMS: MazeParams = {
   shape: 'icosahedron',
   n: 9,
@@ -48,7 +56,7 @@ export function decodeParams(search: string): MazeParams {
     n: clamp(Number(p.get('n') ?? DEFAULT_PARAMS.n), 2, 12),
     k: clamp(Number(p.get('k') ?? DEFAULT_PARAMS.k), 1, 4),
     algorithm: parseAlgorithm(p.get('algo')),
-    seed: clamp(Number(p.get('seed') ?? DEFAULT_PARAMS.seed), 0, 999999),
+    seed: clamp(Number(p.get('seed') ?? DEFAULT_PARAMS.seed), 0, MAX_SEED),
     warp: p.get('warp') === '1',
     showSolution: p.get('solution') === '1',
     style: resolvePreset(p.get('style')).id,

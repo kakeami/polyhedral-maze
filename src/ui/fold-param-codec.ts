@@ -51,6 +51,11 @@ export const FOLD_LIMITS = {
   poses: 6,
 } as const;
 
+/** A seed to shuffle to, in the range a link can carry. */
+export function randomSeed(): number {
+  return Math.floor(Math.random() * (FOLD_LIMITS.maxSeed + 1));
+}
+
 export const DEFAULT_FOLD_PARAMS: FoldParams = {
   // Five squares a face: the finest ruling that is still comfortably legible
   // as eight paper cubes, and coarse enough to read on screen at a glance.

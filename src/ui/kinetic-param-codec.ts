@@ -170,6 +170,11 @@ export const KINETIC_LIMITS = {
  * is told what they got, rather than quietly handed a coarser object.
  */
 
+/** A seed to shuffle to, in the range the URL keeps. */
+export function randomSeed(): number {
+  return Math.floor(Math.random() * (KINETIC_LIMITS.seed.max + 1));
+}
+
 export const DEFAULT_KINETIC_PARAMS: KineticParams = {
   mechanism: 'stack',
   pair: DEFAULT_JOINED_PAIR.id,
