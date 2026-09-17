@@ -3,17 +3,22 @@
  *
  * The second half of this file is the one that earns its keep: it takes every
  * stored design, decodes it against a surface built here and now, and asks the
- * geometry whether it really is a perfect maze in all six poses. A stored
- * design is a set of numbers that mean whatever the surface says they mean, so
- * anything that changes how a surface is built would quietly turn these into
- * nonsense. This is what refuses to let that happen quietly.
+ * geometry whether it really is a perfect maze in every shape its object shuts
+ * into. A stored design is a set of numbers that mean whatever the surface
+ * says they mean, so anything that changes how a surface is built would
+ * quietly turn these into nonsense. This is what refuses to let that happen
+ * quietly — for every object, because a cache entry filed under the wrong one
+ * would be caught by nothing else.
  */
 import { describe, it, expect } from 'vitest';
 import { decodeOpenClasses, encodeOpenClasses } from '../kinetic/stored-design.ts';
 import {
-  INFINITY_CUBE_DESIGNS, INFINITY_CUBE_RULINGS, infinityCubeDesigns,
-} from '../kinetic/mechanisms/infinity-cube-designs.ts';
-import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
+  CUBE_RING_DESIGNS, cubeRingDesigns,
+} from '../kinetic/mechanisms/cube-ring-designs.ts';
+import { createCubeRing } from '../kinetic/mechanisms/cube-ring.ts';
+import {
+  CUBE_RING_OBJECTS, cubeRingRulings,
+} from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface } from '../kinetic/surface.ts';
 import { stateStats } from '../kinetic/maze.ts';
 import { createRng } from '../prng.ts';
@@ -29,7 +34,7 @@ describe('writing a design down', () => {
         if (rng.next() < 0.4) open.add(classId);
       }
       const text = encodeOpenClasses(open, classCount);
-      const back = decodeOpenClasses({ cells: 0, classCount, open: text });
+      const back = decodeOpenClasses({ cells: 0, seed: 0, classCount, open: text });
       expect([...back].sort((a, b) => a - b)).toEqual([...open].sort((a, b) => a - b));
     }
   });
@@ -46,21 +51,27 @@ describe('writing a design down', () => {
 });
 
 describe('the mazes the folding page ships with', () => {
-  it('offers a few at each ruling', () => {
-    expect(INFINITY_CUBE_RULINGS.length).toBeGreaterThanOrEqual(2);
-    for (const cells of INFINITY_CUBE_RULINGS) {
-      expect(infinityCubeDesigns(cells).length).toBeGreaterThanOrEqual(2);
+  it('offers a few at every ruling of every object', () => {
+    let counted = 0;
+    for (const object of CUBE_RING_OBJECTS) {
+      const rulings = cubeRingRulings(object);
+      expect(rulings.length).toBeGreaterThanOrEqual(2);
+      for (const cells of rulings) {
+        const designs = cubeRingDesigns(object.id, cells);
+        expect(designs.length).toBeGreaterThanOrEqual(2);
+        counted += designs.length;
+      }
     }
-    expect(INFINITY_CUBE_DESIGNS.length).toBe(
-      INFINITY_CUBE_RULINGS.reduce((n, cells) => n + infinityCubeDesigns(cells).length, 0),
-    );
+    // Nothing filed under an object that is not on offer: a design nobody can
+    // ask for is a design nothing checks.
+    expect(CUBE_RING_DESIGNS.length).toBe(counted);
   });
 
-  for (const cells of INFINITY_CUBE_RULINGS) {
-    it(`is a perfect maze in every pose, at ${cells} cells across a face`, () => {
-      const mech = createInfinityCube({ cells });
+  for (const object of CUBE_RING_OBJECTS) for (const cells of cubeRingRulings(object)) {
+    it(`is a perfect maze in every pose of the ${object.id} at ${cells} cells`, () => {
+      const mech = createCubeRing(object, { cells });
       const surface = buildSurface(mech, { maxStates: mech.states.length });
-      const designs = infinityCubeDesigns(cells);
+      const designs = cubeRingDesigns(object.id, cells);
       for (const stored of designs) {
         expect(stored.classCount).toBe(surface.classCount);
         const open = decodeOpenClasses(stored);

@@ -29,7 +29,7 @@ import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { StackMechanism } from '../core/kinetic/mechanisms/stack.ts';
 import type { JoinedPairMechanism } from '../core/kinetic/mechanisms/joined.ts';
 import type { GyrationMechanism } from '../core/kinetic/mechanisms/gyration.ts';
-import type { InfinityCubeMechanism } from '../core/kinetic/mechanisms/infinity-cube.ts';
+import type { CubeRingMechanism } from '../core/kinetic/mechanisms/cube-ring.ts';
 
 export interface SheetPdf<P> {
   readonly doc: jsPDF;
@@ -112,7 +112,7 @@ export function exportGyrationPDF(
 }
 
 export function buildFoldPDF(
-  mech: InfinityCubeMechanism,
+  mech: CubeRingMechanism,
   surface: KineticSurface,
   design: KineticDesign,
   options: FoldSheetOptions = {},
@@ -121,13 +121,13 @@ export function buildFoldPDF(
 }
 
 export function exportFoldPDF(
-  mech: InfinityCubeMechanism,
+  mech: CubeRingMechanism,
   surface: KineticSurface,
   design: KineticDesign,
   maze: number,
   options: FoldSheetOptions = {},
 ): FoldSheetPlan {
   const { doc, plan } = buildFoldPDF(mech, surface, design, options);
-  doc.save(`folding-maze-${mech.cellsPerFace}-${maze}.pdf`);
+  doc.save(`folding-maze-${mech.object.id}-${mech.cellsPerFace}-${maze}.pdf`);
   return plan;
 }

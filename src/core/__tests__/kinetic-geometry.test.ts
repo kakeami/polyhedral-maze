@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
-import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
+import { createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface } from '../kinetic/surface.ts';
 import type { KineticSurface } from '../kinetic/surface.ts';
 import { pickStartGoal, searchAllStates, stateStats } from '../kinetic/maze.ts';

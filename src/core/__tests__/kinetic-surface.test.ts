@@ -3,7 +3,7 @@ import { buildSurface, buildSurfaceByState, type KineticSurface } from '../kinet
 import { decomposeByPlacement } from '../kinetic/placement-pairs.ts';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { createJoinedPair } from '../kinetic/mechanisms/joined.ts';
-import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
+import { createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import type { Mechanism } from '../kinetic/types.ts';
 import { IDENTITY } from '../kinetic/types.ts';
 

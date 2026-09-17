@@ -1,13 +1,19 @@
 /**
- * Wiring for the folding maze: mechanism -> design -> scene.
+ * Wiring for the folding maze: object -> mechanism -> design -> scene.
  *
- * A maze is named by a ruling and a seed, exactly as on the polyhedral page,
- * and found by searching for it (`maze-contracted.ts`, about a second at any
- * ruling on offer). The first few seeds at every ruling come with the page
- * (`core/kinetic/mechanisms/infinity-cube-designs.ts`) so that opening it, and
+ * A maze is named by an object, a ruling and a seed, much as the polyhedral
+ * page names one by a solid, a ruling and a seed, and found by searching for
+ * it (`maze-contracted.ts`, about a second at any ruling on offer). The first
+ * few seeds at every ruling come with the page
+ * (`core/kinetic/mechanisms/cube-ring-designs.ts`) so that opening it, and
  * dragging the ruling slider, never waits for anything; every other seed is
  * searched for here, a round at a time with the browser handed back in
  * between.
+ *
+ * The objects are rings of hinged cubes and differ in how many and how taped
+ * (`cube-ring-objects.ts`); everything else about them — how many shapes they
+ * shut into, which ones a hand can fold between, what is buried in each — is
+ * geometry, so this file never names a shape or counts one.
  *
  * A stored design is a set of class numbers, and class numbers mean whatever
  * the surface says they mean, so every one is verified as it is decoded — a
@@ -16,26 +22,28 @@
  *
  * The markers are the one thing this page cannot lift from the other two.
  * There is nowhere on a ring of cubes to print an entrance that is on show
- * however the thing is folded, so each marker goes on a *pair* of cells that
- * are on show one at a time (`pickPrintedEnds`): one entrance and one exit are
- * visible in every pose, and which two they are changes as it folds. The route
- * between them is redrawn on arrival, and only then — mid-fold it would be a
- * route through a shape the object is only passing through.
+ * however the thing is folded — not even on an object that keeps some squares
+ * out in every shape, since none of those is reliably a dead end — so each
+ * marker goes on a *pair* of cells that are on show one at a time
+ * (`pickPrintedEnds`): one entrance and one exit are visible in every pose,
+ * and which two they are changes as it folds. The route between them is
+ * redrawn on arrival, and only then — mid-fold it would be a route through a
+ * shape the object is only passing through.
  */
 
 import { createRng } from '../core/prng.ts';
 import { buildSurface } from '../core/kinetic/surface.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
-import { createInfinityCube } from '../core/kinetic/mechanisms/infinity-cube.ts';
-import type { InfinityCubeMechanism } from '../core/kinetic/mechanisms/infinity-cube.ts';
+import { createCubeRing } from '../core/kinetic/mechanisms/cube-ring.ts';
+import type { CubeRingMechanism, CubeRingObject } from '../core/kinetic/mechanisms/cube-ring.ts';
 import {
-  INFINITY_CUBE_RULINGS, infinityCubeDesign,
-} from '../core/kinetic/mechanisms/infinity-cube-designs.ts';
+  CUBE_RING_OBJECTS, cubeRingObject, cubeRingRulings,
+} from '../core/kinetic/mechanisms/cube-ring-objects.ts';
+import { cubeRingDesign } from '../core/kinetic/mechanisms/cube-ring-designs.ts';
 import { decodeOpenClasses } from '../core/kinetic/stored-design.ts';
 import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
 import { longestWalk, pickPrintedEnds, stateStats, treeRate } from '../core/kinetic/maze.ts';
 import { createContractedSearch } from '../core/kinetic/maze-contracted.ts';
-import { buildFoldGraph } from '../core/kinetic/fold-path.ts';
 import type { FoldGraph } from '../core/kinetic/fold-path.ts';
 import {
   buildKineticPieces, kineticSolutionPath, kineticWalls, solutionLength,
@@ -44,14 +52,12 @@ import { exportFoldPDF } from '../render/pdf-kinetic-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
-import {
-  FOLD_LIMITS, decodeFoldParams, encodeFoldParams, randomSeed,
-} from './fold-param-codec.ts';
+import { decodeFoldParams, encodeFoldParams, randomSeed } from './fold-param-codec.ts';
 import type { FoldParams } from './fold-param-codec.ts';
 import { SCENE_PRESETS } from '../render/scene-presets.ts';
 
 interface Build {
-  mech: InfinityCubeMechanism;
+  mech: CubeRingMechanism;
   surface: KineticSurface;
   graph: FoldGraph;
   design: KineticDesign;
@@ -66,7 +72,7 @@ interface Build {
 
 /** Mechanism and surface, kept so that moving between mazes costs nothing. */
 interface Ruling {
-  mech: InfinityCubeMechanism;
+  mech: CubeRingMechanism;
   surface: KineticSurface;
   graph: FoldGraph;
 }
@@ -76,8 +82,12 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   const scene = createFoldScene(viewportEl, opening.style);
   const controls = createFoldControls(controlsEl, opening);
 
-  const rulings = new Map<number, Ruling>();
+  // Keyed by object and ruling both: a visitor who tries the other object and
+  // comes back should find what they left, and each of these is a surface
+  // rather than a number.
+  const rulings = new Map<string, Ruling>();
   let build: Build | null = null;
+  let object = cubeRingObject(opening.object);
   let cells = opening.cells;
   let seed = opening.seed;
   let poseIndex = opening.pose;
@@ -85,15 +95,18 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   let buildToken = 0;
 
   function rulingFor(next: number): Ruling {
-    const had = rulings.get(next);
+    const key = `${object.id}:${next}`;
+    const had = rulings.get(key);
     if (had) return had;
-    const mech = createInfinityCube({ cells: next });
+    const mech = createCubeRing(object, { cells: next });
     const made: Ruling = {
       mech,
       surface: buildSurface(mech, { maxStates: mech.states.length }),
-      graph: buildFoldGraph(mech),
+      // Worked out once per object rather than once per ruling: which shapes
+      // it folds between has nothing to do with how finely it is ruled.
+      graph: mech.foldGraph(),
     };
-    rulings.set(next, made);
+    rulings.set(key, made);
     return made;
   }
 
@@ -106,7 +119,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
    * moment ago.
    */
   function storedDesign(ruling: Ruling, wanted: number): KineticDesign | null {
-    const stored = infinityCubeDesign(ruling.mech.cellsPerFace, wanted);
+    const stored = cubeRingDesign(ruling.mech.object.id, ruling.mech.cellsPerFace, wanted);
     if (!stored || stored.classCount !== ruling.surface.classCount) return null;
     const design: KineticDesign = {
       open: decodeOpenClasses(stored),
@@ -147,7 +160,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
 
   /** The panel as it stands, with the things the panel does not hold. */
   function currentParams(): FoldParams {
-    return { ...controls.getParams(), cells, seed, pose: poseIndex };
+    return { ...controls.getParams(), object: object.id, cells, seed, pose: poseIndex };
   }
 
   function refreshPose() {
@@ -270,6 +283,19 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.holdAutoFold();
   });
 
+  // A different object is a different everything — different shapes, a
+  // different number of them, a different surface — so the maze is found
+  // again. The seed carries over, for the same reason it does across rulings:
+  // it is a name rather than a description of any one object.
+  controls.onObject(next => {
+    if (next === object.id) return;
+    object = cubeRingObject(next);
+    cells = nearestRulingOf(object, cells);
+    controls.setRulings(cubeRingRulings(object), cells);
+    rebuild(false);
+    scene.holdAutoFold();
+  });
+
   controls.onRuling(next => {
     if (next === cells) return;
     cells = next;
@@ -298,15 +324,17 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // it is made of — but not the three switches, which are how the visitor has
   // decided to look at it rather than what they are looking at.
   controls.onAction('shuffle-all', () => {
-    const rulings = INFINITY_CUBE_RULINGS;
+    object = CUBE_RING_OBJECTS[Math.floor(Math.random() * CUBE_RING_OBJECTS.length)] ?? object;
+    const rulings = cubeRingRulings(object);
     cells = rulings[Math.floor(Math.random() * rulings.length)] ?? cells;
     seed = randomSeed();
-    poseIndex = Math.floor(Math.random() * FOLD_LIMITS.poses);
+    poseIndex = Math.floor(Math.random() * rulingFor(cells).mech.states.length);
     const style = SCENE_PRESETS[Math.floor(Math.random() * SCENE_PRESETS.length)];
     if (style) {
       controls.setStyle(style.id);
       scene.setPreset(style.id);
     }
+    controls.setObject(object.id);
     controls.setRulings(rulings, cells);
     // Keeping the pose, because the pose is one of the things just shuffled.
     // `rebuild(false)` would go back to the first shape and undo it.
@@ -343,8 +371,8 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       try {
         const plan = exportFoldPDF(mech, surface, design, from, { ends });
         controls.showToast(
-          `${plan.sheets.length} sheets — eight cubes ${plan.edgeMm.toFixed(0)} mm on a side, ` +
-          `folding into a ${plan.cubeMm.toFixed(0)} mm cube`,
+          `${plan.sheets.length} sheets — ${mech.pieceCount} cubes ` +
+          `${plan.edgeMm.toFixed(0)} mm on a side`,
         );
       } catch (error) {
         controls.showToast(`Export failed: ${(error as Error).message}`);
@@ -377,36 +405,37 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   });
 
   window.addEventListener('resize', () => scene.resize());
-  controls.setRulings(INFINITY_CUBE_RULINGS, cells);
+  controls.setObjects(CUBE_RING_OBJECTS, object.id);
+  controls.setRulings(cubeRingRulings(object), cells);
   // Opened in the pose the link asked for, and cut to it rather than folded:
   // there is nothing to have come from.
   rebuild(true);
 }
 
+/** The ruling nearest the one on show, among those the object offers. */
+function nearestRulingOf(next: CubeRingObject, cells: number): number {
+  const rulings = cubeRingRulings(next);
+  return rulings.reduce((best, ruling) =>
+    Math.abs(ruling - cells) < Math.abs(best - cells) ? ruling : best, rulings[0]!);
+}
+
 /**
  * What to call each pose, and what the maze is like in it.
  *
- * The name is read off the object rather than stored: a pose whose eight cubes
- * span two lattice cells each way is a cube, and one that spans one by two by
- * four is a plank. Numbered in the order the mechanism found them, which is
- * the order the buttons stand in.
+ * The name comes from the mechanism, which reads it off the shape rather than
+ * storing it: a frame has a hole through it, a plank lies flat, a cube is the
+ * solid block that is square. Numbered in the order the mechanism found them,
+ * which is the order the buttons stand in.
  */
 function describePoses(
-  mech: InfinityCubeMechanism,
+  mech: CubeRingMechanism,
   surface: KineticSurface,
   design: KineticDesign,
 ): FoldPose[] {
-  let cubes = 0;
-  let planks = 0;
-  return mech.states.map((state, index) => {
-    const span = [0, 1, 2]
-      .map(axis => new Set(state.map(p => p.offset[axis]!.toFixed(1))).size)
-      .sort((a, b) => a - b)
-      .join('x');
-    const label = span === '2x2x2' ? `Cube ${++cubes}` : `Plank ${++planks}`;
+  return mech.poses.map((pose, index) => {
     const stats = stateStats(surface, design, index);
     return {
-      label,
+      label: pose.label,
       cells: surface.visibleCount[index] ?? 0,
       passages: stats.edges,
       longestWalk: longestWalk(surface, design, index),

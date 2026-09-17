@@ -1,6 +1,6 @@
 /**
- * The folding maze, as something to cut out: eight cube nets, one to a sheet,
- * and a sheet that says how they go together.
+ * The folding maze, as something to cut out: one cube net to a sheet, and a
+ * sheet that says how they go together.
  *
  * DOM-free, like `stack-sheet-model.ts`, and it emits the same `PageItem`
  * primitives, so `pdf-face-page-painter.ts` paints it unchanged.
@@ -18,10 +18,10 @@
  * is taken.
  *
  * **Nothing is written on the model.** Everything inside the cut line is maze.
- * That is why the first sheet draws the assembled plank from all four sides
- * with its real walls on it: by the time eight cubes are built they are eight
- * white cubes with mazes on them, and the only thing that says which is which,
- * and which way up, is the drawing itself.
+ * That is why the first sheet draws the object, laid out as it is taped, from
+ * all four sides with its real walls on it: by the time the cubes are built
+ * they are identical white cubes with mazes on them, and the only thing that
+ * says which is which, and which way up, is the drawing itself.
  */
 
 import type { Vec2 } from '../core/vec2.ts';
@@ -37,8 +37,8 @@ import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
 import { pickPrintedEnds, treeRate } from '../core/kinetic/maze.ts';
 import type {
-  InfinityCubeMechanism, Lattice, TapeSeam,
-} from '../core/kinetic/mechanisms/infinity-cube.ts';
+  CubeRingMechanism, Lattice, TapeSeam,
+} from '../core/kinetic/mechanisms/cube-ring.ts';
 
 export interface FoldSheetOptions {
   /** Edge of one cube, in mm. Defaults to the largest the sheet allows. */
@@ -60,8 +60,6 @@ export interface FoldSheetPlan {
   readonly sheets: FoldSheet[];
   readonly edgeMm: number;
   readonly cellMm: number;
-  /** The folded 2x2x2, across its face. */
-  readonly cubeMm: number;
   readonly perfectStates: number;
   readonly stateCount: number;
   /** Hinges whose edge did not come out on the boundary of its net. */
@@ -256,7 +254,7 @@ export interface NetFace {
  * squares that end up side by side on the page must be the squares that share
  * an edge on the cube.
  */
-export function foldNetFaces(mech: InfinityCubeMechanism, piece: number): NetFace[] {
+export function foldNetFaces(mech: CubeRingMechanism, piece: number): NetFace[] {
   return bestLayout(hingeKeysOf(mech, piece)).map(face => ({
     face: faceNumberOf(face.frame.n),
     col: face.col,
@@ -269,7 +267,7 @@ export function foldNetFaces(mech: InfinityCubeMechanism, piece: number): NetFac
 }
 
 /** The two hinge edges of one cube, in its own frame, keyed as edges are. */
-function hingeKeysOf(mech: InfinityCubeMechanism, piece: number): string[] {
+function hingeKeysOf(mech: CubeRingMechanism, piece: number): string[] {
   return mech.tapeSeams()
     .filter(seam => seam.pieces.includes(piece))
     .map(seam => {
@@ -279,7 +277,7 @@ function hingeKeysOf(mech: InfinityCubeMechanism, piece: number): string[] {
 }
 
 export function buildFoldSheets(
-  mech: InfinityCubeMechanism,
+  mech: CubeRingMechanism,
   surface: KineticSurface,
   design: KineticDesign,
   options: FoldSheetOptions = {},
@@ -320,7 +318,6 @@ export function buildFoldSheets(
     sheets,
     edgeMm: edge,
     cellMm: edge / cells,
-    cubeMm: edge * 2,
     perfectStates: rate.perfect,
     stateCount: surface.stateCount,
     hingesOffBoundary: offBoundary,
@@ -351,7 +348,7 @@ interface CubeLayout {
  * crease ticks clear.
  */
 function cubeSheet(
-  mech: InfinityCubeMechanism,
+  mech: CubeRingMechanism,
   surface: KineticSurface,
   design: KineticDesign,
   ends: PrintedEnds,
@@ -549,7 +546,7 @@ function creaseTicks(
 }
 
 interface FacePaint {
-  mech: InfinityCubeMechanism;
+  mech: CubeRingMechanism;
   surface: KineticSurface;
   design: Pick<KineticDesign, 'open'>;
   ends: PrintedEnds | null;
@@ -667,16 +664,17 @@ function segmentKey(a: Vec2, b: Vec2): string {
 }
 
 /**
- * The sheet that says how the eight cubes go together.
+ * The sheet that says how the cubes go together.
  *
- * Four views of the assembled plank — from above, from below, and from each of
- * its long sides — with the real maze on them and a bar across every edge that
- * takes tape. It has to be the real maze: eight cubes of the same size with no
- * writing anywhere on them are told apart only by what is printed on them, and
- * which way up each one goes is the same question again.
+ * Four views of the object as it is laid out to be taped — from above, from
+ * below, and from each of its long sides — with the real maze on them and a
+ * bar across every edge that takes tape. It has to be the real maze: cubes of
+ * the same size with no writing anywhere on them are told apart only by what
+ * is printed on them, and which way up each one goes is the same question
+ * again.
  */
 function assemblySheet(
-  mech: InfinityCubeMechanism,
+  mech: CubeRingMechanism,
   surface: KineticSurface,
   design: KineticDesign,
   ends: PrintedEnds,
@@ -688,23 +686,23 @@ function assemblySheet(
   const items: PageItem[] = [];
   let y = sheet.margin;
 
+  const pieces = mech.pieceCount;
   items.push({
     kind: 'text', at: [sheet.margin, y + S.titleSize],
-    text: 'Folding maze — eight cubes taped into a ring',
+    text: `Folding maze — ${countWord(pieces)} cubes taped into a ring`,
     size: S.titleSize, color: S.titleColor, align: 'left', bold: true,
   });
   y += S.titleSize + 3;
 
   const notes = [
-    `Print at 100%. Eight more sheets follow, one cube each, ${edge.toFixed(1)} mm on a side.`,
+    `Print at 100%. ${capitalise(countWord(pieces))} more sheets follow, one cube each, ` +
+      `${edge.toFixed(1)} mm on a side.`,
     'Glue each sheet to thin card, cut the outline, score the creases and glue the cube up.',
     'Four creases run between two notches in the outline; the fifth is marked by a tick at each end.',
-    'Then lay the eight cubes out as the four views below show — they are the real drawing, so a',
-    'cube goes where its own pattern is — and hinge them with clear tape along the orange bars.',
-    'Tape on the outside, one strip an edge, and leave it slack enough to fold both ways.',
-    perfect === 6
-      ? 'The ring shuts into six shapes: four planks and two cubes. Every one is a perfect maze.'
-      : `The ring shuts into six shapes, of which ${perfect} are perfect mazes.`,
+    `Then lay the ${countWord(pieces)} cubes out as the four views below show — they are the real`,
+    'drawing, so a cube goes where its own pattern is — and hinge them with clear tape along the',
+    'orange bars. Tape on the outside, one strip an edge, slack enough to fold both ways.',
+    shapesSentence(mech, perfect),
     'Two squares carry an S and two carry a G: whichever way it is folded, one of each is outside.',
   ];
   for (const note of notes) {
@@ -720,8 +718,10 @@ function assemblySheet(
   const views: { label: string; frame: Frame }[] = [
     { label: 'From above', frame: { n: [0, 0, 1], r: [1, 0, 0], u: [0, 1, 0] } },
     { label: 'From below (turned over towards you)', frame: { n: [0, 0, -1], r: [1, 0, 0], u: [0, -1, 0] } },
-    { label: 'The near side (y = 0)', frame: { n: [0, -1, 0], r: [1, 0, 0], u: [0, 0, 1] } },
-    { label: 'The far side (y = 2)', frame: { n: [0, 1, 0], r: [-1, 0, 0], u: [0, 0, 1] } },
+    { label: `The near side (y = ${Math.min(...mech.ring.map(cell => cell[1]))})`,
+      frame: { n: [0, -1, 0], r: [1, 0, 0], u: [0, 0, 1] } },
+    { label: `The far side (y = ${Math.max(...mech.ring.map(cell => cell[1])) + 1})`,
+      frame: { n: [0, 1, 0], r: [-1, 0, 0], u: [0, 0, 1] } },
   ];
 
   for (const view of views) {
@@ -778,20 +778,53 @@ function assemblySheet(
   return items;
 }
 
-/** The taped edge of a seam, in the coordinates the plank is laid out in. */
+/**
+ * What the ring shuts into, in words, read off the poses it reports.
+ *
+ * The builder is told what the thing does before they build it, and no two
+ * objects here do the same: eight cubes give four planks and two cubes, twelve
+ * give three planks, a block and a frame with a hole through it.
+ */
+function shapesSentence(mech: CubeRingMechanism, perfect: number): string {
+  const kinds = new Map<string, number>();
+  for (const pose of mech.poses) {
+    const kind = pose.label.split(' ')[0]!.toLowerCase();
+    kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+  }
+  const parts = [...kinds].map(([kind, count]) =>
+    (count === 1 ? `a ${kind}` : `${countWord(count)} ${kind}s`));
+  const list = parts.length > 1
+    ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+    : parts[0] ?? '';
+  const total = mech.poses.length;
+  return `The ring shuts into ${countWord(total)} shapes: ${list}. ` + (perfect === total
+    ? 'Every one is a perfect maze.'
+    : `Of them ${perfect} are perfect mazes.`);
+}
+
+const NUMBERS = [
+  'no', 'one', 'two', 'three', 'four', 'five', 'six',
+  'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+];
+
+const countWord = (n: number): string => NUMBERS[n] ?? String(n);
+
+const capitalise = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** The taped edge of a seam, in the coordinates the layout is drawn in. */
 function tapeInWorld(ring: readonly Lattice[], seam: TapeSeam): Vec3[] {
   const cell = ring[seam.pieces[0]]!;
   const centre = add(cell as unknown as Vec3, [0.5, 0.5, 0.5]);
   return seam.ends[0].map(point => add(point, centre));
 }
 
-/** Whether a cube of the plank has that face on the outside of it. */
+/** Whether a cube of the layout has that face on the outside of it. */
 function outsideOf(ring: readonly Lattice[], cell: Lattice, normal: Vec3): boolean {
   const beyond = add(cell as unknown as Vec3, normal);
   return !ring.some(other => other.every((x, axis) => x === beyond[axis]));
 }
 
-/** Whether a point is on the face of the plank that looks that way. */
+/** Whether a point is on the face of the layout that looks that way. */
 function onThisSide(ring: readonly Lattice[], point: Vec3, normal: Vec3): boolean {
   const axis = normal.findIndex(x => Math.abs(x) > 0.5);
   const reach = normal[axis]! > 0

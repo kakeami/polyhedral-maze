@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
-import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
+import { createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
 import { stateStats, treeRate, type KineticDesign } from '../kinetic/maze.ts';
 import {

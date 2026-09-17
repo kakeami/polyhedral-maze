@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { createJoinedPair } from '../kinetic/mechanisms/joined.ts';
-import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
+import { createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface, buildSurfaceByState } from '../kinetic/surface.ts';
 import type { KineticSurface } from '../kinetic/surface.ts';
 import { chainOf } from '../kinetic/chain.ts';

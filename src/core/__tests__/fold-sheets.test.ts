@@ -9,7 +9,7 @@
  * get wrong on its own, which is falling off the sheet.
  */
 import { describe, it, expect } from 'vitest';
-import { createInfinityCube } from '../kinetic/mechanisms/infinity-cube.ts';
+import { createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface } from '../kinetic/surface.ts';
 import { pickPrintedEnds, searchAllStates } from '../kinetic/maze.ts';
 import { createRng } from '../prng.ts';
@@ -97,7 +97,6 @@ describe('the sheets', () => {
     expect(plan.edgeMm).toBeGreaterThanOrEqual(55);
     expect(plan.edgeMm).toBeLessThanOrEqual(63);
     expect(plan.cellMm).toBeCloseTo(plan.edgeMm / mech.cellsPerFace, 9);
-    expect(plan.cubeMm).toBe(plan.edgeMm * 2);
   });
 
   it('keeps everything on the paper, tabs and tape marks included', () => {

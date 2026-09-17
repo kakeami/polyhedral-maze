@@ -7,9 +7,10 @@ import {
   encodeFoldParams,
   nearestRuling,
 } from '../../ui/fold-param-codec.ts';
+import { cubeRingDesign } from '../kinetic/mechanisms/cube-ring-designs.ts';
 import {
-  INFINITY_CUBE_RULINGS, infinityCubeDesign,
-} from '../kinetic/mechanisms/infinity-cube-designs.ts';
+  CUBE_RING_OBJECTS, DEFAULT_CUBE_RING, FRAME_RING, cubeRingRulings,
+} from '../kinetic/mechanisms/cube-ring-objects.ts';
 
 describe('the folding maze in a URL', () => {
   it('says nothing when nothing has changed', () => {
@@ -20,7 +21,7 @@ describe('the folding maze in a URL', () => {
   it('round-trips what someone was looking at', () => {
     const params = clampFoldParams({
       ...DEFAULT_FOLD_PARAMS,
-      cells: INFINITY_CUBE_RULINGS[INFINITY_CUBE_RULINGS.length - 1]!,
+      cells: cubeRingRulings(DEFAULT_CUBE_RING).at(-1)!,
       seed: 8675309, pose: 4, showSolution: true, fold: false, style: 'obsidian',
     });
     expect(decodeFoldParams(encodeFoldParams(params))).toEqual(params);
@@ -34,12 +35,21 @@ describe('the folding maze in a URL', () => {
     expect(decodeFoldParams(encoded)).toEqual(off);
   });
 
+  it('carries which object it is, and opens on the default when it cannot', () => {
+    const other = clampFoldParams({ ...DEFAULT_FOLD_PARAMS, object: FRAME_RING.id });
+    expect(encodeFoldParams(other)).toContain(`object=${FRAME_RING.id}`);
+    expect(decodeFoldParams(encodeFoldParams(other)).object).toBe(FRAME_RING.id);
+    // A link to an object this page no longer has opens on the one it does.
+    expect(decodeFoldParams('?object=a-ring-of-forty').object).toBe(DEFAULT_CUBE_RING.id);
+    expect(CUBE_RING_OBJECTS.map(object => object.id)).toContain(DEFAULT_CUBE_RING.id);
+  });
+
   it('asks the object what rulings it may ask for', () => {
     // A link cannot name a ruling the page does not offer — it would have
     // nothing to draw, and quietly showing a neighbouring one beats an empty
     // screen. A *seed* it can name freely: any of them is a maze, found here
     // if it is not one of the few that ship with the page.
-    expect(INFINITY_CUBE_RULINGS).toContain(nearestRuling(99));
+    expect(cubeRingRulings(DEFAULT_CUBE_RING)).toContain(nearestRuling(DEFAULT_CUBE_RING, 99));
     expect(clampFoldParams({ ...DEFAULT_FOLD_PARAMS, seed: 1e9 }).seed)
       .toBe(FOLD_LIMITS.maxSeed);
     expect(clampFoldParams({ ...DEFAULT_FOLD_PARAMS, seed: -5 }).seed).toBe(0);
@@ -52,11 +62,14 @@ describe('the folding maze in a URL', () => {
     const old = decodeFoldParams('?n=4&maze=3');
     expect(old.cells).toBe(4);
     expect(old.seed).toBe(3);
-    expect(infinityCubeDesign(4, 3)).not.toBeNull();
+    expect(cubeRingDesign(DEFAULT_CUBE_RING.id, 4, 3)).not.toBeNull();
   });
 
-  it('brings a pose back into the six the object has', () => {
-    expect(clampFoldParams({ ...DEFAULT_FOLD_PARAMS, pose: 40 }).pose).toBe(FOLD_LIMITS.poses - 1);
+  it('leaves the pose to the object, but never below zero', () => {
+    // How many shapes there are is worked out from the taping rather than
+    // written down here, so a pose beyond the end is brought into range where
+    // the object is built. What a URL can settle on its own is the floor.
+    expect(clampFoldParams({ ...DEFAULT_FOLD_PARAMS, pose: 40 }).pose).toBe(40);
     expect(clampFoldParams({ ...DEFAULT_FOLD_PARAMS, pose: -3 }).pose).toBe(0);
   });
 

@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createInfinityCube, PLANK_RING,
-} from '../kinetic/mechanisms/infinity-cube.ts';
+} from '../kinetic/mechanisms/cube-ring-objects.ts';
 import {
   buildFoldGraph, chooseNextPose, foldPath, poseDistances, stateDuringFold, sweepIsClear,
 } from '../kinetic/fold-path.ts';
@@ -126,21 +126,22 @@ describe('getting from one pose to another', () => {
     expect(sameState(path[path.length - 1]!.to, mech.states[5]!)).toBe(true);
   });
 
-  it('cannot, on a taping whose crossing seams are not in line', () => {
+  it('and on a taping whose crossing seams are not in line, there is less to get to', () => {
     // The taping this project first recommended. It shuts into the same six
-    // poses and folds between only three of them: the rest are on the far side
-    // of a move the tape does not allow.
+    // shapes and folds between only three of them: the rest are on the far
+    // side of a move the tape does not allow, so they are not states at all —
+    // short of peeling the tape off, no hand can put the object into one.
     const stuck = createInfinityCube({
       cells: 1, ring: PLANK_RING, hinges: '32021200'.split('').map(Number),
     });
+    expect(stuck.states.length).toBe(3);
+    expect(stuck.strays.length).toBe(3);
     const stuckGraph = buildFoldGraph(stuck);
-    let unreachable = 0;
     for (let from = 0; from < stuck.states.length; from++) {
       for (let to = 0; to < stuck.states.length; to++) {
-        if (foldPath(stuckGraph, from, to) === null) unreachable++;
+        expect(foldPath(stuckGraph, from, to)).not.toBeNull();
       }
     }
-    expect(unreachable).toBe(18);
   });
 });
 

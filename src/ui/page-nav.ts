@@ -55,7 +55,7 @@ const PAGES: readonly Page[] = [
     id: 'folding',
     label: 'Folding',
     path: 'fold/',
-    title: 'A maze on eight cubes taped into a ring — fold it and half the maze '
+    title: 'A maze on cubes taped into a ring — fold it and part of the maze '
       + 'goes inside, and what is left is still a perfect maze',
   },
 ];

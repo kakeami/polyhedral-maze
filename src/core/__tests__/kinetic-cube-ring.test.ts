@@ -1,22 +1,33 @@
 /**
- * The infinity cube is the first mechanism that buries part of its own surface.
+ * A ring of hinged cubes is the first mechanism that buries part of its own
+ * surface.
  *
  * Everything the other mechanisms rely on — a cell is a cell, the passage
  * count is the same in every state — stops being free here, so what is checked
  * is not only that a design comes out but that it is a real maze on the real
  * outside of the object, audited from the geometry rather than from the same
  * counters the search used.
+ *
+ * Most of this is about the eight-cube ring, which is the one with the longest
+ * history here. The last part is about what is asked of *any* object of this
+ * kind, and about the twelve-cube one, which does the thing the eight cannot:
+ * it shuts into a frame, so the same printed pattern has to be a perfect maze
+ * on a torus as well as on a sphere.
  */
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
+import { createCubeRing, hingeLine } from '../kinetic/mechanisms/cube-ring.ts';
 import {
-  createInfinityCube, hingeLine, DEFAULT_HINGES, PLANK_RING,
-} from '../kinetic/mechanisms/infinity-cube.ts';
+  CUBE_RING_OBJECTS, DEFAULT_HINGES, FRAME_RING, INFINITY_CUBE, PLANK_RING, createInfinityCube,
+} from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
 import { applyPlacement, type KineticCell, type Placement } from '../kinetic/types.ts';
 import {
-  longestWalk, pickPrintedEnds, pickStartGoal, searchAllStates, type KineticDesign,
+  longestWalk, pickPrintedEnds, pickStartGoal, searchAllStates, stateStats,
+  type KineticDesign,
 } from '../kinetic/maze.ts';
+import { contractedSearch } from '../kinetic/maze-contracted.ts';
+import { poseDistances } from '../kinetic/fold-path.ts';
 import { UnionFind } from '../graph.ts';
 import { createRng } from '../prng.ts';
 import type { Vec3 } from '../types.ts';
@@ -408,5 +419,92 @@ describe('a drawing that agrees with itself where it shows', () => {
     const loose = buildSurface(stack, { weld: 'walkable' });
     expect(safe.classCount).toBe(loose.classCount);
     expect([...safe.classOf]).toEqual([...loose.classOf]);
+  });
+});
+
+describe('every object the page offers', () => {
+  for (const object of CUBE_RING_OBJECTS) {
+    const ring = createCubeRing(object, { cells: 1 });
+
+    it(`${object.id}: every state is a shape a hand can set down`, () => {
+      expect(ring.states.length).toBe(ring.poses.length);
+      expect(ring.states.length).toBeGreaterThan(1);
+      for (const pose of ring.poses) {
+        const [a, b, c] = pose.span as [number, number, number];
+        // A solid block, or one layer thick. Anything else is a shape that
+        // stands up only while someone is holding it.
+        expect(a * b * c === ring.pieceCount || Math.min(a, b, c) === 1).toBe(true);
+      }
+      // No two shapes with the same name, so the panel's list is a list of
+      // things rather than of things and their duplicates.
+      expect(new Set(ring.poses.map(pose => pose.label)).size).toBe(ring.poses.length);
+    });
+
+    it(`${object.id}: can be folded from any state to any other`, () => {
+      const distances = poseDistances(ring.foldGraph());
+      for (let from = 0; from < ring.states.length; from++) {
+        for (let to = 0; to < ring.states.length; to++) {
+          expect(distances[from]![to]!).toBeGreaterThanOrEqual(0);
+        }
+      }
+    });
+  }
+
+  it('leaves the eight-cube ring exactly as it was', () => {
+    // The mazes that ship with the page are sets of class numbers, and class
+    // numbers mean whatever the surface says they mean. So this is not a
+    // preference about naming: if the general machinery found the six shapes
+    // in another order, or found a seventh, every stored design would quietly
+    // become a different maze.
+    const eight = createCubeRing(INFINITY_CUBE, { cells: 1 });
+    expect(eight.states.length).toBe(6);
+    expect(eight.poses.map(pose => pose.label))
+      .toEqual(['Plank 1', 'Plank 2', 'Cube 1', 'Cube 2', 'Plank 3', 'Plank 4']);
+    expect(eight.poses.every(pose => pose.genus === 0)).toBe(true);
+  });
+});
+
+describe('the twelve-cube ring, which shuts into a frame', () => {
+  const twelve = createCubeRing(FRAME_RING, { cells: 2 });
+  const skin = buildSurface(twelve, { maxStates: twelve.states.length });
+
+  it('changes the genus of its own surface, which eight cubes cannot', () => {
+    expect(twelve.states.length).toBe(5);
+    expect(new Set(twelve.poses.map(pose => pose.genus))).toEqual(new Set([0, 1]));
+    expect(twelve.poses.filter(pose => pose.label.startsWith('Frame')).length).toBe(1);
+  });
+
+  it('shows a different amount of itself in almost every shape', () => {
+    // 160, 128, 152, 152, 184 at two cells across a face: the passage count is
+    // not the same from one shape to the next, which is the whole difficulty.
+    expect([...skin.visibleCount].sort((a, b) => a - b)[0])
+      .toBeLessThan([...skin.visibleCount].sort((a, b) => b - a)[0]!);
+    expect(skin.hidesCells).toBe(true);
+  });
+
+  it('is a perfect maze in all five of them, on a design found here', () => {
+    const found = contractedSearch(skin, { rng: createRng(1) });
+    expect(found.rate.rate).toBe(1);
+    for (let state = 0; state < skin.stateCount; state++) {
+      const stats = stateStats(skin, found.design, state);
+      expect(stats.perfect).toBe(true);
+      expect(stats.edges).toBe(skin.visibleCount[state]! - 1);
+    }
+  });
+
+  it('has somewhere to print a marker, though not on a cell that is always out', () => {
+    const found = contractedSearch(skin, { rng: createRng(1) });
+    const ends = pickPrintedEnds(skin, found.design);
+    // Unlike the eight-cube ring it does keep some squares out in every shape
+    // — and still cannot print a marker on one of them, because none of those
+    // is reliably a dead end. So the markers go in pairs here too.
+    expect(skin.alwaysVisible.length).toBeGreaterThan(0);
+    expect(ends.start.length).toBe(2);
+    expect(ends.goal.length).toBe(2);
+    for (let state = 0; state < skin.stateCount; state++) {
+      const out = skin.visibleOfState(state);
+      expect(ends.start.filter(cell => out[cell]).length).toBe(1);
+      expect(ends.goal.filter(cell => out[cell]).length).toBe(1);
+    }
   });
 });

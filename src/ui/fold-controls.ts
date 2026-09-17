@@ -1,9 +1,15 @@
 /**
  * The panel for the folding maze.
  *
- * Deliberately small. The object has one shape and one taping — both settled
- * by what folds rather than by anything a visitor would want to turn — so what
- * is left to set is how finely it is ruled and which maze.
+ * Deliberately small. An object is a ring of cubes and a taping, both settled
+ * by what can be folded rather than by anything a visitor would want to turn,
+ * so what is left to set is which of them, how finely it is ruled, and which
+ * maze.
+ *
+ * Which object is a select and not a slider, because the two on offer are not
+ * two settings of one thing: a different ring folds into a different number of
+ * different shapes. It stands first, where the polyhedral page puts the solid,
+ * since everything under it is read in terms of it.
  *
  * Which maze is a *seed*, and the two Shuffles beside it are the polyhedral
  * page's, doing the same thing: one asks for a different maze on the same
@@ -14,7 +20,7 @@
  * Built like `controls.ts` and `kinetic-controls.ts`, and with their
  * vocabulary: a number is a slider with its value in the label, a named choice
  * is a select, and a seed is a number field. So the ruling is a slider, the
- * seed is a field, and the pose — six shapes with names — is a select.
+ * seed is a field, and the pose — a handful of shapes with names — is a select.
  *
  * The order is theirs too, and it is why the pose is not last: every panel
  * here ends with Seed and then Style, so those two are found in the same place
@@ -37,6 +43,7 @@
 
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
+import type { CubeRingObject } from '../core/kinetic/mechanisms/cube-ring.ts';
 import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
 import { byId, esc, showToast } from './panel.ts';
 import { FOLD_LIMITS } from './fold-param-codec.ts';
@@ -66,6 +73,10 @@ export interface FoldMetrics {
 export interface FoldControlsContext {
   /** Everything a link carries, read off the panel as it stands. */
   getParams(): FoldParams;
+  /** The rings of cubes on offer, and which one is on show. */
+  setObjects(objects: readonly CubeRingObject[], current: string): void;
+  /** Follows a shuffle that picked a different object. */
+  setObject(id: string): void;
   /** The rulings there are mazes for, and which one is on show. */
   setRulings(rulings: readonly number[], current: number): void;
   /** The seed of the maze on show, and whether it came off the cache. */
@@ -79,6 +90,7 @@ export interface FoldControlsContext {
   setStatus(text: string): void;
   setProgress(fraction: number | null): void;
   setBusy(busy: boolean): void;
+  onObject(cb: (id: string) => void): void;
   onPose(cb: (index: number) => void): void;
   onRuling(cb: (cells: number) => void): void;
   onSeed(cb: (seed: number) => void): void;
@@ -98,6 +110,8 @@ export function createFoldControls(
   container.innerHTML = buildHTML(initial);
   const el = byId(container);
 
+  const objectSelect = el<HTMLSelectElement>('fold-object');
+  const objectNote = el<HTMLDivElement>('fold-object-note');
   const cellsSlider = el<HTMLInputElement>('fold-cells');
   const cellsValue = el<HTMLSpanElement>('fold-cells-val');
   const seedInput = el<HTMLInputElement>('fold-seed');
@@ -119,11 +133,19 @@ export function createFoldControls(
 
   const actions = new Map<string, () => void>();
   let rulings: readonly number[] = [];
+  let objects: readonly CubeRingObject[] = [];
+  let objectCallback: ((id: string) => void) | null = null;
   let poseCallback: ((index: number) => void) | null = null;
   let rulingCallback: ((cells: number) => void) | null = null;
   let seedCallback: ((seed: number) => void) | null = null;
 
   const rulingAt = (index: number) => rulings[index] ?? rulings[0] ?? 0;
+  const blurbOf = (id: string) => objects.find(object => object.id === id)?.blurb ?? '';
+
+  objectSelect.addEventListener('change', () => {
+    objectNote.textContent = blurbOf(objectSelect.value);
+    objectCallback?.(objectSelect.value);
+  });
 
   // On `input` rather than `change`: the first seeds at every ruling are kept
   // with the page, so dragging this moves between objects that are already in
@@ -156,6 +178,7 @@ export function createFoldControls(
   return {
     getParams() {
       return {
+        object: objectSelect.value,
         cells: rulingAt(Number(cellsSlider.value)),
         seed: Number(seedInput.value),
         pose: Number(poseSelect.value),
@@ -164,6 +187,18 @@ export function createFoldControls(
         autoRotate: autoRotate.checked,
         style: styleSelect.value as PresetId,
       };
+    },
+    setObjects(next, current) {
+      objects = next;
+      objectSelect.innerHTML = next.map(object =>
+        `<option value="${esc(object.id)}"${object.id === current ? ' selected' : ''}>` +
+        `${esc(object.label)}</option>`).join('');
+      objectSelect.value = current;
+      objectNote.textContent = blurbOf(current);
+    },
+    setObject(id) {
+      objectSelect.value = id;
+      objectNote.textContent = blurbOf(id);
     },
     setRulings(next, current) {
       rulings = next;
@@ -217,10 +252,14 @@ export function createFoldControls(
       progressFill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
     },
     setBusy(busy) {
+      objectSelect.disabled = busy || objects.length < 2;
       cellsSlider.disabled = busy || rulings.length < 2;
       seedInput.disabled = busy;
       shuffleSeedBtn.disabled = busy;
       shuffleAllBtn.disabled = busy;
+    },
+    onObject(cb) {
+      objectCallback = cb;
     },
     onPose(cb) {
       poseCallback = cb;
@@ -255,8 +294,8 @@ export function createFoldControls(
 }
 
 const BLURB =
-  'Eight cubes taped into a ring, folded into every shape the tape allows. ' +
-  'The maze is printed once and never changes; what changes is which half of ' +
+  'Cubes taped into a ring, folded into every shape the tape allows. ' +
+  'The maze is printed once and never changes; what changes is which part of ' +
   'it is on the outside. Every pose is a perfect maze in its own right.';
 
 function buildHTML(p: FoldParams): string {
@@ -268,6 +307,11 @@ function buildHTML(p: FoldParams): string {
 
     <h2>Folding Maze</h2>
     <p class="blurb">${esc(BLURB)}</p>
+
+    <label>Object
+      <select id="fold-object"></select>
+    </label>
+    <div class="shape-info" id="fold-object-note"></div>
 
     <label>Cells across a face: <span id="fold-cells-val">${p.cells}</span>
       <input id="fold-cells" type="range" min="0" max="0" value="0" />
@@ -295,10 +339,10 @@ function buildHTML(p: FoldParams): string {
     </div>
 
     <div class="buttons">
-      <button id="fold-shuffle-seed" title="A different maze on the same object. Every seed is a maze that is perfect in all six poses; the first few at each ruling come with the page, the rest are found here and now">Shuffle seed</button>
-      <button id="fold-shuffle-all" title="A new ruling, seed, pose and material — everything except the Show solution, Cubes fold and Auto-rotate switches">Shuffle all</button>
+      <button id="fold-shuffle-seed" title="A different maze on the same object. Every seed is a maze that is perfect in every pose; the first few at each ruling come with the page, the rest are found here and now">Shuffle seed</button>
+      <button id="fold-shuffle-all" title="A new object, ruling, seed, pose and material — everything except the Show solution, Cubes fold and Auto-rotate switches">Shuffle all</button>
       <button id="fold-copy-url" class="wide">Copy URL</button>
-      <button id="fold-export-pdf" class="wide" title="Nine sheets: how the eight cubes go together, then one cube each, to print, cut and tape">Export cubes PDF</button>
+      <button id="fold-export-pdf" class="wide" title="How the cubes go together, then one sheet for each cube, to print, cut and tape">Export cubes PDF</button>
     </div>
 
     <div class="progress" id="fold-progress" hidden>
@@ -313,10 +357,10 @@ function buildHTML(p: FoldParams): string {
       <div class="key"><span class="dot" style="color:#dd2222;">&#9679;</span>
         <span><b>Goal</b> &mdash; where it ends</span></div>
       <div class="note">Each mark is printed on <b>two</b> squares, and exactly one of
-        the two is on the outside in any pose &mdash; no square of a ring of cubes is on
-        show in every one. Fold the object and the mark you were looking at goes inside
-        while its twin comes out. Both are drawn here, so the buried one is hidden in
-        the cube it is pressed against.</div>
+        the two is on the outside in any pose &mdash; a ring of cubes buries part of
+        itself, and what it buries changes as it folds. Fold the object and the mark you
+        were looking at goes inside while its twin comes out. Both are drawn here, so the
+        buried one is hidden in the cube it is pressed against.</div>
     </div>
 
     ${sourceLinkHTML()}
