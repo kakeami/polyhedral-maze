@@ -340,11 +340,16 @@ export function decomposeByPlacement(mech: Mechanism, sideStart: Int32Array): Su
   return { pieceCount, stateCount, intra, pairs, placeOfState };
 }
 
-/** The pairings between one pair of pieces in one state, or none. */
-export function pairingsOfState(parts: SurfaceParts, pair: PlacementPair, state: number): readonly Pairing[] {
+/** Which relative placement a pair of pieces is at in one state, or -1. */
+export function relOfState(parts: SurfaceParts, pair: PlacementPair, state: number): number {
   const base = state * parts.pieceCount;
   const a = parts.placeOfState[base + pair.lower]!;
   const b = parts.placeOfState[base + pair.upper]!;
-  const rel = pair.relOf[a * pair.stride + b]!;
+  return pair.relOf[a * pair.stride + b]!;
+}
+
+/** The pairings between one pair of pieces in one state, or none. */
+export function pairingsOfState(parts: SurfaceParts, pair: PlacementPair, state: number): readonly Pairing[] {
+  const rel = relOfState(parts, pair, state);
   return rel === -1 ? [] : pair.byRel[rel]!;
 }

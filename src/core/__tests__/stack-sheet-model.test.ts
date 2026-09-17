@@ -149,7 +149,7 @@ describe('stack sheets', () => {
       );
       expect(onRim).toBe(true);
       for (let state = 0; state < surface.stateCount; state++) {
-        const degree = surface.adjByState[state]!.filter(
+        const degree = surface.adjOfState(state).filter(
           e => design.open.has(e.classId) && (e.a === cell || e.b === cell),
         ).length;
         expect(degree).toBe(1);

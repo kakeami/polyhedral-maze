@@ -73,7 +73,7 @@ describe('stack surface', () => {
   });
 
   it('has the same adjacency count in every state', () => {
-    const counts = surface.adjByState.map(a => a.length);
+    const counts = Array.from({ length: surface.stateCount }, (_u, s) => surface.adjOfState(s).length);
     const expected = SIDES * COLS * (2 * ROWS - 1) * LAYERS + SIDES * COLS * (LAYERS - 1);
     for (const n of counts) expect(n).toBe(expected);
   });

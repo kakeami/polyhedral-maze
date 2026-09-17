@@ -223,7 +223,7 @@ export function buildKineticPieces(
  * counts every cell, which is what the printed pattern wants: the paper
  * carries the whole object, whatever shape it is folded into.
  *
- * Passing one state's `surface.visibleByState[state]` matters for a mechanism
+ * Passing one state's `surface.visibleOfState(state)` matters for a mechanism
  * that folds shut on itself. A cell pressed against another piece is not on
  * the surface there, and neither is what is printed on it — and the walls
  * along the edge of that face lie exactly on the seam the surface crosses, so
@@ -378,8 +378,7 @@ export function solutionCells(
   stateIndex: number,
   ends: StartGoal,
 ): { cells: number[]; doorway: Map<number, number> } {
-  const adj = surface.adjByState[stateIndex];
-  if (!adj) throw new Error(`no such state: ${stateIndex}`);
+  const adj = surface.adjOfState(stateIndex);
 
   const neighbours = new Map<number, { to: number; classId: number }[]>();
   for (const e of adj) {

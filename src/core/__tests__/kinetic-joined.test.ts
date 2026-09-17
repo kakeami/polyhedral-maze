@@ -24,7 +24,7 @@ const gamma = searchAllStates(surface, { rng: createRng(20260914) });
 /** Longest walk in the tree, in the given state. */
 function diameter(stateIndex: number, open: ReadonlySet<number>): number {
   const adjacency: number[][] = Array.from({ length: surface.cellCount }, () => []);
-  for (const edge of surface.adjByState[stateIndex]!) {
+  for (const edge of surface.adjOfState(stateIndex)) {
     if (!open.has(edge.classId)) continue;
     adjacency[edge.a]!.push(edge.b);
     adjacency[edge.b]!.push(edge.a);
@@ -126,7 +126,7 @@ describe('joined pair mechanism', () => {
     // Both are dead ends, and stay dead ends however the object is turned.
     for (let state = 0; state < surface.stateCount; state++) {
       const degree = new Int32Array(surface.cellCount);
-      for (const edge of surface.adjByState[state]!) {
+      for (const edge of surface.adjOfState(state)) {
         if (!gamma.design.open.has(edge.classId)) continue;
         degree[edge.a]!++;
         degree[edge.b]!++;

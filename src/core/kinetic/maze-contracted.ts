@@ -163,7 +163,8 @@ function findPatches(surface: KineticSurface): Int32Array[] {
  */
 export function contractsCleanly(surface: KineticSurface): boolean {
   for (const patch of findPatches(surface)) {
-    for (const visible of surface.visibleByState) {
+    for (let s = 0; s < surface.stateCount; s++) {
+      const visible = surface.visibleOfState(s);
       const first = visible[patch[0]!]!;
       for (const cell of patch) if (visible[cell] !== first) return false;
     }
@@ -285,7 +286,7 @@ function makeEngine(
     seamPairs.length = 0;
     for (const s of list) {
       const buckets: number[][] = Array.from({ length: seamCount }, () => []);
-      for (const e of surface.adjByState[s]!) {
+      for (const e of surface.adjOfState(s)) {
         const k = seamIndex.get(e.classId);
         if (k === undefined) continue;
         buckets[k]!.push(e.a, e.b);
@@ -294,7 +295,7 @@ function makeEngine(
     }
     patchSeen = list.map(s => {
       const seen = new Uint8Array(patchCount);
-      const visible = surface.visibleByState[s]!;
+      const visible = surface.visibleOfState(s);
       for (let cell = 0; cell < surface.cellCount; cell++) {
         if (visible[cell]) seen[patchOf[cell]!] = 1;
       }

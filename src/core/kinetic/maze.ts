@@ -87,9 +87,7 @@ function openAdjacencies(
   design: Pick<KineticDesign, 'open'>,
   stateIndex: number,
 ): readonly SurfaceAdjacency[] {
-  const adj = surface.adjByState[stateIndex];
-  if (!adj) throw new Error(`no such state: ${stateIndex}`);
-  return adj.filter(e => design.open.has(e.classId));
+  return surface.adjOfState(stateIndex).filter(e => design.open.has(e.classId));
 }
 
 export function stateStats(
@@ -181,7 +179,7 @@ function staysForest(surface: KineticSurface, open: ReadonlySet<number>): boolea
   }
   for (let s = 0; s < surface.stateCount; s++) {
     const uf = new UnionFind<number>();
-    for (const e of surface.adjByState[s]!) {
+    for (const e of surface.adjOfState(s)) {
       if (!open.has(e.classId)) continue;
       if (uf.connected(e.a, e.b)) return false;
       uf.union(e.a, e.b);
@@ -213,7 +211,7 @@ export function chooseCutClasses(surface: KineticSurface, rng: Rng): number[] {
     for (let s = 0; s < surface.stateCount; s++) {
       const uf = new UnionFind<number>();
       let comps = surface.visibleCount[s]!;
-      for (const e of surface.adjByState[s]!) {
+      for (const e of surface.adjOfState(s)) {
         if (surface.classKind[e.classId] !== 'internal' && !open.has(e.classId)) continue;
         if (!uf.connected(e.a, e.b)) {
           uf.union(e.a, e.b);
@@ -263,7 +261,7 @@ export function generateKineticMaze(
   const open = new Set<number>(openCutClasses);
 
   const uf = new UnionFind<number>();
-  for (const e of surface.adjByState[targetState] ?? []) {
+  for (const e of surface.adjOfState(targetState)) {
     if (!open.has(e.classId)) continue;
     if (uf.connected(e.a, e.b)) {
       throw new Error(
@@ -278,7 +276,7 @@ export function generateKineticMaze(
   // order they were found in, so a mechanism that never buries anything gets
   // exactly the list it always got.
   const present = new Set<number>();
-  for (const e of surface.adjByState[targetState] ?? []) {
+  for (const e of surface.adjOfState(targetState)) {
     if (surface.classKind[e.classId] === 'internal') present.add(e.classId);
   }
   const walls = surface.internalEdges.filter(e => present.has(e.classId));
@@ -566,7 +564,7 @@ export function optimizeForStates(
   const cutPairs = targetStates.map(s => {
     const pairs: number[] = [];
     if (!canToggle) {
-      for (const e of surface.adjByState[s]!) {
+      for (const e of surface.adjOfState(s)) {
         if (cutSet.has(e.classId)) pairs.push(e.a, e.b);
       }
     }
@@ -575,7 +573,7 @@ export function optimizeForStates(
   // Which cells a wall joins, per state: -1 where it is buried and joins none.
   const wallPairs = targetStates.map(s => {
     const pairs = new Int32Array(internalCount * 2).fill(-1);
-    for (const e of surface.adjByState[s]!) {
+    for (const e of surface.adjOfState(s)) {
       const index = classIndexOf.get(e.classId);
       if (index === undefined || index >= internalCount) continue;
       pairs[2 * index] = e.a;
@@ -590,7 +588,7 @@ export function optimizeForStates(
   const seamStart = targetStates.map(() => new Int32Array(seams.length + 1));
   const seamPairs = targetStates.map((s, t) => {
     const buckets: number[][] = seams.map(() => []);
-    for (const e of surface.adjByState[s]!) {
+    for (const e of surface.adjOfState(s)) {
       const index = classIndexOf.get(e.classId);
       if (index === undefined || index < internalCount) continue;
       buckets[index - internalCount]!.push(e.a, e.b);
@@ -881,8 +879,7 @@ export function pickStartGoal(
   options: { stateIndex?: number } = {},
 ): StartGoal {
   const stateIndex = options.stateIndex ?? design.targetState;
-  const adj = surface.adjByState[stateIndex];
-  if (!adj) throw new Error(`no such state: ${stateIndex}`);
+  const adj = surface.adjOfState(stateIndex);
 
   const neighbours = new Map<number, number[]>();
   for (const e of adj) {
@@ -977,7 +974,11 @@ export function pickPrintedEnds(
   // difference between an entrance and a hole in the middle of a wall.
   if (!surface.hidesCells) {
     const ends = pickStartGoal(surface, design);
-    return { start: [ends.start], goal: [ends.goal], byState: surface.adjByState.map(() => ends) };
+    return {
+      start: [ends.start],
+      goal: [ends.goal],
+      byState: Array.from({ length: surface.stateCount }, () => ends),
+    };
   }
 
   const states = surface.stateCount;
@@ -986,7 +987,7 @@ export function pickPrintedEnds(
   for (let state = 0; state < states; state++) {
     const near: number[][] = Array.from({ length: surface.cellCount }, () => []);
     const count = new Int32Array(surface.cellCount);
-    for (const e of surface.adjByState[state]!) {
+    for (const e of surface.adjOfState(state)) {
       if (!design.open.has(e.classId)) continue;
       near[e.a]!.push(e.b);
       near[e.b]!.push(e.a);
@@ -1000,7 +1001,7 @@ export function pickPrintedEnds(
   /** Which states a cell is on show in, as text, so any number of them fits. */
   const showsIn = (cell: number): string => {
     let bits = '';
-    for (let state = 0; state < states; state++) bits += surface.visibleByState[state]![cell] ? '1' : '0';
+    for (let state = 0; state < states; state++) bits += surface.visibleOfState(state)[cell] ? '1' : '0';
     return bits;
   };
   const complement = (bits: string): string => [...bits].map(b => (b === '1' ? '0' : '1')).join('');
@@ -1014,7 +1015,7 @@ export function pickPrintedEnds(
     const had = walks.get(cell);
     if (had) return had;
     const made = Array.from({ length: states }, (_unused, state) =>
-      (surface.visibleByState[state]![cell] ? distancesFrom(neighbours[state]!, cell) : EMPTY));
+      (surface.visibleOfState(state)[cell] ? distancesFrom(neighbours[state]!, cell) : EMPTY));
     walks.set(cell, made);
     return made;
   };
@@ -1030,7 +1031,7 @@ export function pickPrintedEnds(
   const reachOf = (pair: readonly [number, number]): number => {
     let worst = Infinity;
     for (let state = 0; state < states; state++) {
-      const from = surface.visibleByState[state]![pair[0]] ? pair[0] : pair[1];
+      const from = surface.visibleOfState(state)[pair[0]] ? pair[0] : pair[1];
       const far = walksFrom(from)[state]!;
       let furthest = 0;
       for (let cell = 0; cell < far.length; cell++) if (far[cell]! > furthest) furthest = far[cell]!;
@@ -1064,8 +1065,8 @@ export function pickPrintedEnds(
       const byState: StartGoal[] = [];
       let worst = Infinity;
       for (let state = 0; state < states; state++) {
-        const start = surface.visibleByState[state]![s[0]] ? s[0] : s[1];
-        const goal = surface.visibleByState[state]![g[0]] ? g[0] : g[1];
+        const start = surface.visibleOfState(state)[s[0]] ? s[0] : s[1];
+        const goal = surface.visibleOfState(state)[g[0]] ? g[0] : g[1];
         byState.push({ start, goal });
         worst = Math.min(worst, fromStart[start === s[0] ? 0 : 1]![state]![goal] ?? -1);
         if (worst <= bestWalk) break;
@@ -1102,7 +1103,7 @@ function markerPairs(
     let anywhere = false;
     let leaf = true;
     for (let state = 0; state < surface.stateCount; state++) {
-      if (!surface.visibleByState[state]![cell]) continue;
+      if (!surface.visibleOfState(state)[cell]) continue;
       anywhere = true;
       if (degree[state]![cell] !== 1) leaf = false;
     }
@@ -1157,9 +1158,9 @@ function deadEndsInEveryState(
   const stillLeaf = new Uint8Array(surface.cellCount);
   for (const cell of surface.alwaysVisible) stillLeaf[cell] = 1;
   const degree = new Int32Array(surface.cellCount);
-  for (const adj of surface.adjByState) {
+  for (let state = 0; state < surface.stateCount; state++) {
     degree.fill(0);
-    for (const e of adj) {
+    for (const e of surface.adjOfState(state)) {
       if (!design.open.has(e.classId)) continue;
       degree[e.a]!++;
       degree[e.b]!++;

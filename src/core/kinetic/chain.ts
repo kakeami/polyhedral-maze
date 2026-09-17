@@ -177,8 +177,8 @@ function findChain(surface: KineticSurface): Chain | null {
 
   // --- 1. which pieces does each cut class join? --------------------------
   const neighbours = new Map<string, [number, number]>();
-  for (const adj of surface.adjByState) {
-    for (const e of adj) {
+  for (let s = 0; s < surface.stateCount; s++) {
+    for (const e of surface.adjOfState(s)) {
       if (surface.classKind[e.classId] !== 'cut') continue;
       const pa = cells[e.a]!.piece;
       const pb = cells[e.b]!.piece;
@@ -228,7 +228,7 @@ function findChain(surface: KineticSurface): Chain | null {
 
   for (let s = 0; s < surface.stateCount; s++) {
     const perSeam: number[][] = Array.from({ length: seamCount }, () => []);
-    for (const e of surface.adjByState[s]!) {
+    for (const e of surface.adjOfState(s)) {
       if (surface.classKind[e.classId] !== 'cut') continue;
       const pa = cells[e.a]!.piece;
       const pb = cells[e.b]!.piece;

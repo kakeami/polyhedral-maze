@@ -308,7 +308,7 @@ describe('the walls a pose has on show', () => {
   ): Vec3[] {
     const place = mech.states[state]!;
     const points: Vec3[] = [];
-    for (const edge of on.adjByState[state]!) {
+    for (const edge of on.adjOfState(state)) {
       if (!plan.open.has(edge.classId)) continue;
       const cell = mech.cells[edge.a]!;
       const base = on.sideStart[edge.a]!;
@@ -361,7 +361,7 @@ describe('the walls a pose has on show', () => {
 
   it('never lays a wall across a passage', () => {
     for (let state = 0; state < surface.stateCount; state++) {
-      expect(walled(state, surface.visibleByState[state]!)).toBe(0);
+      expect(walled(state, surface.visibleOfState(state))).toBe(0);
     }
   });
 
@@ -396,7 +396,7 @@ describe('the walls a pose has on show', () => {
     const pieces = buildKineticPieces(mech, surface, design);
     const printed = pieces.reduce((sum, piece) => sum + piece.walls.length, 0);
     const onShow = mech.states.map((_, state) =>
-      kineticWalls(mech, surface, design, surface.visibleByState[state]!)
+      kineticWalls(mech, surface, design, surface.visibleOfState(state))
         .reduce((sum, points) => sum + points.length, 0),
     );
     for (const count of onShow) expect(count).toBeLessThan(printed);

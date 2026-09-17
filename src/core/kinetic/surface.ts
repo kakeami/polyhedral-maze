@@ -3,7 +3,7 @@ import { applyPlacement } from './types.ts';
 import { UnionFind } from '../graph.ts';
 import { VertexWelder } from './weld.ts';
 import type { Pairing, SurfaceParts } from './placement-pairs.ts';
-import { decomposeByPlacement, pairingsOfState } from './placement-pairs.ts';
+import { decomposeByPlacement, relOfState } from './placement-pairs.ts';
 
 export type SideClassKind =
   /**
@@ -47,12 +47,22 @@ export interface KineticSurface {
   readonly classCount: number;
   readonly classKind: readonly SideClassKind[];
   readonly classSides: readonly (readonly number[])[];
-  readonly adjByState: readonly (readonly SurfaceAdjacency[])[];
+  /**
+   * Passages of one state, on demand.
+   *
+   * A function and not a list, because a mechanism worth building has more
+   * states than a list of their passages fits in: a stack of six twelve-sided
+   * rings has 248832 of them over 288 cells. Where the surface was built out
+   * of pairs of pieces this is assembled when asked — the pairings themselves
+   * are shared, so a state costs a list of references — and the last one asked
+   * for is kept, since a caller almost always asks twice.
+   */
+  adjOfState(state: number): readonly SurfaceAdjacency[];
   /** The one adjacency behind each 'internal' class — the free maze walls. */
   readonly internalEdges: readonly SurfaceAdjacency[];
   readonly cutClasses: readonly number[];
   /** 1 where the cell is on the outside of the object in that state. */
-  readonly visibleByState: readonly Uint8Array[];
+  visibleOfState(state: number): Uint8Array;
   /** How many cells are on the outside in each state. */
   readonly visibleCount: Int32Array;
   /** Cells on the outside in *every* state — the only places a marker can go. */
@@ -390,10 +400,18 @@ export function buildSurfaceByState(
     classCount,
     classKind: kind,
     classSides,
-    adjByState,
+    adjOfState: (state: number) => {
+      const adj = adjByState[state];
+      if (!adj) throw new Error(`no such state: ${state}`);
+      return adj;
+    },
     internalEdges,
     cutClasses,
-    visibleByState,
+    visibleOfState: (state: number) => {
+      const visible = visibleByState[state];
+      if (!visible) throw new Error(`no such state: ${state}`);
+      return visible;
+    },
     visibleCount,
     alwaysVisible,
     hidesCells,
@@ -472,24 +490,28 @@ function buildFromParts(
   // that a state costs a list of references rather than a list of objects.
   const intraAdj: SurfaceAdjacency[] = [];
   for (const list of parts.intra) for (const p of list) intraAdj.push(adjacency(p, true));
-  const crossAdj = new Map<readonly Pairing[], SurfaceAdjacency[]>();
-  for (const pair of parts.pairs) {
-    for (const list of pair.byRel) crossAdj.set(list, list.map(p => adjacency(p, false)));
-  }
-  const adjByState: SurfaceAdjacency[][] = [];
-  for (let s = 0; s < stateCount; s++) {
-    const adj = intraAdj.slice();
-    for (const pair of parts.pairs) {
-      const cross = crossAdj.get(pairingsOfState(parts, pair, s))!;
-      for (const e of cross) adj.push(e);
+  const crossAdj = parts.pairs.map(pair => pair.byRel.map(list => list.map(p => adjacency(p, false))));
+  let lastState = -1;
+  let lastAdj: SurfaceAdjacency[] = [];
+  const adjOfState = (state: number): readonly SurfaceAdjacency[] => {
+    if (!Number.isInteger(state) || state < 0 || state >= stateCount) {
+      throw new Error(`no such state: ${state}`);
     }
-    adjByState.push(adj);
-  }
+    if (state === lastState) return lastAdj;
+    const adj = intraAdj.slice();
+    for (let i = 0; i < parts.pairs.length; i++) {
+      const rel = relOfState(parts, parts.pairs[i]!, state);
+      if (rel === -1) continue;
+      for (const e of crossAdj[i]![rel]!) adj.push(e);
+    }
+    lastState = state;
+    lastAdj = adj;
+    return adj;
+  };
 
   // Nothing is ever buried — that is what let the pairs decide the surface —
   // so one row of ones serves every state.
   const allVisible = new Uint8Array(cellCount).fill(1);
-  const visibleByState = new Array<Uint8Array>(stateCount).fill(allVisible);
   const visibleCount = new Int32Array(stateCount).fill(cellCount);
   const alwaysVisible = Array.from({ length: cellCount }, (_, i) => i);
 
@@ -503,10 +525,10 @@ function buildFromParts(
     classCount,
     classKind: kind,
     classSides,
-    adjByState,
+    adjOfState,
     internalEdges,
     cutClasses,
-    visibleByState,
+    visibleOfState: () => allVisible,
     visibleCount,
     alwaysVisible,
     hidesCells: false,

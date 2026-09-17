@@ -150,7 +150,7 @@ describe('the contracted search', () => {
   it('is a tree in a pose exactly when the contracted graph is', () => {
     const { of } = blocksOf(ringSurface, found().design.open);
     for (let state = 0; state < ringSurface.stateCount; state++) {
-      const visible = ringSurface.visibleByState[state]!;
+      const visible = ringSurface.visibleOfState(state);
       const nodes = new Set<number>();
       for (let cell = 0; cell < ringSurface.cellCount; cell++) {
         if (visible[cell]) nodes.add(of[cell]!);
@@ -163,7 +163,7 @@ describe('the contracted search', () => {
       };
       let edges = 0;
       let cycles = 0;
-      for (const e of ringSurface.adjByState[state]!) {
+      for (const e of ringSurface.adjOfState(state)) {
         if (!found().design.open.has(e.classId)) continue;
         if (ringSurface.classKind[e.classId] !== 'cut') continue;
         edges++;
@@ -212,12 +212,13 @@ describe('the contracted search', () => {
   it('refuses a surface it cannot be used on', () => {
     const half = {
       ...ringSurface,
-      visibleByState: ringSurface.visibleByState.map((bits, index) => {
+      visibleOfState: (index: number) => {
+        const bits = ringSurface.visibleOfState(index);
         if (index !== 0) return bits;
         const copy = Uint8Array.from(bits);
         copy[0] = copy[0] ? 0 : 1; // one cell of a patch, out of step with the rest
         return copy;
-      }),
+      },
     };
     expect(contractsCleanly(half)).toBe(false);
     expect(() => createContractedSearch(half, { rng: createRng(1) })).toThrow(/half on show/);

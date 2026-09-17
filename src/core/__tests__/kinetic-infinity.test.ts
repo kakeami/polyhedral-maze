@@ -37,12 +37,12 @@ function place(cell: KineticCell, at: Placement): { normal: Vec3 } {
 
 /** Rebuilds one state's maze from the design, without using the search's counters. */
 function audit(surface: KineticSurface, design: Pick<KineticDesign, 'open'>, state: number) {
-  const visible = surface.visibleByState[state]!;
+  const visible = surface.visibleOfState(state);
   const uf = new UnionFind<number>();
   let edges = 0;
   let cycles = 0;
   let touchesBuried = 0;
-  for (const e of surface.adjByState[state]!) {
+  for (const e of surface.adjOfState(state)) {
     if (!visible[e.a] || !visible[e.b]) touchesBuried++;
     if (!design.open.has(e.classId)) continue;
     edges++;
@@ -86,8 +86,8 @@ describe('the outside of a folded ring', () => {
 
   it('keeps nothing on the outside, and nothing in', () => {
     const ever = new Set<number>();
-    for (const visible of surface.visibleByState) {
-      visible.forEach((bit, cell) => { if (bit) ever.add(cell); });
+    for (let state = 0; state < surface.stateCount; state++) {
+      surface.visibleOfState(state).forEach((bit, cell) => { if (bit) ever.add(cell); });
     }
     expect(ever.size).toBe(surface.cellCount); // every square is seen at some point
     expect(surface.alwaysVisible.length).toBe(0); // and none of them always
@@ -100,7 +100,7 @@ describe('the outside of a folded ring', () => {
         new Set(state.map(p => p.offset[axis]!.toFixed(1))).size) }))
       .filter(s => s.span.every(n => n === 2))
       .map(s => s.index);
-    const [a, b] = [surface.visibleByState[cubes[0]!]!, surface.visibleByState[cubes[1]!]!];
+    const [a, b] = [surface.visibleOfState(cubes[0]!), surface.visibleOfState(cubes[1]!)];
     let both = 0;
     for (let cell = 0; cell < surface.cellCount; cell++) if (a[cell] && b[cell]) both++;
     expect(both).toBe(0);
@@ -118,7 +118,7 @@ describe('the outside of a folded ring', () => {
           Math.abs(c[0] - beyond[0]) < 1e-9 &&
           Math.abs(c[1] - beyond[1]) < 1e-9 &&
           Math.abs(c[2] - beyond[2]) < 1e-9);
-        expect(Boolean(surface.visibleByState[index]![cellIndex])).toBe(!blocked);
+        expect(Boolean(surface.visibleOfState(index)[cellIndex])).toBe(!blocked);
       });
     });
   });
@@ -172,7 +172,7 @@ describe('printing an entrance on something that hides itself', () => {
 
   /** Which cells of the maze are on the outside in one pose. */
   const showing = (cells: readonly number[], state: number) =>
-    cells.filter(cell => surface.visibleByState[state]![cell]);
+    cells.filter(cell => surface.visibleOfState(state)[cell]);
 
   it('prints each marker twice, and shows exactly one of each in every pose', () => {
     expect(ends.start.length).toBe(2);
@@ -195,13 +195,13 @@ describe('printing an entrance on something that hides itself', () => {
   it('puts them on dead ends, wherever they are on show', () => {
     for (let state = 0; state < surface.stateCount; state++) {
       const degree = new Map<number, number>();
-      for (const e of surface.adjByState[state]!) {
+      for (const e of surface.adjOfState(state)) {
         if (!design.open.has(e.classId)) continue;
         degree.set(e.a, (degree.get(e.a) ?? 0) + 1);
         degree.set(e.b, (degree.get(e.b) ?? 0) + 1);
       }
       for (const cell of [...ends.start, ...ends.goal]) {
-        if (!surface.visibleByState[state]![cell]) continue;
+        if (!surface.visibleOfState(state)[cell]) continue;
         expect(degree.get(cell)).toBe(1);
       }
     }
@@ -218,7 +218,8 @@ describe('printing an entrance on something that hides itself', () => {
       for (let axis = 0; axis < 3; axis++) {
         const front = mech.cellIndex(piece, axis * 2, 0, 0);
         const back = mech.cellIndex(piece, axis * 2 + 1, 0, 0);
-        const together = surface.visibleByState.filter(v => v[front] && v[back]);
+        const together = Array.from({ length: surface.stateCount }, (_u, s) => surface.visibleOfState(s))
+          .filter(v => v[front] && v[back]);
         expect(together.length).toBeGreaterThan(0);
       }
     }
@@ -231,7 +232,7 @@ describe('printing an entrance on something that hides itself', () => {
     const same = pickStartGoal(stack, found);
     expect(one.start).toEqual([same.start]);
     expect(one.goal).toEqual([same.goal]);
-    expect(one.byState).toEqual(stack.adjByState.map(() => same));
+    expect(one.byState).toEqual(Array.from({ length: stack.stateCount }, () => same));
   });
 });
 
@@ -298,7 +299,7 @@ describe('the longest walk through a pose', () => {
 
   function byBruteForce(state: number): number {
     const near = new Map<number, number[]>();
-    for (const e of surface.adjByState[state]!) {
+    for (const e of surface.adjOfState(state)) {
       if (!result.design.open.has(e.classId)) continue;
       (near.get(e.a) ?? near.set(e.a, []).get(e.a)!).push(e.b);
       (near.get(e.b) ?? near.set(e.b, []).get(e.b)!).push(e.a);
@@ -374,7 +375,7 @@ describe('a drawing that agrees with itself where it shows', () => {
   function disagreeing(surface: KineticSurface, design: Pick<KineticDesign, 'open'>): number {
     let count = 0;
     for (let state = 0; state < surface.stateCount; state++) {
-      const visible = surface.visibleByState[state]!;
+      const visible = surface.visibleOfState(state);
       for (const sides of touching(surface, state)) {
         if (sides.length < 2) continue;
         const cellOf = (side: number) => {

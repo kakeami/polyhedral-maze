@@ -50,7 +50,7 @@ function oneAtATime(surface: KineticSurface, open: ReadonlySet<number>, blockRoo
     let components = roots.size;
     let cycles = 0;
     let opened = 0;
-    for (const e of surface.adjByState[s]!) {
+    for (const e of surface.adjOfState(s)) {
       if (surface.classKind[e.classId] !== 'cut' || !open.has(e.classId)) continue;
       opened++;
       const ra = find(blockRoot[e.a]!);

@@ -37,8 +37,8 @@ function expectSameSurface(want: KineticSurface, got: KineticSurface): void {
       .map(e => `${Math.min(e.a, e.b)}-${Math.max(e.a, e.b)}#${e.classId}${e.intra ? 'i' : 'x'}`)
       .sort();
   for (let s = 0; s < want.stateCount; s++) {
-    expect(keys(got.adjByState[s]!)).toEqual(keys(want.adjByState[s]!));
-    expect([...got.visibleByState[s]!]).toEqual([...want.visibleByState[s]!]);
+    expect(keys(got.adjOfState(s))).toEqual(keys(want.adjOfState(s)));
+    expect([...got.visibleOfState(s)]).toEqual([...want.visibleOfState(s)]);
   }
 }
 
