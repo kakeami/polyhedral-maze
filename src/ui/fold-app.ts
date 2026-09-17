@@ -40,7 +40,7 @@ import type { FoldGraph } from '../core/kinetic/fold-path.ts';
 import {
   buildKineticPieces, kineticSolutionPath, kineticWalls, solutionLength,
 } from '../render/kinetic-geometry.ts';
-import { exportFoldPDF } from '../render/pdf-fold-sheets.ts';
+import { exportFoldPDF } from '../render/pdf-kinetic-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';

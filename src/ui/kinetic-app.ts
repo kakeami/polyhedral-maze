@@ -37,9 +37,9 @@ import {
 } from '../render/kinetic-geometry.ts';
 import { createKineticScene } from '../render/kinetic-scene.ts';
 import { KINETIC_SCENE } from '../render/kinetic-scene-constants.ts';
-import { exportStackPDF } from '../render/pdf-stack-sheets.ts';
-import { exportPairPDF } from '../render/pdf-pair-sheets.ts';
-import { exportGyrationPDF } from '../render/pdf-gyration-sheets.ts';
+import { exportStackPDF } from '../render/pdf-kinetic-sheets.ts';
+import { exportPairPDF } from '../render/pdf-kinetic-sheets.ts';
+import { exportGyrationPDF } from '../render/pdf-kinetic-sheets.ts';
 import { A4_SHEET, STACK_SHEET_DEFAULTS } from '../render/kinetic-sheet-constants.ts';
 import { createKineticControls } from './kinetic-controls.ts';
 import { decodeKineticParams, encodeKineticParams, isMaxEffort } from './kinetic-param-codec.ts';
