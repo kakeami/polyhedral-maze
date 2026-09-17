@@ -66,6 +66,23 @@ export {
   CUBE_RING_HINGES,
 } from './mechanisms/infinity-cube.ts';
 
+export type { GyrationSeam, GyrationAxis } from './seams.ts';
+export { gyrationAxes } from './seams.ts';
+
+export type {
+  GyrationOptions,
+  GyrationMechanism,
+  GyrationChoice,
+} from './mechanisms/gyration.ts';
+export {
+  createGyration,
+  gyrationCellCount,
+  gyrationFacts,
+  gyrationById,
+  GYRATIONS,
+  DEFAULT_GYRATION,
+} from './mechanisms/gyration.ts';
+
 export type {
   JoinedPairOptions,
   JoinedPairMechanism,

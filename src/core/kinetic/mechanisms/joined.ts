@@ -1,10 +1,13 @@
-import type { CellKey, Face, Vec3 } from '../../types.ts';
+import type { Face, Vec3 } from '../../types.ts';
 import type { Polyhedron } from '../../polyhedron.ts';
-import type { KineticCell, KineticState, Placement, TurnableMechanism } from '../types.ts';
+import type { CellSource, KineticCell, KineticState, Placement, TurnableMechanism } from '../types.ts';
 import { IDENTITY, rotZ } from '../types.ts';
 import { cellVertices3d } from '../../cell-geometry.ts';
 import { sub, scale, dot, cross, norm, normalize, mean } from '../../vec3.ts';
 import { getShape } from '../../polyhedra/registry.ts';
+
+/** Re-exported: it used to be declared here, and callers still ask for it. */
+export type { CellSource };
 
 /**
  * Two congruent solids glued at a regular polygon face, one free to turn.
@@ -30,13 +33,6 @@ export interface JoinedPairOptions {
   jointIndex?: number;
   /** Cells along one edge of a face. */
   n?: number;
-}
-
-/** Where a cell came from, which is what the printed net needs. */
-export interface CellSource {
-  readonly piece: number;
-  readonly faceId: number;
-  readonly cell: CellKey;
 }
 
 export interface JoinedPairMechanism extends TurnableMechanism {

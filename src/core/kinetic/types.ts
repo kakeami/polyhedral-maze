@@ -1,4 +1,4 @@
-import type { Vec3 } from '../types.ts';
+import type { CellKey, Vec3 } from '../types.ts';
 
 /** Row-major 3x3 matrix. Only rigid rotations are used. */
 export type Mat3 = readonly [Vec3, Vec3, Vec3];
@@ -20,6 +20,19 @@ export type KineticState = readonly Placement[];
 export interface KineticCell {
   readonly piece: number;
   readonly corners: readonly Vec3[];
+}
+
+/**
+ * Where a cell came from, which is what a printed pattern needs.
+ *
+ * Any mechanism cut from a catalogued solid can say this, and the pattern code
+ * is the same for all of them: unfold the solid, then draw the cells of the
+ * faces this piece kept.
+ */
+export interface CellSource {
+  readonly piece: number;
+  readonly faceId: number;
+  readonly cell: CellKey;
 }
 
 /**
