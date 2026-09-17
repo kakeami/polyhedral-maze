@@ -17,7 +17,7 @@ import {
   maxCols,
   maxPairN,
   maxRows,
-  maxUsableLayers,
+  maxLayers,
   pairCellCount,
   pairStateCount,
   stateCount,
@@ -132,7 +132,7 @@ export function createKineticControls(
     mechSelect.value = p.mechanism;
     blurb.textContent = pair ? PAIR_BLURB : STACK_BLURB;
 
-    layersSlider.max = String(maxUsableLayers(p.sides));
+    layersSlider.max = String(maxLayers(p.sides));
     colsSlider.max = String(maxCols(p));
     rowsSlider.max = String(maxRows(p));
     sidesSlider.value = String(p.sides);

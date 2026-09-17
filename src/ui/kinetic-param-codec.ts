@@ -70,12 +70,33 @@ export const KINETIC_LIMITS = {
    * anyone can feel", which was a judgement about hands rather than about
    * arithmetic, and it was the wrong judgement: a stack is *meant* to have
    * more turns than anyone will try, and what a visitor feels is that the
-   * maze holds up whatever they do with it. What it guards now is the one
-   * thing left that still counts states one at a time — `buildSurface`, which
-   * welds each state's cells separately and keeps the passages it finds.
+   * maze holds up whatever they do with it. Then it guarded `buildSurface`,
+   * which welded each state's cells separately — and that is gone too: the
+   * surface is built out of pairs of pieces, and every question about all the
+   * states is answered by one walk along the line they sit in.
+   *
+   * What is left is the mechanism itself. `Mechanism.states` is a placement
+   * per piece per state, worked out up front, so a quarter of a million states
+   * over six rings is a few hundred megabytes of them before anything is built
+   * on top. Measured on a twelve-sided stack six rings deep — 248832 states —
+   * the mechanism takes 65ms and the surface 555ms, which is a wait but not
+   * the problem; the memory is. At this ceiling the same two come to 7ms and
+   * 54ms.
+   *
+   * Lifting it means handing out a state when asked rather than keeping them
+   * all, which is the move `adjOfState` made one layer up.
    */
   maxStates: 32768,
-  /** Past this the cells are too small to read on screen anyway. */
+  /**
+   * Cells a stack may carry.
+   *
+   * A cap on the total rather than on the ruling, because what it guards is
+   * reading the thing: a barrel with seven hundred squares on it is already
+   * more than the eye follows at a glance, however they are shared out. It
+   * does *not* guard the printed size — that is settled at export, where a
+   * band too wide for the sheet is drawn smaller until a cell would come out
+   * under 5 mm, and then the page says so and names a ruling that would fit.
+   */
   maxCells: 720,
   /** Cells along a face edge of a glued pair. */
   pairN: { min: 1, max: 12 },
@@ -95,30 +116,32 @@ export const KINETIC_LIMITS = {
    * cells, so `states x cells` never comes near binding here.
    */
   pairCells: 1250,
-  /**
-   * What a rebuild may cost, counted in state-cells.
-   *
-   * It is no longer the search's number. The search stopped scoring a design
-   * state by state when the chain walk went in (`chainScore`): a stack of five
-   * six-sided rings went from 47 seconds to 115 milliseconds, and its cost
-   * stopped growing with the number of states at all.
-   *
-   * What is left is `buildSurface`, which still welds every state's cells
-   * separately and keeps a list of passages for each. Measured on this code it
-   * runs at about 1.2 microseconds a state-cell, near enough flat from 47
-   * thousand of them to five million, so this is a rebuild of about three
-   * seconds at the worst corner of the sliders and well under one at the
-   * corners anybody visits. Nine times what it was, because it used to have to
-   * pay for the search out of the same budget.
-   *
-   * Removing it altogether is a job on `buildSurface`, not on this file: it
-   * would have to learn what the search now knows — that the pieces sit in a
-   * line, so whether two cells meet depends on their own two pieces' relative
-   * turn and not on the state — and hand out a state's passages on demand
-   * rather than keeping all of them.
-   */
-  maxWork: 1_500_000,
 } as const;
+
+/**
+ * There is no budget of `states x cells` here any more, and that is the point.
+ *
+ * One used to sit between these sliders and tie them together: ask for another
+ * ring and the panel took cells away, because `buildSurface` welded every
+ * state's cells and so cost exactly that product. It no longer does, and
+ * neither does anything else. Measured over every corner of these sliders at
+ * the finest ruling the cell cap allows, building the mechanism, the surface
+ * and the seam openings comes to 630ms at the very worst — a twelve-sided
+ * stack six rings deep, a quarter of a million states — and to under 50ms
+ * everywhere a visitor is likely to go. The shape of the cost is now
+ * `a * states + b * cells`, both terms small, so a product bound describes
+ * nothing. Twelve-sided rings five deep were held to one cell a face by it,
+ * and carry twelve without.
+ *
+ * What can still be slow is the search, and it is slow in a way no product
+ * predicts: eight-sided rings six deep find a design perfect in all 32768
+ * states in a second and a half, while twelve-sided rings five deep spend half
+ * a minute and reach five states in six. That is annealing, not arithmetic.
+ * It is also not a reason to take a slider away, because the search runs a
+ * round a frame and says what it has — "a perfect maze in so many of so many
+ * states", with a button to look harder. A visitor who turns every slider up
+ * is told what they got, rather than quietly handed a coarser object.
+ */
 
 export const DEFAULT_KINETIC_PARAMS: KineticParams = {
   mechanism: 'stack',
@@ -157,18 +180,16 @@ export function maxLayers(sides: number): number {
   return layers;
 }
 
-/** Cells the budget still has room for, given how many states there are. */
-function cellBudget(sides: number, layers: number): number {
-  return Math.min(
-    KINETIC_LIMITS.maxCells,
-    Math.floor(KINETIC_LIMITS.maxWork / stateCount(sides, layers)),
-  );
-}
-
-/** Most cells a face can carry across, given the rest of the shape. */
+/**
+ * Most cells a face can carry across, given the rest of the shape.
+ *
+ * The only thing sharing out the cells is the cell cap itself: a barrel of so
+ * many faces and so many rings has that many squares to give away, and how
+ * many ways it turns does not enter into it.
+ */
 export function maxCols(p: Pick<KineticParams, 'sides' | 'layers' | 'rows'>): number {
   const fits = Math.floor(
-    cellBudget(p.sides, p.layers) / (p.sides * p.layers * Math.max(1, p.rows)),
+    KINETIC_LIMITS.maxCells / (p.sides * p.layers * Math.max(1, p.rows)),
   );
   return clamp(fits, KINETIC_LIMITS.cols.min, KINETIC_LIMITS.cols.max);
 }
@@ -176,25 +197,9 @@ export function maxCols(p: Pick<KineticParams, 'sides' | 'layers' | 'rows'>): nu
 /** Most cells a ring can carry up its height, given the rest of the shape. */
 export function maxRows(p: Pick<KineticParams, 'sides' | 'layers' | 'cols'>): number {
   const fits = Math.floor(
-    cellBudget(p.sides, p.layers) / (p.sides * p.layers * Math.max(1, p.cols)),
+    KINETIC_LIMITS.maxCells / (p.sides * p.layers * Math.max(1, p.cols)),
   );
   return clamp(fits, KINETIC_LIMITS.rows.min, KINETIC_LIMITS.rows.max);
-}
-
-/**
- * Rings this many sides can carry while a one-cell-per-face ruling still fits
- * the work budget. Coarser than `maxLayers` alone, and it is what the panel
- * uses: a ring count that could only ever be drawn with no maze on it is not
- * a ring count worth offering.
- */
-export function maxUsableLayers(sides: number): number {
-  let layers: number = KINETIC_LIMITS.layers.min;
-  while (layers < maxLayers(sides)) {
-    const next = layers + 1;
-    if (stateCount(sides, next) * sides * next > KINETIC_LIMITS.maxWork) break;
-    layers = next;
-  }
-  return layers;
 }
 
 /**
@@ -233,7 +238,6 @@ export function maxPairN(pairId: string): number {
   for (let n = KINETIC_LIMITS.pairN.min + 1; n <= ceiling; n++) {
     const cells = pairCellCount(pairId, n);
     if (cells > KINETIC_LIMITS.pairCells) break;
-    if (cells * choice.gon > KINETIC_LIMITS.maxWork) break;
     best = n;
   }
   return best;
@@ -249,7 +253,7 @@ export function maxPairN(pairId: string): number {
 export function clampKineticParams(p: KineticParams): KineticParams {
   const mechanism: MechanismId = p.mechanism === 'pair' ? 'pair' : 'stack';
   const sides = clamp(Math.round(p.sides), KINETIC_LIMITS.sides.min, KINETIC_LIMITS.sides.max);
-  const layers = clamp(Math.round(p.layers), KINETIC_LIMITS.layers.min, maxUsableLayers(sides));
+  const layers = clamp(Math.round(p.layers), KINETIC_LIMITS.layers.min, maxLayers(sides));
   const rows = clamp(Math.round(p.rows), KINETIC_LIMITS.rows.min, KINETIC_LIMITS.rows.max);
   const cols = clamp(Math.round(p.cols), KINETIC_LIMITS.cols.min, maxCols({ sides, layers, rows }));
   const pair = (joinedPairById(p.pair) ?? DEFAULT_JOINED_PAIR).id;

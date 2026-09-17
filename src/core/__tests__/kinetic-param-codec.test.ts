@@ -107,6 +107,30 @@ describe('the limits that keep a rebuild quick', () => {
     expect(maxCols({ ...base })).toBe(Math.min(6, Math.floor(720 / (6 * 4 * 3))));
     expect(maxRows({ ...base })).toBe(Math.min(6, Math.floor(720 / (6 * 4 * 3))));
   });
+
+  it('rules a barrel by how many squares it has, not by how it turns', () => {
+    // There is no budget of states times cells any more: the ruling answers to
+    // the cell cap and to nothing else, whatever the turns come to.
+    for (let sides = 3; sides <= 12; sides++) {
+      for (let layers = 2; layers <= maxLayers(sides); layers++) {
+        for (let rows = 1; rows <= 6; rows++) {
+          const want = Math.max(1, Math.min(6, Math.floor(720 / (sides * layers * rows))));
+          expect(maxCols({ sides, layers, rows })).toBe(want);
+          expect(maxRows({ sides, layers, cols: rows })).toBe(want);
+        }
+      }
+    }
+  });
+
+  it('lets a wide barrel keep its ruling', () => {
+    // Twelve sides and five rings is 20736 turns; the old product budget spent
+    // all of them and left one cell a face. The squares are the visitor's.
+    const p = clampKineticParams({ ...DEFAULT_KINETIC_PARAMS, sides: 12, layers: 5, cols: 6, rows: 6 });
+    expect(p.sides).toBe(12);
+    expect(p.layers).toBe(5);
+    expect(p.cols * p.rows).toBeGreaterThanOrEqual(12);
+    expect(cellCount(p)).toBeLessThanOrEqual(KINETIC_LIMITS.maxCells);
+  });
 });
 
 describe('search effort', () => {
@@ -172,7 +196,6 @@ describe('the glued pair on the same page', () => {
       expect(n).toBeLessThanOrEqual(KINETIC_LIMITS.pairN.max);
       const cells = pairCellCount(choice.id, n);
       expect(cells).toBeLessThanOrEqual(KINETIC_LIMITS.pairCells);
-      expect(cells * pairStateCount(choice.id)).toBeLessThanOrEqual(KINETIC_LIMITS.maxWork);
       expect(clampKineticParams({
         ...DEFAULT_KINETIC_PARAMS, mechanism: 'pair', pair: choice.id, pairN: 99,
       }).pairN).toBe(n);
