@@ -38,6 +38,10 @@ import type { Rng } from '../prng.ts';
 import type { KineticSurface } from './surface.ts';
 import { chooseCutClasses, treeRate } from './maze.ts';
 import type { KineticDesign, TreeRate } from './maze.ts';
+import { chainOf } from './chain.ts';
+import type { Chain } from './chain.ts';
+import { chainBlocks, chainScore } from './chain-cost.ts';
+import type { ChainBlocks } from './chain-cost.ts';
 
 export interface ContractedSearchOptions {
   readonly rng: Rng;
@@ -73,6 +77,18 @@ export interface ContractedSearchOptions {
   readonly temperature?: number;
   /** Attempts before giving up. Each is `restarts` anneals of `iterations`. */
   readonly maxRounds?: number;
+  /**
+   * Seam openings to hold fixed, instead of choosing and annealing them.
+   *
+   * On the folding ring the seam set has to be free to move: a face is buried
+   * in some poses and on show in others, so where the surface crosses from one
+   * cube to the next is half of the arrangement. A mechanism that turns buries
+   * nothing, and there the seam set is not the search's to choose — it is the
+   * caller's `k`, how many passages cross a seam over the minimum, which is
+   * what a visitor feels as difficulty. Passing it here freezes it, and the
+   * blocks carry the whole of the arrangement.
+   */
+  readonly openCutClasses?: readonly number[];
 }
 
 export interface ContractedResult {
@@ -176,12 +192,19 @@ interface Attempt {
 const NOTHING: Attempt = { open: new Set(), openCutClasses: [], cost: Infinity };
 
 /** One annealing engine, reusable across attempts on the same surface. */
+interface Engine {
+  attempt(rng: Rng, restarts: number): Attempt;
+  /** Score against these states only; all of them are the verifier's business. */
+  setStates(list: readonly number[]): void;
+}
+
 function makeEngine(
   surface: KineticSurface,
-  options: { iterations: number; temperature: number },
-): (rng: Rng, restarts: number) => Attempt {
-  const { iterations, temperature: startTemperature } = options;
-  const states = surface.stateCount;
+  options: { iterations: number; temperature: number; fixedCuts?: readonly number[] },
+): Engine {
+  const { iterations, temperature: startTemperature, fixedCuts } = options;
+  /** With the seams held, every move is a wall and the moves that open a seam are not offered. */
+  const seamsFixed = fixedCuts !== undefined;
   const patches = findPatches(surface);
   const patchCount = patches.length;
   const patchOf = new Int32Array(surface.cellCount);
@@ -221,34 +244,32 @@ function makeEngine(
   const seamCount = seams.length;
   const seamIndex = new Map<number, number>();
   seams.forEach((c, k) => seamIndex.set(c, k));
+  /**
+   * The states the anneal is scored against, which need not be all of them.
+   *
+   * On the folding ring they are: a patch is on show in two or three of the
+   * six poses, so a move rescores two or three states and scoring the lot is
+   * what the engine is built to do. A mechanism that turns buries nothing, so
+   * every patch is on show in every state and every move would rescore every
+   * one — which on a stack of five rings is 1296 of them per move, and is why
+   * the engine was 70x slower there than the search it was meant to replace.
+   *
+   * So the states are a working set, in the round structure `searchAllStates`
+   * uses: anneal against a few, check all of them another way, and take the
+   * one that failed into the set. Indices below are positions in this list,
+   * never state numbers; nothing outside the engine sees either.
+   */
+  let states = 0;
   const seamPairs: Int32Array[][] = [];
-  for (let s = 0; s < states; s++) {
-    const buckets: number[][] = Array.from({ length: seamCount }, () => []);
-    for (const e of surface.adjByState[s]!) {
-      const k = seamIndex.get(e.classId);
-      if (k === undefined) continue;
-      buckets[k]!.push(e.a, e.b);
-    }
-    seamPairs.push(buckets.map(b => Int32Array.from(b)));
-  }
-  const patchSeen = Array.from({ length: states }, () => new Uint8Array(patchCount));
-  for (let s = 0; s < states; s++) {
-    const visible = surface.visibleByState[s]!;
-    for (let cell = 0; cell < surface.cellCount; cell++) {
-      if (visible[cell]) patchSeen[s]![patchOf[cell]!] = 1;
-    }
-  }
-  const posesOfPatch: number[][] = Array.from({ length: patchCount }, () => []);
-  for (let s = 0; s < states; s++) {
-    for (let p = 0; p < patchCount; p++) if (patchSeen[s]![p]) posesOfPatch[p]!.push(s);
-  }
+  let patchSeen: Uint8Array[] = [];
+  let posesOfPatch: number[][] = [];
   /** The poses a move can change the score of: nothing else needs rescoring. */
-  const posesOfSeam: number[][] = [];
-  for (let k = 0; k < seamCount; k++) {
-    const live: number[] = [];
-    for (let s = 0; s < states; s++) if (seamPairs[s]![k]!.length > 0) live.push(s);
-    posesOfSeam.push(live);
-  }
+  let posesOfSeam: number[][] = [];
+  let nodes = new Int32Array(0);
+  let costOf = new Int32Array(0);
+  /** Where each state's loops were, so a move can be aimed without a second pass. */
+  let loopsOf: number[][] = [];
+  let everyState: number[] = [];
 
   // --- the design ----------------------------------------------------------
   const wallOpen = new Uint8Array(wallCount);
@@ -257,8 +278,50 @@ function makeEngine(
   /** The block a cell is in, named by the lowest cell in that block. */
   const blockRoot = new Int32Array(surface.cellCount);
   const blocks = new Int32Array(patchCount);
-  /** Blocks on show in each state: the node count of its contracted graph. */
-  const nodes = new Int32Array(states);
+
+  /** Points the engine at a working set, and sizes everything to it. */
+  const setStates = (list: readonly number[]): void => {
+    states = list.length;
+    seamPairs.length = 0;
+    for (const s of list) {
+      const buckets: number[][] = Array.from({ length: seamCount }, () => []);
+      for (const e of surface.adjByState[s]!) {
+        const k = seamIndex.get(e.classId);
+        if (k === undefined) continue;
+        buckets[k]!.push(e.a, e.b);
+      }
+      seamPairs.push(buckets.map(b => Int32Array.from(b)));
+    }
+    patchSeen = list.map(s => {
+      const seen = new Uint8Array(patchCount);
+      const visible = surface.visibleByState[s]!;
+      for (let cell = 0; cell < surface.cellCount; cell++) {
+        if (visible[cell]) seen[patchOf[cell]!] = 1;
+      }
+      return seen;
+    });
+    posesOfPatch = Array.from({ length: patchCount }, () => [] as number[]);
+    for (let pos = 0; pos < states; pos++) {
+      for (let p = 0; p < patchCount; p++) if (patchSeen[pos]![p]) posesOfPatch[p]!.push(pos);
+    }
+    posesOfSeam = [];
+    for (let k = 0; k < seamCount; k++) {
+      const live: number[] = [];
+      for (let pos = 0; pos < states; pos++) if (seamPairs[pos]![k]!.length > 0) live.push(pos);
+      posesOfSeam.push(live);
+    }
+    // Rebuilt from the blocks as they stand, since `relabel` keeps it in step
+    // from here on by the difference alone.
+    nodes = new Int32Array(states);
+    for (let pos = 0; pos < states; pos++) {
+      let count = 0;
+      for (let p = 0; p < patchCount; p++) if (patchSeen[pos]![p]) count += blocks[p]!;
+      nodes[pos] = count;
+    }
+    costOf = new Int32Array(states);
+    loopsOf = Array.from({ length: states }, () => [] as number[]);
+    everyState = Array.from({ length: states }, (_unused, pos) => pos);
+  };
 
   const queue = new Int32Array(widest);
   const relabel = (p: number): void => {
@@ -330,9 +393,6 @@ function makeEngine(
     return true;
   };
 
-  const costOf = new Int32Array(states);
-  /** Where each state's loops were, so a move can be aimed without a second pass. */
-  const loopsOf: number[][] = Array.from({ length: states }, () => []);
   /**
    * Rescores the states a move can have touched, and returns what it cost.
    *
@@ -371,7 +431,6 @@ function makeEngine(
     }
     return delta;
   };
-  const everyState = Array.from({ length: states }, (_unused, s) => s);
   const scoreAll = (): number => {
     costOf.fill(0);
     rescore(everyState);
@@ -472,7 +531,9 @@ function makeEngine(
   const propose = (rng: Rng): number => {
     failing.length = 0;
     for (let s = 0; s < states; s++) if (costOf[s]! > 0) failing.push(s);
-    if (failing.length === 0) return rng.nextInt(wallCount + seamCount) - seamCount;
+    if (failing.length === 0) return seamsFixed
+      ? rng.nextInt(wallCount)
+      : rng.nextInt(wallCount + seamCount) - seamCount;
     const s = failing[rng.nextInt(failing.length)]!;
     const loops = loopsOf[s]!;
     const mostlyGaps = costOf[s]! > (loops.length / 3) * 2;
@@ -482,7 +543,7 @@ function makeEngine(
       // Close the seam that closed the loop: blunt, but it always works, and
       // the seam set has to be free to move or the blocks carry the whole
       // burden of the arrangement.
-      if (rng.next() < CLOSE_THE_SEAM) return ~loops[pick + 2]!;
+      if (!seamsFixed && rng.next() < CLOSE_THE_SEAM) return ~loops[pick + 2]!;
       const a = loops[pick]!;
       const b = loops[pick + 1]!;
       for (const x of rng.next() < HALF ? [a, b] : [b, a]) {
@@ -500,7 +561,7 @@ function makeEngine(
     // state is badly broken such walls are a large share of the closed ones.
     scan(s);
     for (let tries = 0; tries < GAP_TRIES; tries++) {
-      if (rng.next() < SPAN_BY_SEAM) {
+      if (!seamsFixed && rng.next() < SPAN_BY_SEAM) {
         const k = rng.nextInt(seamCount);
         if (seamOpen[k]) continue;
         const pairs = seamPairs[s]![k]!;
@@ -520,7 +581,9 @@ function makeEngine(
       const rb = componentOf.get(blockRoot[wallB[w]!]!);
       if (ra === undefined || rb === undefined || ra !== rb) return w;
     }
-    return rng.nextInt(wallCount + seamCount) - seamCount;
+    return seamsFixed
+      ? rng.nextInt(wallCount)
+      : rng.nextInt(wallCount + seamCount) - seamCount;
   };
 
   const touchedBy = (move: number): number[] =>
@@ -544,12 +607,15 @@ function makeEngine(
     return blockRoot[wallA[move]!] !== blockRoot[wallB[move]!];
   };
 
-  return (rng: Rng, restarts: number): Attempt => {
+  const attempt = (rng: Rng, restarts: number): Attempt => {
     let cuts: number[];
-    try {
-      cuts = chooseCutClasses(surface, rng);
-    } catch {
-      return NOTHING;
+    if (fixedCuts) cuts = [...fixedCuts];
+    else {
+      try {
+        cuts = chooseCutClasses(surface, rng);
+      } catch {
+        return NOTHING;
+      }
     }
     let bestCost = Infinity;
     let bestWalls: Uint8Array | null = null;
@@ -642,6 +708,8 @@ function makeEngine(
     }
     return { open, openCutClasses, cost: bestCost };
   };
+
+  return { attempt, setStates };
 }
 
 /** How often a loop is answered by closing the seam that made it. */
@@ -658,6 +726,45 @@ const LEGAL_TRIES = 8;
 
 /** Named only because a bare 0.5 in the middle of the aim reads as a threshold. */
 const HALF = 0.5;
+
+/**
+ * States the anneal is scored against before the walk starts naming more.
+ *
+ * The same handful `searchAllStates` starts from, and for the same reason: a
+ * design that is a maze in eight states taken at random is usually a maze in
+ * most of the rest, so the ones worth the arithmetic are the ones that turn
+ * out not to be.
+ */
+const WORKING_STATES = 8;
+
+/** The blocks a design cuts the pieces into, as the chain walk wants them. */
+function blocksOfDesign(
+  surface: KineticSurface,
+  chain: Chain,
+  open: ReadonlySet<number>,
+): ChainBlocks {
+  const parent = new Int32Array(surface.cellCount);
+  for (let cell = 0; cell < surface.cellCount; cell++) parent[cell] = cell;
+  const find = (x: number): number => {
+    let root = x;
+    while (parent[root] !== root) root = parent[root] = parent[parent[root]!]!;
+    return root;
+  };
+  for (const e of surface.internalEdges) {
+    if (!open.has(e.classId)) continue;
+    const ra = find(e.a);
+    const rb = find(e.b);
+    if (ra !== rb) parent[ra] = rb;
+  }
+  const root = new Int32Array(surface.cellCount);
+  for (let cell = 0; cell < surface.cellCount; cell++) root[cell] = find(cell);
+  return chainBlocks(
+    chain,
+    cell => surface.mechanism.cells[cell]!.piece,
+    surface.cellCount,
+    root,
+  );
+}
 
 /**
  * The same search as `contractedSearch`, one attempt at a time.
@@ -679,12 +786,30 @@ export function createContractedSearch(
   const { rng } = options;
   const maxRounds = options.maxRounds ?? 48;
   const restarts = options.restarts ?? 1;
-  const attempt = makeEngine(surface, {
+  const engine = makeEngine(surface, {
     iterations: options.iterations ?? 20000,
     temperature: options.temperature ?? 0.8,
+    fixedCuts: options.openCutClasses,
   });
 
-  let best: ContractedResult | null = null;
+  // A mechanism that turns is a line of pieces, so every state can be scored
+  // by walking the line once. Then the anneal need only answer a handful of
+  // them and the walk says which to answer next. A mechanism that folds is not
+  // a line, and there the anneal runs against all of its poses, as it always
+  // did — which is affordable because there are six of them.
+  const chain = chainOf(surface);
+  const working: number[] = [];
+  if (chain) {
+    while (working.length < Math.min(WORKING_STATES, surface.stateCount)) {
+      const s = rng.nextInt(surface.stateCount);
+      if (!working.includes(s)) working.push(s);
+    }
+  } else {
+    for (let s = 0; s < surface.stateCount; s++) working.push(s);
+  }
+  engine.setStates(working);
+
+  let best: { design: KineticDesign; perfect: number; rounds: number } | null = null;
   let round = 0;
   let finished = false;
 
@@ -695,20 +820,28 @@ export function createContractedSearch(
       return true;
     }
     round++;
-    const got = attempt(rng, restarts);
+    const got = engine.attempt(rng, restarts);
     if (got.cost === Infinity) return false; // a shuffle that went nowhere
     const design: KineticDesign = {
       open: got.open,
       openCutClasses: got.openCutClasses,
       targetState: 0,
     };
-    const rate = treeRate(surface, design);
-    if (!best || rate.perfectStates.length > best.rate.perfectStates.length) {
-      best = { design, rate, rounds: round, exhausted: false };
-    }
-    if (rate.rate === 1) {
+    const score = chain
+      ? chainScore(chain, blocksOfDesign(surface, chain, design.open), c => design.open.has(c))
+      : null;
+    const perfect = score ? score.perfect : treeRate(surface, design).perfectStates.length;
+    if (!best || perfect > best.perfect) best = { design, perfect, rounds: round };
+    if (perfect === surface.stateCount) {
       finished = true;
       return true;
+    }
+    // The state the walk found furthest from being a maze is the one worth
+    // annealing against next; without it the anneal answers the same few
+    // complaints for ever and the rest of the object never gets a hearing.
+    if (score && score.witness >= 0 && !working.includes(score.witness)) {
+      working.push(score.witness);
+      engine.setStates(working);
     }
     return false;
   };
@@ -719,7 +852,7 @@ export function createContractedSearch(
       return {
         rounds: Math.min(round, maxRounds),
         maxRounds,
-        perfectStates: best?.rate.perfectStates.length ?? 0,
+        perfectStates: best?.perfect ?? 0,
         stateCount: surface.stateCount,
       };
     },
@@ -731,9 +864,32 @@ export function createContractedSearch(
             : 'no set of cut classes joins the pieces in every state',
         );
       }
-      return { ...best, exhausted: best.rate.rate < 1 };
+      const rate = treeRate(surface, best.design);
+      return { design: best.design, rate, rounds: best.rounds, exhausted: rate.rate < 1 };
     },
   };
+}
+
+/**
+ * Whether the contracted search is the one to use on this surface.
+ *
+ * It was once a question of arithmetic — the contracted search rescored every
+ * state after every move, so a stack of five rings cost 1296 rescores a move
+ * and the cell-level search beat it seventy times over. It no longer does:
+ * the pieces of anything that turns sit in a line, so the anneal answers a
+ * working set of states and `chainScore` checks all of them by walking the
+ * line once. Measured after that change, on three seeds each: a stack of five
+ * six-sided rings 115ms against 303ms, of four 52ms against 107ms, of four
+ * eight-sided rings 312ms against 278ms — level at worst, and it does not get
+ * worse as the states multiply, which is the point.
+ *
+ * So what is left to ask is whether the contraction applies at all: whether
+ * every patch is buried whole or not at all (`contractsCleanly`), and whether
+ * the states are few because the object folds, or factor because it turns.
+ */
+export function contractedSuits(surface: KineticSurface): boolean {
+  if (!contractsCleanly(surface)) return false;
+  return surface.hidesCells || chainOf(surface) !== null;
 }
 
 /** A design that is a perfect maze in every state, or the best one found. */
