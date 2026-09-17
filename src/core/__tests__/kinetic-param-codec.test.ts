@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { JOINED_PAIRS } from '../kinetic/mechanisms/joined.ts';
+import { GYRATIONS } from '../kinetic/mechanisms/gyration.ts';
 import {
   DEFAULT_KINETIC_PARAMS,
+  maxCutN,
   maxPairN,
+  cutCellCount,
+  cutSolidFacts,
+  cutStateCount,
   pairCellCount,
   pairStateCount,
   KINETIC_LIMITS,
@@ -219,5 +224,73 @@ describe('the glued pair on the same page', () => {
       ...DEFAULT_KINETIC_PARAMS, mechanism: 'pair', pair: 'j6@10', pairN: 3,
     });
     expect(p.pairN).toBe(maxPairN('j6@10'));
+  });
+});
+
+describe('the cut solid on the same page', () => {
+  it('stays out of the URL until it is chosen', () => {
+    const url = encodeKineticParams({
+      ...DEFAULT_KINETIC_PARAMS, mechanism: 'cut', cut: 'rhombicuboctahedron', cutN: 2,
+    });
+    expect(url).toContain('mech=cut');
+    expect(url).toContain('cut=rhombicuboctahedron');
+    expect(url).toContain('cn=2');
+    const back = decodeKineticParams(url);
+    expect(back.mechanism).toBe('cut');
+    expect(back.cut).toBe('rhombicuboctahedron');
+    expect(back.cutN).toBe(2);
+    // A ruling of its own, so switching mechanism does not disturb the other.
+    expect(encodeKineticParams({ ...DEFAULT_KINETIC_PARAMS, mechanism: 'cut' })).toBe('?mech=cut');
+  });
+
+  it('falls back on a solid that cannot be cut', () => {
+    const p = decodeKineticParams('?mech=cut&cut=nonsense');
+    expect(p.cut).toBe(DEFAULT_KINETIC_PARAMS.cut);
+    expect(p.mechanism).toBe('cut');
+  });
+
+  it('spends one seam class per cut on holding the line together', () => {
+    // Two cuts ruled two cells to an edge come to four classes, and two of
+    // them are keeping the three pieces joined.
+    const facts = cutSolidFacts('icosahedron', 2);
+    expect(facts.seamClasses).toBe(4);
+    expect(facts.pieces).toBe(3);
+    const p = clampKineticParams({
+      ...DEFAULT_KINETIC_PARAMS, mechanism: 'cut', cut: 'icosahedron', cutN: 2, k: 4,
+    });
+    expect(p.k).toBe(2);
+    const coarse = clampKineticParams({
+      ...DEFAULT_KINETIC_PARAMS, mechanism: 'cut', cut: 'icosahedron', cutN: 1, k: 2,
+    });
+    expect(coarse.k).toBe(0);
+  });
+
+  it('rules every cut by the paper, since the search never runs out first', () => {
+    for (const choice of GYRATIONS) {
+      const n = maxCutN(choice.id);
+      expect(n).toBeGreaterThanOrEqual(KINETIC_LIMITS.cutN.min);
+      expect(n).toBeLessThanOrEqual(KINETIC_LIMITS.cutN.max);
+      expect(cutCellCount(choice.id, n)).toBeLessThanOrEqual(KINETIC_LIMITS.cutCells);
+      // One finer would be over the cap, unless the slider itself has run out.
+      if (n < KINETIC_LIMITS.cutN.max) {
+        expect(cutCellCount(choice.id, n + 1)).toBeGreaterThan(KINETIC_LIMITS.cutCells);
+      }
+      expect(clampKineticParams({
+        ...DEFAULT_KINETIC_PARAMS, mechanism: 'cut', cut: choice.id, cutN: 99,
+      }).cutN).toBe(n);
+    }
+  });
+
+  it('counts the turns of a cut solid without building it', () => {
+    expect(cutStateCount('icosahedron')).toBe(25);
+    expect(cutStateCount('rhombicuboctahedron')).toBe(64);
+    expect(cutStateCount('rhombicosidodecahedron')).toBe(100);
+    // Two cuts, so the turns multiply: that is what the pair cannot do, and
+    // why nothing on this list has fewer than three pieces.
+    for (const choice of GYRATIONS) {
+      const facts = cutSolidFacts(choice.id, 2);
+      expect(facts.pieces).toBe(3);
+      expect(facts.stateCount).toBe(facts.turnSteps ** 2);
+    }
   });
 });

@@ -16,6 +16,9 @@ import type { StackMechanism } from '../core/kinetic/mechanisms/stack.ts';
 import { createJoinedPair, joinedPairById, DEFAULT_JOINED_PAIR }
   from '../core/kinetic/mechanisms/joined.ts';
 import type { JoinedPairMechanism } from '../core/kinetic/mechanisms/joined.ts';
+import { createGyration, gyrationById, DEFAULT_GYRATION }
+  from '../core/kinetic/mechanisms/gyration.ts';
+import type { GyrationMechanism } from '../core/kinetic/mechanisms/gyration.ts';
 import type { TurnableMechanism } from '../core/kinetic/types.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign, StartGoal, TreeRate } from '../core/kinetic/maze.ts';
@@ -36,6 +39,7 @@ import { createKineticScene } from '../render/kinetic-scene.ts';
 import { KINETIC_SCENE } from '../render/kinetic-scene-constants.ts';
 import { exportStackPDF } from '../render/pdf-stack-sheets.ts';
 import { exportPairPDF } from '../render/pdf-pair-sheets.ts';
+import { exportGyrationPDF } from '../render/pdf-gyration-sheets.ts';
 import { A4_SHEET, STACK_SHEET_DEFAULTS } from '../render/kinetic-sheet-constants.ts';
 import { createKineticControls } from './kinetic-controls.ts';
 import { decodeKineticParams, encodeKineticParams, isMaxEffort } from './kinetic-param-codec.ts';
@@ -99,6 +103,10 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
     if (p.mechanism === 'pair') {
       const choice = joinedPairById(p.pair) ?? DEFAULT_JOINED_PAIR;
       return createJoinedPair({ shape: choice.shape, gon: choice.gon, n: p.pairN });
+    }
+    if (p.mechanism === 'cut') {
+      const choice = gyrationById(p.cut) ?? DEFAULT_GYRATION;
+      return createGyration({ shape: choice.shape, axisIndex: choice.axisIndex, n: p.cutN });
     }
     return createStack({ sides: p.sides, layers: p.layers, cols: p.cols, rows: p.rows });
   }
@@ -340,6 +348,10 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
       exportPair(build);
       return;
     }
+    if (build.params.mechanism === 'cut') {
+      exportCut(build);
+      return;
+    }
     const { mech: turnable, surface, design, params: p } = build;
     const mech = turnable as StackMechanism;
     // A cell is printed at a fixed size, so a wide barrel has to be drawn
@@ -372,6 +384,28 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
       }
     }, 0);
   });
+
+  /** The pieces of a cut solid, all at the one scale that lets them meet. */
+  function exportCut(current: Build) {
+    const mech = current.mech as GyrationMechanism;
+    controls.setExportBusy(true);
+    setTimeout(() => {
+      try {
+        const plan = exportGyrationPDF(
+          mech, current.surface, current.design, current.params.seed,
+        );
+        const dowels = plan.dowelLengthsMm.map(mm => `${mm} mm`).join(' and ');
+        controls.showToast(
+          `${plan.sheets.length} sheets — ${plan.edgeMm.toFixed(0)} mm to an edge, ` +
+          `on ${plan.dowelLengthsMm.length === 1 ? 'a dowel of' : 'dowels of'} ${dowels}`,
+        );
+      } catch (error) {
+        controls.showToast(`Export failed: ${(error as Error).message}`);
+      } finally {
+        controls.setExportBusy(false);
+      }
+    }, 0);
+  }
 
   /** The two halves and their bulkheads, at whatever scale the sheet allows. */
   function exportPair(current: Build) {

@@ -16,12 +16,20 @@ import {
   joinedPairById,
   joinedPairCellCount,
 } from '../core/kinetic/mechanisms/joined.ts';
+import {
+  DEFAULT_GYRATION,
+  gyrationById,
+  gyrationCellCount,
+  gyrationFacts,
+} from '../core/kinetic/mechanisms/gyration.ts';
 
 /** Which mechanism the page is showing. */
-export type MechanismId = 'stack' | 'pair';
+export type MechanismId = 'stack' | 'pair' | 'cut';
+
+const MECHANISMS: readonly MechanismId[] = ['stack', 'pair', 'cut'];
 
 export interface KineticParams {
-  /** Rings on a dowel, or two solids glued at a face. */
+  /** Rings on a dowel, two solids glued at a face, or one solid cut open. */
   mechanism: MechanismId;
   /** Faces of the prism. */
   sides: number;
@@ -35,6 +43,10 @@ export interface KineticParams {
   pair: string;
   /** Cells along one edge of a face, when the mechanism is the pair. */
   pairN: number;
+  /** Which solid to cut open, when the mechanism is the cut one. */
+  cut: string;
+  /** Cells along one edge of a face, when the mechanism is the cut one. */
+  cutN: number;
   /** Passages across a seam, over the minimum the mechanism needs. */
   k: number;
   seed: number;
@@ -116,6 +128,21 @@ export const KINETIC_LIMITS = {
    * cells, so `states x cells` never comes near binding here.
    */
   pairCells: 1250,
+  /** Cells along a face edge of a cut solid. */
+  cutN: { min: 1, max: 12 },
+  /**
+   * Cells a cut solid may carry.
+   *
+   * The same number as `pairCells` and for the same reason — a cell that still
+   * prints at about 7 mm — but it is doing more work here, because it is the
+   * *only* thing that stops the slider. A cut solid has no measured search
+   * ceiling to put beside it: over the six solids on offer, at every ruling up
+   * to this cap, on three seeds each, the search found a design perfect in
+   * every state every time (`.dev/probe-gyration-gamma.ts`). So where a pair
+   * is held by whichever of the two comes first, a cut solid is held by the
+   * paper alone.
+   */
+  cutCells: 1250,
 } as const;
 
 /**
@@ -147,6 +174,8 @@ export const DEFAULT_KINETIC_PARAMS: KineticParams = {
   mechanism: 'stack',
   pair: DEFAULT_JOINED_PAIR.id,
   pairN: 3,
+  cut: DEFAULT_GYRATION.id,
+  cutN: 3,
   sides: 6,
   layers: 4,
   cols: 3,
@@ -222,6 +251,53 @@ export function pairStateCount(pairId: string): number {
 }
 
 /**
+ * Cells a cut solid would carry, and what its seams come to, both cached.
+ *
+ * Cached for the same reason the pair's count is: the sliders ask on every
+ * keystroke, and the answer means building the solid, finding the plane it can
+ * be cut on and ruling all of its faces.
+ */
+const cutCells = new Map<string, number>();
+export function cutCellCount(cutId: string, n: number): number {
+  const key = `${cutId}:${n}`;
+  const known = cutCells.get(key);
+  if (known !== undefined) return known;
+  const choice = gyrationById(cutId) ?? DEFAULT_GYRATION;
+  const count = gyrationCellCount({ shape: choice.shape, axisIndex: choice.axisIndex, n });
+  cutCells.set(key, count);
+  return count;
+}
+
+const cutFacts = new Map<string, ReturnType<typeof gyrationFacts>>();
+export function cutSolidFacts(cutId: string, n: number): ReturnType<typeof gyrationFacts> {
+  const key = `${cutId}:${n}`;
+  const known = cutFacts.get(key);
+  if (known) return known;
+  const choice = gyrationById(cutId) ?? DEFAULT_GYRATION;
+  const facts = gyrationFacts({ shape: choice.shape, axisIndex: choice.axisIndex, n });
+  cutFacts.set(key, facts);
+  return facts;
+}
+
+export function cutStateCount(cutId: string): number {
+  return cutSolidFacts(cutId, 1).stateCount;
+}
+
+/**
+ * How finely a cut solid may be ruled: until a cell would be too small to cut.
+ *
+ * One guard and not two, unlike the pair — see `KINETIC_LIMITS.cutCells`.
+ */
+export function maxCutN(cutId: string): number {
+  let best: number = KINETIC_LIMITS.cutN.min;
+  for (let n = KINETIC_LIMITS.cutN.min + 1; n <= KINETIC_LIMITS.cutN.max; n++) {
+    if (cutCellCount(cutId, n) > KINETIC_LIMITS.cutCells) break;
+    best = n;
+  }
+  return best;
+}
+
+/**
  * How finely a pair may be ruled.
  *
  * The joint's own measured ceiling first, then the cost guards. Since the pair
@@ -251,20 +327,31 @@ export function maxPairN(pairId: string): number {
  * is what the mechanism *is*, while the grid is how finely it is ruled.
  */
 export function clampKineticParams(p: KineticParams): KineticParams {
-  const mechanism: MechanismId = p.mechanism === 'pair' ? 'pair' : 'stack';
+  const mechanism: MechanismId = MECHANISMS.includes(p.mechanism) ? p.mechanism : 'stack';
   const sides = clamp(Math.round(p.sides), KINETIC_LIMITS.sides.min, KINETIC_LIMITS.sides.max);
   const layers = clamp(Math.round(p.layers), KINETIC_LIMITS.layers.min, maxLayers(sides));
   const rows = clamp(Math.round(p.rows), KINETIC_LIMITS.rows.min, KINETIC_LIMITS.rows.max);
   const cols = clamp(Math.round(p.cols), KINETIC_LIMITS.cols.min, maxCols({ sides, layers, rows }));
   const pair = (joinedPairById(p.pair) ?? DEFAULT_JOINED_PAIR).id;
   const pairN = clamp(Math.round(p.pairN), KINETIC_LIMITS.pairN.min, maxPairN(pair));
+  const cut = (gyrationById(p.cut) ?? DEFAULT_GYRATION).id;
+  const cutN = clamp(Math.round(p.cutN), KINETIC_LIMITS.cutN.min, maxCutN(cut));
   // A pair has one seam, ruled into `pairN` classes, and one of them has to be
-  // spent joining the halves; the stack's ceiling is a matter of taste.
-  const maxK = mechanism === 'pair' ? pairN - 1 : KINETIC_LIMITS.k.max;
+  // spent joining the halves; a cut solid has as many classes as its seams
+  // between them make, and one of those per seam goes on holding the line of
+  // pieces together. The stack's ceiling is a matter of taste.
+  const cutSeams = cutSolidFacts(cut, cutN);
+  const maxK = mechanism === 'pair'
+    ? pairN - 1
+    : mechanism === 'cut'
+      ? Math.max(0, cutSeams.seamClasses - (cutSeams.pieces - 1))
+      : KINETIC_LIMITS.k.max;
   return {
     mechanism,
     pair,
     pairN,
+    cut,
+    cutN,
     sides,
     layers,
     cols,
@@ -303,6 +390,8 @@ export function encodeKineticParams(params: KineticParams): string {
   if (params.mechanism !== d.mechanism) p.set('mech', params.mechanism);
   if (params.pair !== d.pair) p.set('pair', params.pair);
   if (params.pairN !== d.pairN) p.set('n', String(params.pairN));
+  if (params.cut !== d.cut) p.set('cut', params.cut);
+  if (params.cutN !== d.cutN) p.set('cn', String(params.cutN));
   if (params.sides !== d.sides) p.set('sides', String(params.sides));
   if (params.layers !== d.layers) p.set('rings', String(params.layers));
   if (params.cols !== d.cols) p.set('cols', String(params.cols));
@@ -322,9 +411,11 @@ export function decodeKineticParams(search: string): KineticParams {
   const p = new URLSearchParams(search);
   const d = DEFAULT_KINETIC_PARAMS;
   return clampKineticParams({
-    mechanism: p.get('mech') === 'pair' ? 'pair' : 'stack',
+    mechanism: (MECHANISMS.find(id => id === p.get('mech')) ?? d.mechanism),
     pair: p.get('pair') ?? d.pair,
     pairN: number(p.get('n'), d.pairN),
+    cut: p.get('cut') ?? d.cut,
+    cutN: number(p.get('cn'), d.cutN),
     sides: number(p.get('sides'), d.sides),
     layers: number(p.get('rings'), d.layers),
     cols: number(p.get('cols'), d.cols),
