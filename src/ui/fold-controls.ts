@@ -44,7 +44,7 @@
 
 import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
-import type { CubeRingObject } from '../core/kinetic/mechanisms/cube-ring.ts';
+import type { FoldObjectSummary } from './fold-objects.ts';
 import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
 import { byId, esc, showToast } from './panel.ts';
 import { FOLD_LIMITS } from './fold-param-codec.ts';
@@ -75,7 +75,14 @@ export interface FoldControlsContext {
   /** Everything a link carries, read off the panel as it stands. */
   getParams(): FoldParams;
   /** The rings of cubes on offer, and which one is on show. */
-  setObjects(objects: readonly CubeRingObject[], current: string): void;
+  setObjects(objects: readonly FoldObjectSummary[], current: string): void;
+  /**
+   * Whether this object has a printed pattern, and what the button says.
+   *
+   * A ring of prisms has no pattern yet, and a button that fails when it is
+   * pressed is worse than one that says why it is not there.
+   */
+  setExport(state: { enabled: boolean; label: string }): void;
   /** Follows a shuffle that picked a different object. */
   setObject(id: string): void;
   /** The rulings there are mazes for, and which one is on show. */
@@ -134,7 +141,9 @@ export function createFoldControls(
 
   const actions = new Map<string, () => void>();
   let rulings: readonly number[] = [];
-  let objects: readonly CubeRingObject[] = [];
+  let objects: readonly FoldObjectSummary[] = [];
+  /** What the pattern button says while it is not busy, and whether it works. */
+  let exportState = { enabled: true, label: 'Export cubes PDF' };
   let objectCallback: ((id: string) => void) | null = null;
   let poseCallback: ((index: number) => void) | null = null;
   let rulingCallback: ((cells: number) => void) | null = null;
@@ -200,6 +209,14 @@ export function createFoldControls(
     setObject(id) {
       objectSelect.value = id;
       objectNote.textContent = blurbOf(id);
+    },
+    setExport(state) {
+      exportState = { ...state };
+      exportBtn.textContent = state.label;
+      exportBtn.disabled = !state.enabled;
+      exportBtn.title = state.enabled
+        ? 'How the pieces go together, then one sheet for each piece, to print, cut and tape'
+        : 'This object has no printed pattern yet';
     },
     setRulings(next, current) {
       rulings = next;
@@ -288,8 +305,8 @@ export function createFoldControls(
     },
     showToast,
     setExportBusy(busy) {
-      exportBtn.disabled = busy;
-      exportBtn.textContent = busy ? 'Exporting...' : 'Export cubes PDF';
+      exportBtn.textContent = busy ? 'Exporting...' : exportState.label;
+      exportBtn.disabled = busy || !exportState.enabled;
     },
   };
 }

@@ -23,13 +23,11 @@
 
 import { DEFAULT_PRESET_ID, resolvePreset } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
-import {
-  DEFAULT_CUBE_RING, cubeRingObject, cubeRingRulings,
-} from '../core/kinetic/mechanisms/cube-ring-objects.ts';
-import type { CubeRingObject } from '../core/kinetic/mechanisms/cube-ring.ts';
+import { DEFAULT_FOLD_OBJECT, foldObject, foldRulings } from './fold-objects.ts';
+import type { FoldObject } from './fold-objects.ts';
 
 export interface FoldParams {
-  /** Which ring of cubes: `CubeRingObject.id`. */
+  /** Which object: a ring of cubes or a ring of prisms, by its own id. */
   object: string;
   /** Maze cells across one face of one cube. */
   cells: number;
@@ -58,10 +56,10 @@ export function randomSeed(): number {
 export const DEFAULT_FOLD_PARAMS: FoldParams = {
   // The eight-cube ring: the one the page shipped with, and the one a visitor
   // is likeliest to have in a drawer already.
-  object: DEFAULT_CUBE_RING.id,
+  object: DEFAULT_FOLD_OBJECT.id,
   // Five squares a face: the finest ruling that is still comfortably legible
   // as paper cubes, and coarse enough to read on screen at a glance.
-  cells: nearestRuling(DEFAULT_CUBE_RING, 5),
+  cells: nearestRuling(DEFAULT_FOLD_OBJECT, 5),
   // As on the polyhedral page. It is cached at every ruling, so the first
   // thing anyone sees is drawn without a search, and so is the first thing
   // they see after dragging the ruling slider.
@@ -74,8 +72,8 @@ export const DEFAULT_FOLD_PARAMS: FoldParams = {
 };
 
 /** The nearest ruling the object offers: a link cannot ask for one it has not. */
-export function nearestRuling(object: CubeRingObject, cells: number): number {
-  const rulings = cubeRingRulings(object);
+export function nearestRuling(object: FoldObject, cells: number): number {
+  const rulings = foldRulings(object);
   return rulings.reduce((best, ruling) =>
     Math.abs(ruling - cells) < Math.abs(best - cells) ? ruling : best, rulings[0]!);
 }
@@ -83,7 +81,7 @@ export function nearestRuling(object: CubeRingObject, cells: number): number {
 export function clampFoldParams(p: FoldParams): FoldParams {
   // A link that names an object this page no longer has is opened on the one
   // it does have, rather than on nothing.
-  const object = cubeRingObject(p.object);
+  const object = foldObject(p.object);
   return {
     object: object.id,
     cells: nearestRuling(object, Math.round(p.cells)),

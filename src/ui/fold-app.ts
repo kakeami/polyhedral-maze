@@ -34,11 +34,10 @@
 import { createRng } from '../core/prng.ts';
 import { buildSurface } from '../core/kinetic/surface.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
-import { createCubeRing } from '../core/kinetic/mechanisms/cube-ring.ts';
-import type { CubeRingMechanism, CubeRingObject } from '../core/kinetic/mechanisms/cube-ring.ts';
 import {
-  CUBE_RING_OBJECTS, cubeRingObject, cubeRingRulings,
-} from '../core/kinetic/mechanisms/cube-ring-objects.ts';
+  FOLD_OBJECTS, createFoldMechanism, foldObject, foldRulings, isCubeRingMechanism, isPrismRing,
+} from './fold-objects.ts';
+import type { FoldMechanism, FoldObject } from './fold-objects.ts';
 import { cubeRingDesign } from '../core/kinetic/mechanisms/cube-ring-designs.ts';
 import { decodeOpenClasses } from '../core/kinetic/stored-design.ts';
 import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
@@ -48,7 +47,7 @@ import type { FoldGraph } from '../core/kinetic/fold-path.ts';
 import {
   buildKineticPieces, kineticSolutionPath, kineticWalls, solutionLength,
 } from '../render/kinetic-geometry.ts';
-import { exportFoldPDF } from '../render/pdf-kinetic-sheets.ts';
+import { exportFoldPDF, exportHoneycombPDF } from '../render/pdf-kinetic-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
@@ -57,7 +56,7 @@ import type { FoldParams } from './fold-param-codec.ts';
 import { SCENE_PRESETS } from '../render/scene-presets.ts';
 
 interface Build {
-  mech: CubeRingMechanism;
+  mech: FoldMechanism;
   surface: KineticSurface;
   graph: FoldGraph;
   design: KineticDesign;
@@ -72,7 +71,7 @@ interface Build {
 
 /** Mechanism and surface, kept so that moving between mazes costs nothing. */
 interface Ruling {
-  mech: CubeRingMechanism;
+  mech: FoldMechanism;
   surface: KineticSurface;
   graph: FoldGraph;
 }
@@ -87,7 +86,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // rather than a number.
   const rulings = new Map<string, Ruling>();
   let build: Build | null = null;
-  let object = cubeRingObject(opening.object);
+  let object: FoldObject = foldObject(opening.object);
   let cells = opening.cells;
   let seed = opening.seed;
   let poseIndex = opening.pose;
@@ -98,7 +97,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     const key = `${object.id}:${next}`;
     const had = rulings.get(key);
     if (had) return had;
-    const mech = createCubeRing(object, { cells: next });
+    const mech = createFoldMechanism(object, { cells: next });
     const made: Ruling = {
       mech,
       surface: buildSurface(mech, { maxStates: mech.states.length }),
@@ -119,7 +118,11 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
    * moment ago.
    */
   function storedDesign(ruling: Ruling, wanted: number): KineticDesign | null {
-    const stored = cubeRingDesign(ruling.mech.object.id, ruling.mech.cellsPerFace, wanted);
+    // Only the rings of cubes have a shelf of mazes; a ring of prisms is
+    // searched for, which takes a few milliseconds at any ruling it offers.
+    const stored = isPrismRing(ruling.mech.object)
+      ? null
+      : cubeRingDesign(ruling.mech.object.id, ruling.mech.cellsPerFace, wanted);
     if (!stored || stored.classCount !== ruling.surface.classCount) return null;
     const design: KineticDesign = {
       open: decodeOpenClasses(stored),
@@ -289,9 +292,10 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // it is a name rather than a description of any one object.
   controls.onObject(next => {
     if (next === object.id) return;
-    object = cubeRingObject(next);
+    object = foldObject(next);
     cells = nearestRulingOf(object, cells);
-    controls.setRulings(cubeRingRulings(object), cells);
+    controls.setRulings(foldRulings(object), cells);
+    showExport();
     rebuild(false);
     scene.holdAutoFold();
   });
@@ -324,8 +328,8 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // it is made of — but not the three switches, which are how the visitor has
   // decided to look at it rather than what they are looking at.
   controls.onAction('shuffle-all', () => {
-    object = CUBE_RING_OBJECTS[Math.floor(Math.random() * CUBE_RING_OBJECTS.length)] ?? object;
-    const rulings = cubeRingRulings(object);
+    object = FOLD_OBJECTS[Math.floor(Math.random() * FOLD_OBJECTS.length)] ?? object;
+    const rulings = foldRulings(object);
     cells = rulings[Math.floor(Math.random() * rulings.length)] ?? cells;
     seed = randomSeed();
     poseIndex = Math.floor(Math.random() * rulingFor(cells).mech.states.length);
@@ -361,17 +365,34 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     );
   });
 
-  // The pattern is nine sheets and takes a moment to draw, so the button says
-  // so before the work starts rather than after it.
+  /**
+   * What the pattern button says, which the object decides.
+   *
+   * Both kinds print one piece a sheet and a sheet of notes in front, and both
+   * print the piece as large as a sheet holds — a cube at 58 mm a side, a
+   * prism at 43 — so the button only has to name what comes out.
+   */
+  function showExport() {
+    controls.setExport({
+      enabled: true,
+      label: isPrismRing(object) ? 'Export prisms PDF' : 'Export cubes PDF',
+    });
+  }
+
+  // The pattern is a sheet a piece and takes a moment to draw, so the button
+  // says so before the work starts rather than after it.
   controls.onAction('export-pdf', () => {
     if (!build) return;
     const { mech, surface, design, ends, seed: from } = build;
     controls.setExportBusy(true);
     setTimeout(() => {
       try {
-        const plan = exportFoldPDF(mech, surface, design, from, { ends });
+        const plan = isCubeRingMechanism(mech)
+          ? exportFoldPDF(mech, surface, design, from, { ends })
+          : exportHoneycombPDF(mech, surface, design, from, { ends });
         controls.showToast(
-          `${plan.sheets.length} sheets — ${mech.pieceCount} cubes ` +
+          `${plan.sheets.length} sheets — ${mech.pieceCount} ` +
+          `${isCubeRingMechanism(mech) ? 'cubes' : 'prisms'} ` +
           `${plan.edgeMm.toFixed(0)} mm on a side`,
         );
       } catch (error) {
@@ -405,16 +426,17 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   });
 
   window.addEventListener('resize', () => scene.resize());
-  controls.setObjects(CUBE_RING_OBJECTS, object.id);
-  controls.setRulings(cubeRingRulings(object), cells);
+  controls.setObjects(FOLD_OBJECTS, object.id);
+  controls.setRulings(foldRulings(object), cells);
+  showExport();
   // Opened in the pose the link asked for, and cut to it rather than folded:
   // there is nothing to have come from.
   rebuild(true);
 }
 
 /** The ruling nearest the one on show, among those the object offers. */
-function nearestRulingOf(next: CubeRingObject, cells: number): number {
-  const rulings = cubeRingRulings(next);
+function nearestRulingOf(next: FoldObject, cells: number): number {
+  const rulings = foldRulings(next);
   return rulings.reduce((best, ruling) =>
     Math.abs(ruling - cells) < Math.abs(best - cells) ? ruling : best, rulings[0]!);
 }
@@ -428,7 +450,7 @@ function nearestRulingOf(next: CubeRingObject, cells: number): number {
  * which is the order the buttons stand in.
  */
 function describePoses(
-  mech: CubeRingMechanism,
+  mech: FoldMechanism,
   surface: KineticSurface,
   design: KineticDesign,
 ): FoldPose[] {
