@@ -64,6 +64,21 @@ export interface FoldableMechanism {
    * are cubes, and a box that contains a piece can only ever be pessimistic.
    */
   readonly pieceHalfExtents: readonly Vec3[];
+  /**
+   * Each piece's own faces, as loops of points in its body frame — for a
+   * mechanism whose pieces are *not* boxes.
+   *
+   * The sentence above is true of a cube and false of anything else, and the
+   * difference is not a matter of degree. A triangular prism fills half of its
+   * box and a rhombic dodecahedron a third, so two of them sharing a face have
+   * overlapping boxes *before anything moves*: measured, the box test refuses
+   * every fold of every taping of a prism ring, which reads as "the object is
+   * rigid" and is wrong. With the faces given, the sweep is tested by
+   * separating axes over the real solids instead
+   * (`.dev/2026-09-18-other-polyhedra-fold.md` §0-3). On the cube ring the two
+   * tests agree, which is what the box path is still here for.
+   */
+  readonly pieceFaces?: readonly (readonly (readonly Vec3[])[])[];
 }
 
 /**
@@ -322,25 +337,131 @@ function foldBetween(
  */
 export function sweepIsClear(
   step: FoldStep,
-  mech: Pick<FoldableMechanism, 'pieceCount' | 'pieceHalfExtents'>,
+  mech: Pick<FoldableMechanism, 'pieceCount' | 'pieceHalfExtents' | 'pieceFaces'>,
 ): boolean {
   const moving = new Set(step.pieces);
   const still: number[] = [];
   for (let piece = 0; piece < mech.pieceCount; piece++) {
     if (!moving.has(piece)) still.push(piece);
   }
+  const faces = mech.pieceFaces;
 
   for (let sample = 1; sample < SWEEP_SAMPLES; sample++) {
     const state = stateDuringFold(step, sample / SWEEP_SAMPLES);
     for (const a of step.pieces) {
       for (const b of still) {
-        const overlap = boxesOverlap(
-          state[a]!, mech.pieceHalfExtents[a]!,
-          state[b]!, mech.pieceHalfExtents[b]!,
-        );
+        const overlap = faces
+          ? solidsOverlap(state[a]!, bodyOf(faces[a]!), state[b]!, bodyOf(faces[b]!))
+          : boxesOverlap(
+            state[a]!, mech.pieceHalfExtents[a]!,
+            state[b]!, mech.pieceHalfExtents[b]!,
+          );
         if (overlap) return false;
       }
     }
+  }
+  return true;
+}
+
+/** A piece as a convex solid: what the separating-axis test needs of it. */
+interface Body {
+  readonly verts: readonly Vec3[];
+  /** One per distinct face direction. */
+  readonly normals: readonly Vec3[];
+  /** One per distinct edge direction. */
+  readonly edges: readonly Vec3[];
+  /** How far the piece reaches from its own origin. */
+  readonly radius: number;
+}
+
+const bodies = new WeakMap<object, Body>();
+
+function bodyOf(faces: readonly (readonly Vec3[])[]): Body {
+  const had = bodies.get(faces);
+  if (had) return had;
+  const verts: Vec3[] = [];
+  const seen = new Set<string>();
+  for (const loop of faces) {
+    for (const v of loop) {
+      const key = v.map(x => x.toFixed(6)).join(',');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      verts.push(v);
+    }
+  }
+  const normals: Vec3[] = [];
+  const edges: Vec3[] = [];
+  const keep = (list: Vec3[], v: Vec3): void => {
+    const length = Math.hypot(v[0], v[1], v[2]);
+    if (length < 1e-9) return;
+    const unit = normalise(v);
+    for (const had_ of list) {
+      const c = cross(had_, unit);
+      if (Math.hypot(c[0], c[1], c[2]) < 1e-6) return;
+    }
+    list.push(unit);
+  };
+  for (const loop of faces) {
+    keep(normals, cross(
+      [loop[1]![0] - loop[0]![0], loop[1]![1] - loop[0]![1], loop[1]![2] - loop[0]![2]],
+      [loop[2]![0] - loop[0]![0], loop[2]![1] - loop[0]![1], loop[2]![2] - loop[0]![2]],
+    ));
+    for (let k = 0; k < loop.length; k++) {
+      const a = loop[k]!;
+      const b = loop[(k + 1) % loop.length]!;
+      keep(edges, [b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+    }
+  }
+  const made: Body = {
+    verts,
+    normals,
+    edges,
+    radius: Math.max(...verts.map(v => Math.hypot(v[0], v[1], v[2]))),
+  };
+  bodies.set(faces, made);
+  return made;
+}
+
+/**
+ * Whether two placed convex solids share more than a skin of space.
+ *
+ * The same separating-axis argument the boxes use, over the axes these solids
+ * actually have: each one's face normals, and the cross products of their edge
+ * directions. The bounding spheres are tried first, which is most pairs of a
+ * ring settled in three multiplications.
+ */
+function solidsOverlap(a: Placement, bodyA: Body, b: Placement, bodyB: Body): boolean {
+  const between: Vec3 = [
+    b.offset[0] - a.offset[0], b.offset[1] - a.offset[1], b.offset[2] - a.offset[2],
+  ];
+  if (Math.hypot(between[0], between[1], between[2]) > bodyA.radius + bodyB.radius) return false;
+
+  const turned = (rot: Mat3, v: Vec3): Vec3 => apply(rot, v);
+  const axes: Vec3[] = [];
+  for (const n of bodyA.normals) axes.push(turned(a.rot, n));
+  for (const n of bodyB.normals) axes.push(turned(b.rot, n));
+  for (const ea of bodyA.edges) {
+    for (const eb of bodyB.edges) {
+      const c = cross(turned(a.rot, ea), turned(b.rot, eb));
+      if (Math.hypot(c[0], c[1], c[2]) > 1e-6) axes.push(normalise(c));
+    }
+  }
+  for (const axis of axes) {
+    let loA = Infinity;
+    let hiA = -Infinity;
+    let loB = Infinity;
+    let hiB = -Infinity;
+    for (const v of bodyA.verts) {
+      const d = dot(apply(a.rot, v), axis) + dot(a.offset, axis);
+      if (d < loA) loA = d;
+      if (d > hiA) hiA = d;
+    }
+    for (const v of bodyB.verts) {
+      const d = dot(apply(b.rot, v), axis) + dot(b.offset, axis);
+      if (d < loB) loB = d;
+      if (d > hiB) hiB = d;
+    }
+    if (Math.min(hiA, hiB) - Math.max(loA, loB) <= TOUCH_SLACK) return false;
   }
   return true;
 }
