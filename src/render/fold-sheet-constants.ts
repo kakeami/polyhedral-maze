@@ -71,6 +71,16 @@ export const FOLD_SHEET_DEFAULTS = {
   tapeStandMm: 1.5,
   tapeLabelStandMm: 4.5,
   gapMm: 7,
-  /** A cube in the plank diagrams: as large as four views leave room for. */
+  /** A cube in the layout diagrams: as large as four views leave room for. */
   diagramEdgeMm: 28,
+  /**
+   * How small those may be shrunk when the layout is tall rather than long.
+   *
+   * A frame of ten or twelve cubes is four cells deep and its views are four
+   * times as tall as a plank's, so they are shelved two to a row and drawn
+   * smaller (`packDiagrams`). This is where that stops: below it the numbering
+   * is no longer a diagram anyone can match a cube against, and a layout that
+   * needed it would be better given a sheet of its own.
+   */
+  minDiagramEdgeMm: 14,
 } as const;

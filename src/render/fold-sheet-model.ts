@@ -18,16 +18,17 @@
  * is taken.
  *
  * **Nothing is written on the model.** Everything inside the cut line is maze.
- * That is why the first sheet draws the object, laid out as it is taped, from
- * all four sides with its real walls on it: by the time the cubes are built
- * they are identical white cubes with mazes on them, and the only thing that
- * says which is which, and which way up, is the drawing itself.
+ * That is why the first sheet draws the object in one of its shapes, from
+ * every side that shows each cube in its own place, with its real walls on it:
+ * by the time the cubes are built they are identical white cubes with mazes on
+ * them, and the only thing that says which is which, and which way up, is the
+ * drawing itself.
  */
 
 import type { Vec2 } from '../core/vec2.ts';
 import { scale2 } from '../core/vec2.ts';
 import type { Vec3 } from '../core/types.ts';
-import { add, cross, dot, scale } from '../core/vec3.ts';
+import { add, cross, dot, scale, sub } from '../core/vec3.ts';
 import type { PageItem } from './face-page-model.ts';
 import { glueTabQuad } from './kinetic-sheet-parts.ts';
 import type { SheetBox } from './kinetic-sheet-constants.ts';
@@ -36,9 +37,9 @@ import { FOLD_SHEET_STYLE as S, FOLD_SHEET_DEFAULTS as D } from './fold-sheet-co
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
 import { pickPrintedEnds, treeRate } from '../core/kinetic/maze.ts';
-import type {
-  CubeRingMechanism, Lattice, TapeSeam,
-} from '../core/kinetic/mechanisms/cube-ring.ts';
+import type { CubeRingMechanism, TapeSeam } from '../core/kinetic/mechanisms/cube-ring.ts';
+import type { KineticState, Mat3 } from '../core/kinetic/types.ts';
+import { applyPlacement } from '../core/kinetic/types.ts';
 
 export interface FoldSheetOptions {
   /** Edge of one cube, in mm. Defaults to the largest the sheet allows. */
@@ -666,12 +667,18 @@ function segmentKey(a: Vec2, b: Vec2): string {
 /**
  * The sheet that says how the cubes go together.
  *
- * Four views of the object as it is laid out to be taped — from above, from
- * below, and from each of its long sides — with the real maze on them and a
+ * Views of the object in one of its shapes — from above, from below, and from
+ * whichever sides have something to add — with the real maze on them and a
  * bar across every edge that takes tape. It has to be the real maze: cubes of
  * the same size with no writing anywhere on them are told apart only by what
  * is printed on them, and which way up each one goes is the same question
  * again.
+ *
+ * Which shape, which views and what the notes say are all read off the object
+ * (`drawnArrangement`), because the objects differ in what a pair of hands can
+ * do with them: a ring taped on a plank is laid out and taped where it lies,
+ * and one whose every shape presses some hinge into a crack has to be taped in
+ * ring order, with the drawing left as something to check against.
  */
 function assemblySheet(
   mech: CubeRingMechanism,
@@ -687,6 +694,7 @@ function assemblySheet(
   let y = sheet.margin;
 
   const pieces = mech.pieceCount;
+  const shape = drawnArrangement(mech, seams);
   items.push({
     kind: 'text', at: [sheet.margin, y + S.titleSize],
     text: `Folding maze — ${countWord(pieces)} cubes taped into a ring`,
@@ -694,14 +702,62 @@ function assemblySheet(
   });
   y += S.titleSize + 3;
 
+  const axes: { label: string; frame: Frame }[] = [
+    { label: 'From above', frame: { n: [0, 0, 1], r: [1, 0, 0], u: [0, 1, 0] } },
+    { label: 'From below (turned over towards you)', frame: { n: [0, 0, -1], r: [1, 0, 0], u: [0, -1, 0] } },
+    { label: 'The near side', frame: { n: [0, -1, 0], r: [1, 0, 0], u: [0, 0, 1] } },
+    { label: 'The far side', frame: { n: [0, 1, 0], r: [-1, 0, 0], u: [0, 0, 1] } },
+    { label: 'The left side', frame: { n: [-1, 0, 0], r: [0, -1, 0], u: [0, 0, 1] } },
+    { label: 'The right side', frame: { n: [1, 0, 0], r: [0, 1, 0], u: [0, 0, 1] } },
+  ];
+
+  // Measured before anything is drawn, because the shape decides both which
+  // views are worth having and how large they can be: a 2 by 6 plank is long
+  // and low, a 3 by 4 frame is half as wide and twice as tall, and four of the
+  // latter stacked one under another run off the bottom of the sheet.
+  const measured = axes.map(view => {
+    const spots = shape.cells
+      .map((cell, piece) => ({ cell, piece }))
+      .filter(({ cell }) => outsideOf(shape.cells, cell, view.frame.n))
+      .map(({ cell, piece }) => {
+        const centre = add(cell, [0.5, 0.5, 0.5]);
+        return { piece, at: [dot(centre, view.frame.r), dot(centre, view.frame.u)] as Vec2 };
+      });
+    return {
+      view,
+      spots,
+      // Two cubes on the same spot would be a drawing of neither. It happens
+      // the moment a shape has a notch or a hole in it: looking along the
+      // notch, the cube at the bottom of it stands in front of one of the
+      // cubes on the far side.
+      oneEach: new Set(spots.map(spot => spot.at.join(','))).size === spots.length,
+      // Only worth counting when the tape can go on in this shape at all: a
+      // ring taped in order is checked against the drawing rather than built
+      // from it, and two views of a flat shape show every cube it has.
+      tapes: shape.tapeable
+        ? shape.tapes.filter(tape => tape.free && sameWay(tape.normal, view.frame.n))
+        : [],
+    };
+  });
+
+  // From above and from below every cube of a shape one layer thick is in
+  // sight, so those two are the drawing; a side is worth a view of its own
+  // when it is the only one that can show a strip of tape.
+  const kept = measured.filter((shown, index) =>
+    shown.spots.length > 0 && shown.oneEach && (index < 2 || shown.tapes.length > 0));
+  const seen = kept.length > 0 ? kept : measured.filter(shown => shown.spots.length > 0).slice(0, 1);
+
+  // A strip whose own view is not drawn: it runs down a vertical corner, which
+  // is a point rather than a line seen from above, so it is marked as one.
+  const dotted = shape.tapes.filter(tape =>
+    tape.free && !seen.some(shown => sameWay(tape.normal, shown.view.frame.n)));
+
   const notes = [
     `Print at 100%. ${capitalise(countWord(pieces))} more sheets follow, one cube each, ` +
       `${edge.toFixed(1)} mm on a side.`,
     'Glue each sheet to thin card, cut the outline, score the creases and glue the cube up.',
     'Four creases run between two notches in the outline; the fifth is marked by a tick at each end.',
-    `Then lay the ${countWord(pieces)} cubes out as the four views below show — they are the real`,
-    'drawing, so a cube goes where its own pattern is — and hinge them with clear tape along the',
-    'orange bars. Tape on the outside, one strip an edge, slack enough to fold both ways.',
+    ...tapingNotes(mech, shape, dotted.length > 0),
     shapesSentence(mech, perfect),
     'Two squares carry an S and two carry a G: whichever way it is folded, one of each is outside.',
   ];
@@ -714,34 +770,30 @@ function assemblySheet(
   }
   y += 3;
 
-  const small = D.diagramEdgeMm;
-  const views: { label: string; frame: Frame }[] = [
-    { label: 'From above', frame: { n: [0, 0, 1], r: [1, 0, 0], u: [0, 1, 0] } },
-    { label: 'From below (turned over towards you)', frame: { n: [0, 0, -1], r: [1, 0, 0], u: [0, -1, 0] } },
-    { label: `The near side (y = ${Math.min(...mech.ring.map(cell => cell[1]))})`,
-      frame: { n: [0, -1, 0], r: [1, 0, 0], u: [0, 0, 1] } },
-    { label: `The far side (y = ${Math.max(...mech.ring.map(cell => cell[1])) + 1})`,
-      frame: { n: [0, 1, 0], r: [-1, 0, 0], u: [0, 0, 1] } },
-  ];
+  const plan = packDiagrams(
+    seen.map(shown => {
+      const across = shown.spots.map(spot => spot.at[0]);
+      const up = shown.spots.map(spot => spot.at[1]);
+      return {
+        wide: Math.max(...across) - Math.min(...across) + 1,
+        tall: Math.max(...up) - Math.min(...up) + 1,
+      };
+    }),
+    sheet.width - 2 * sheet.margin,
+    sheet.height - sheet.margin - y,
+  );
+  const small = plan.edge;
 
-  for (const view of views) {
-    const seen = mech.ring
-      .map((cell, piece) => ({ cell, piece }))
-      .filter(({ cell }) => outsideOf(mech.ring, cell, view.frame.n));
-    if (seen.length === 0) continue;
-
-    const spots = seen.map(({ cell, piece }) => {
-      const centre = add(cell as unknown as Vec3, [0.5, 0.5, 0.5]);
-      return { piece, at: [dot(centre, view.frame.r), dot(centre, view.frame.u)] as Vec2 };
-    });
-    const minR = Math.min(...spots.map(s => s.at[0]));
-    const maxU = Math.max(...spots.map(s => s.at[1]));
-    const minU = Math.min(...spots.map(s => s.at[1]));
-    const originX = sheet.margin;
-    const originY = y + S.diagramLabelSize + 2.5;
+  seen.forEach((shown, index) => {
+    const { view, spots } = shown;
+    const minR = Math.min(...spots.map(spot => spot.at[0]));
+    const maxU = Math.max(...spots.map(spot => spot.at[1]));
+    const originX = sheet.margin + plan.at[index]![0];
+    const top = y + plan.at[index]![1];
+    const originY = top + S.diagramLabelSize + 2.5;
 
     items.push({
-      kind: 'text', at: [sheet.margin, y + S.diagramLabelSize], text: view.label,
+      kind: 'text', at: [originX, top + S.diagramLabelSize], text: view.label,
       size: S.diagramLabelSize, color: S.diagramLabelColor, align: 'left',
     });
 
@@ -749,13 +801,18 @@ function assemblySheet(
       originX + (at[0] - minR + 0.5) * small,
       originY + (maxU - at[1] + 0.5) * small,
     ];
+    const project = (point: Vec3): Vec2 =>
+      place([dot(point, view.frame.r), dot(point, view.frame.u)]);
 
     const drawn = new Set<string>();
     for (const spot of spots) {
       const centre = place(spot.at);
       paintFace(items, {
         mech, surface, design, ends, piece: spot.piece,
-        frame: view.frame, centre, edge: small, drawn,
+        // The cubes are turned in this shape, so which face of a cube looks
+        // this way is a question for that cube's own frame.
+        frame: inBodyFrame(shape.state[spot.piece]!.rot, view.frame),
+        centre, edge: small, drawn,
         cutSides: new Set<Step>(),
       });
       items.push({
@@ -764,26 +821,219 @@ function assemblySheet(
       });
     }
 
-    // The tape, where this view can see it.
-    for (const seam of seams) {
-      const world = tapeInWorld(mech.ring, seam);
-      if (!world.every(point => onThisSide(mech.ring, point, view.frame.n))) continue;
-      const [a, b] = world.map(point => place([dot(point, view.frame.r), dot(point, view.frame.u)]));
+    // The tape, where this view can see it — and only when the tape can go on
+    // in this shape at all, since a bar drawn where no hand can reach is worse
+    // than none.
+    if (!shape.tapeable) return;
+    for (const tape of shown.tapes) {
+      const [a, b] = tape.ends.map(project);
       items.push({ kind: 'line', a: a!, b: b!, stroke: S.tapeColor, width: S.tapeWidth });
     }
-
-    y = originY + (maxU - minU + 1) * small + D.gapMm;
-  }
+    if (index !== 0) return;
+    for (const tape of dotted) {
+      const middle = project(scale(add(tape.ends[0], tape.ends[1]), 0.5));
+      const half = S.tapeWidth;
+      items.push({
+        kind: 'poly',
+        pts: [
+          [middle[0] - half, middle[1] - half], [middle[0] + half, middle[1] - half],
+          [middle[0] + half, middle[1] + half], [middle[0] - half, middle[1] + half],
+        ],
+        fill: S.tapeColor,
+      });
+    }
+  });
 
   return items;
+}
+
+/** One strip of tape, where a shape of the object puts it. */
+interface Tape {
+  readonly seam: TapeSeam;
+  /** The taped edge, in the coordinates the shape is drawn in. */
+  readonly ends: readonly [Vec3, Vec3];
+  /** Which way the strip faces: the two cube faces it is pressed onto. */
+  readonly normal: Vec3;
+  /** Whether both of those faces are free with the cubes in this shape. */
+  readonly free: boolean;
+}
+
+/** The cubes as one shape puts them, and where the tape goes on them there. */
+interface Arrangement {
+  readonly state: KineticState;
+  /** Where each cube sits, one lattice cell each. */
+  readonly cells: readonly Vec3[];
+  readonly tapes: readonly Tape[];
+  /** One layer thick: a shape that can be laid on a table and looked down on. */
+  readonly flat: boolean;
+  /** Whether every strip can be laid on with the cubes in this shape. */
+  readonly tapeable: boolean;
+}
+
+/**
+ * The shape the first sheet draws — chosen for the tape rather than named.
+ *
+ * The easiest way to build one of these is to lay the cubes out and tape them
+ * where they lie, and the layout an object is defined in is usually the shape
+ * to do it in. Usually, not always, and the difference is not a matter of
+ * taste: a strip has to be pressed onto the two faces that meet at its edge,
+ * and a shape can have a third cube lying against one of them. A ring taped on
+ * a plank never does. A ring taped round a frame does it twice, and one whose
+ * hinges run down the corners of a staircase does it eight times out of ten,
+ * so there is no shape at all it can be taped in while lying flat — it is
+ * taped in ring order instead, a pair at a time, and the drawing is left as
+ * something to check the finished object against.
+ *
+ * So: the flattest shape that leaves the most tape reachable, the shapes taken
+ * in the order the object reports them, which puts the layout first where the
+ * layout works.
+ */
+function drawnArrangement(
+  mech: CubeRingMechanism,
+  seams: readonly TapeSeam[],
+): Arrangement {
+  const closures = mech.closures();
+  const rank = (shape: Arrangement): number =>
+    (shape.flat ? 1000 : 0) + shape.tapes.filter(tape => tape.free).length;
+  let best: Arrangement | null = null;
+  for (const pose of mech.poses) {
+    const made = arrangementAt(seams, closures[pose.closure]!);
+    if (!best || rank(made) > rank(best)) best = made;
+  }
+  return best ?? arrangementAt(seams, closures[0]!);
+}
+
+function arrangementAt(seams: readonly TapeSeam[], state: KineticState): Arrangement {
+  const cells = state.map(at =>
+    at.offset.map(x => Math.round(x - 0.5)) as unknown as Vec3);
+  const filled = new Set(cells.map(cell => cell.join(',')));
+  const tapes = seams.map((seam): Tape => {
+    const [a, b] = seam.pieces;
+    const ends = seam.ends[0].map(point => applyPlacement(state[a]!, point)) as [Vec3, Vec3];
+    // A strip lies along one edge of the face the two cubes share, so which
+    // way it faces is which way that edge is offset from the middle of that
+    // face: half a cube along one axis and nothing along the others.
+    const middle = scale(add(ends[0], ends[1]), 0.5);
+    const shared = scale(add(state[a]!.offset, state[b]!.offset), 0.5);
+    const normal = sub(middle, shared).map(x => Math.round(x * 2)) as unknown as Vec3;
+    const free = !seam.pieces.some(piece => filled.has(add(cells[piece]!, normal).join(',')));
+    return { seam, ends, normal, free };
+  });
+  const span = [0, 1, 2].map(axis =>
+    Math.max(...cells.map(cell => cell[axis]!)) - Math.min(...cells.map(cell => cell[axis]!)));
+  return {
+    state,
+    cells,
+    tapes,
+    flat: Math.min(...span) === 0,
+    tapeable: tapes.every(tape => tape.free),
+  };
+}
+
+/** How the cubes are taped together, in words, read off the shape drawn. */
+function tapingNotes(
+  mech: CubeRingMechanism,
+  shape: Arrangement,
+  dotted: boolean,
+): string[] {
+  const pieces = mech.pieceCount;
+  if (!shape.tapeable) {
+    return [
+      `Then tape the cubes together in ring order — 1 to 2, 2 to 3, and on round to ${pieces} and 1`,
+      '— joining the two edges their own sheets name, on the outside, one strip an edge, slack',
+      'enough to fold both ways. This ring cannot be taped lying flat: in every shape it takes,',
+      'some of those edges are pressed against a third cube, so each pair is taped before the ring',
+      'is closed. The views below are the finished ring in one of its shapes, to check against.',
+    ];
+  }
+  return [
+    `Then lay the ${countWord(pieces)} cubes out as the views below show — they are the real`,
+    'drawing, so a cube goes where its own pattern is — and hinge them with clear tape along the',
+    dotted
+      ? 'orange bars and down the corner at each orange dot. Tape on the outside, one strip an edge,'
+      : 'orange bars. Tape on the outside, one strip an edge, slack enough to fold both ways.',
+    ...(dotted ? ['slack enough to fold both ways.'] : []),
+  ];
+}
+
+/** Whether two axis directions are the same one. */
+const sameWay = (a: Vec3, b: Vec3): boolean =>
+  a.every((x, axis) => Math.abs(x - b[axis]!) < 1e-9);
+
+/**
+ * A view direction in the frame of one cube: which of its faces looks that
+ * way, once the shape has turned it.
+ *
+ * The rotation of a placement is a signed permutation, so its inverse is its
+ * transpose and the answer is exact — which matters, because the face is then
+ * chosen by which axis the direction points along.
+ */
+function inBodyFrame(rot: Mat3, frame: Frame): Frame {
+  const back = (v: Vec3): Vec3 => [
+    rot[0]![0]! * v[0] + rot[1]![0]! * v[1] + rot[2]![0]! * v[2],
+    rot[0]![1]! * v[0] + rot[1]![1]! * v[1] + rot[2]![1]! * v[2],
+    rot[0]![2]! * v[0] + rot[1]![2]! * v[1] + rot[2]![2]! * v[2],
+  ];
+  return { n: back(frame.n), r: back(frame.r), u: back(frame.u) };
+}
+
+/**
+ * Where the views of the layout go on the first sheet, and how large.
+ *
+ * Shelved across the width and then down, at the largest size that leaves them
+ * all on the sheet — `diagramEdgeMm` being the size they are worth drawing at
+ * and never bettered. Both halves of that are the object rather than a
+ * setting: the views of a long plank are too wide to sit side by side and fall
+ * back into the column they have always been drawn in, while the views of a
+ * frame are narrow and tall, pair up across the sheet, and would otherwise run
+ * off the bottom of it — at four views of four cells each, a stack is longer
+ * than the page whatever is written above it.
+ */
+function packDiagrams(
+  sizes: readonly { wide: number; tall: number }[],
+  width: number,
+  height: number,
+): { edge: number; at: Vec2[] } {
+  const header = S.diagramLabelSize + 2.5;
+  const shelve = (edge: number): { at: Vec2[]; wide: number; tall: number } => {
+    const at: Vec2[] = [];
+    let x = 0;
+    let top = 0;
+    let rowTall = 0;
+    let widest = 0;
+    for (const size of sizes) {
+      if (at.length > 0 && x + size.wide * edge > width) {
+        top += header + rowTall * edge + D.gapMm;
+        x = 0;
+        rowTall = 0;
+      }
+      at.push([x, top]);
+      x += size.wide * edge + D.gapMm;
+      widest = Math.max(widest, x - D.gapMm);
+      rowTall = Math.max(rowTall, size.tall);
+    }
+    return { at, wide: widest, tall: top + header + rowTall * edge };
+  };
+
+  // Down in quarter millimetres from the size these are drawn at elsewhere:
+  // the first that fits is the answer, and for every object whose views are a
+  // column that is the first one tried.
+  for (let edge = D.diagramEdgeMm; edge > D.minDiagramEdgeMm; edge -= 0.25) {
+    const tried = shelve(edge);
+    if (tried.wide <= width && tried.tall <= height) return { edge, at: tried.at };
+  }
+  const floor = shelve(D.minDiagramEdgeMm);
+  return { edge: D.minDiagramEdgeMm, at: floor.at };
 }
 
 /**
  * What the ring shuts into, in words, read off the poses it reports.
  *
  * The builder is told what the thing does before they build it, and no two
- * objects here do the same: eight cubes give four planks and two cubes, twelve
- * give three planks, a block and a frame with a hole through it.
+ * objects here do the same: eight cubes give four planks and two cubes, ten
+ * give a plank and a frame built two ways round — or sixteen planks and
+ * nothing else — and twelve give a frame with a hole through it, a solid
+ * block, and one plank or three.
  */
 function shapesSentence(mech: CubeRingMechanism, perfect: number): string {
   const kinds = new Map<string, number>();
@@ -803,32 +1053,18 @@ function shapesSentence(mech: CubeRingMechanism, perfect: number): string {
 }
 
 const NUMBERS = [
-  'no', 'one', 'two', 'three', 'four', 'five', 'six',
-  'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+  'no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+  'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+  'seventeen', 'eighteen', 'nineteen', 'twenty',
 ];
 
 const countWord = (n: number): string => NUMBERS[n] ?? String(n);
 
 const capitalise = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** The taped edge of a seam, in the coordinates the layout is drawn in. */
-function tapeInWorld(ring: readonly Lattice[], seam: TapeSeam): Vec3[] {
-  const cell = ring[seam.pieces[0]]!;
-  const centre = add(cell as unknown as Vec3, [0.5, 0.5, 0.5]);
-  return seam.ends[0].map(point => add(point, centre));
+/** Whether a cube of a shape has that face on the outside of it. */
+function outsideOf(cells: readonly Vec3[], cell: Vec3, normal: Vec3): boolean {
+  const beyond = add(cell, normal);
+  return !cells.some(other => other.every((x, axis) => x === beyond[axis]));
 }
 
-/** Whether a cube of the layout has that face on the outside of it. */
-function outsideOf(ring: readonly Lattice[], cell: Lattice, normal: Vec3): boolean {
-  const beyond = add(cell as unknown as Vec3, normal);
-  return !ring.some(other => other.every((x, axis) => x === beyond[axis]));
-}
-
-/** Whether a point is on the face of the layout that looks that way. */
-function onThisSide(ring: readonly Lattice[], point: Vec3, normal: Vec3): boolean {
-  const axis = normal.findIndex(x => Math.abs(x) > 0.5);
-  const reach = normal[axis]! > 0
-    ? Math.max(...ring.map(cell => cell[axis]! + 1))
-    : Math.min(...ring.map(cell => cell[axis]!));
-  return Math.abs(point[axis]! - reach) < 1e-9;
-}
