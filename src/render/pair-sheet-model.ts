@@ -173,8 +173,8 @@ export function buildPairSheets(
       cellMm,
       cellIndexOf: (faceId, cell) => cellIndexOf.get(`${half}:${faceId}:${cell}`),
       isOpen,
-      start,
-      goal,
+      start: [start],
+      goal: [goal],
     }));
     flow.y += netHeight + 2 * tab + gap;
   }

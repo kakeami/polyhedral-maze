@@ -210,8 +210,8 @@ export function buildGyrationSheets(
       cellMm,
       cellIndexOf: (faceId, cell) => cellIndexOf.get(`${index}:${faceId}:${cell}`),
       isOpen,
-      start,
-      goal,
+      start: [start],
+      goal: [goal],
     }));
     flow.y += netHeight + 2 * tab + gap;
   });

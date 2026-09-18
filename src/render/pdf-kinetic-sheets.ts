@@ -1,8 +1,8 @@
 /**
  * The PDFs of the turning and folding patterns: the rings, the glued pair, the
- * cut solid and the ring of cubes.
+ * cut solid, the ring of cubes and the ring of prisms.
  *
- * All four are the same three lines — build the plan, open a document, paint
+ * All five are the same three lines — build the plan, open a document, paint
  * each sheet — because all four patterns are already a list of sheets of
  * `PageItem`s, DOM-free, in page millimetres, and `pdf-face-page-painter.ts`
  * paints those unchanged. Only the mechanism and the name of the file differ,
@@ -24,12 +24,18 @@ import {
   type GyrationSheetPlan,
 } from './gyration-sheet-model.ts';
 import { buildFoldSheets, type FoldSheetOptions, type FoldSheetPlan } from './fold-sheet-model.ts';
+import {
+  buildHoneycombSheets,
+  type HoneycombSheetOptions,
+  type HoneycombSheetPlan,
+} from './honeycomb-sheet-model.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { StackMechanism } from '../core/kinetic/mechanisms/stack.ts';
 import type { JoinedPairMechanism } from '../core/kinetic/mechanisms/joined.ts';
 import type { GyrationMechanism } from '../core/kinetic/mechanisms/gyration.ts';
 import type { CubeRingMechanism } from '../core/kinetic/mechanisms/cube-ring.ts';
+import type { HoneycombRingMechanism } from '../core/kinetic/mechanisms/honeycomb-ring.ts';
 
 export interface SheetPdf<P> {
   readonly doc: jsPDF;
@@ -129,5 +135,26 @@ export function exportFoldPDF(
 ): FoldSheetPlan {
   const { doc, plan } = buildFoldPDF(mech, surface, design, options);
   doc.save(`folding-maze-${mech.object.id}-${mech.cellsPerFace}-${maze}.pdf`);
+  return plan;
+}
+
+export function buildHoneycombPDF(
+  mech: HoneycombRingMechanism,
+  surface: KineticSurface,
+  design: KineticDesign,
+  options: HoneycombSheetOptions = {},
+): SheetPdf<HoneycombSheetPlan> {
+  return paintPlan(buildHoneycombSheets(mech, surface, design, options));
+}
+
+export function exportHoneycombPDF(
+  mech: HoneycombRingMechanism,
+  surface: KineticSurface,
+  design: KineticDesign,
+  maze: number,
+  options: HoneycombSheetOptions = {},
+): HoneycombSheetPlan {
+  const { doc, plan } = buildHoneycombPDF(mech, surface, design, options);
+  doc.save(`polyhedral-maze-${mech.id}-${maze}-fold.pdf`);
   return plan;
 }

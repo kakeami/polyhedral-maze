@@ -83,8 +83,16 @@ export interface PieceNetRequest {
   /** This piece's cell index for a cell of a face, or undefined. */
   cellIndexOf(faceId: number, cell: CellKey): number | undefined;
   isOpen(cellIndex: number, side: number): boolean;
-  readonly start?: number;
-  readonly goal?: number;
+  /**
+   * Cells the entrance is printed on, and the exit.
+   *
+   * Lists rather than single cells, because a mechanism that buries part of
+   * its own surface has nowhere a marker is always on show and prints each of
+   * them on a *pair* of cells (`pickPrintedEnds`). A mechanism that hides
+   * nothing passes one apiece.
+   */
+  readonly start?: readonly number[];
+  readonly goal?: readonly number[];
 }
 
 /**
@@ -163,13 +171,15 @@ export function drawPieceNet(request: PieceNetRequest): PageItem[] {
       const index = request.cellIndexOf(face.id, cell);
       if (index === undefined) continue;
       const corners = cellVerts2d(flat, cell, n, grid.kind).map(place);
-      if (index === request.start || index === request.goal) {
+      const isStart = request.start?.includes(index) ?? false;
+      const isGoal = !isStart && (request.goal?.includes(index) ?? false);
+      if (isStart || isGoal) {
         marks.push({
           kind: 'poly', pts: corners,
-          fill: index === request.start ? S.startColor : S.goalColor,
+          fill: isStart ? S.startColor : S.goalColor,
         });
         letters.push({
-          kind: 'text', at: centroid2(corners), text: index === request.start ? 'S' : 'G',
+          kind: 'text', at: centroid2(corners), text: isStart ? 'S' : 'G',
           size: S.markerTextSize, color: S.markerTextColor,
         });
       }
