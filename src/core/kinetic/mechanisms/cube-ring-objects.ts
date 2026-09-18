@@ -13,7 +13,7 @@
  * the shared face the tape crosses, numbered as `hingeLine` numbers them.
  */
 
-import { createCubeRing, plankRing } from './cube-ring.ts';
+import { createCubeRing, plankRing, rectRing } from './cube-ring.ts';
 import type { CubeRingMechanism, CubeRingObject, CubeRingOptions, Lattice } from './cube-ring.ts';
 
 /** The layout the eight-cube ring is taped in: a 1x2x4 plank. */
@@ -58,8 +58,8 @@ export const DEFAULT_HINGES: readonly number[] = [2, 3, 2, 3, 2, 1, 2, 3];
  */
 export const INFINITY_CUBE: CubeRingObject = {
   id: 'infinity-cube',
-  label: 'Eight cubes — cube and plank',
-  blurb: 'Shuts into six shapes: four planks and two cubes.',
+  label: 'Eight cubes — two cubes and four planks',
+  blurb: 'Shuts into six shapes, four planks and two cubes.',
   ring: PLANK_RING,
   hinges: DEFAULT_HINGES,
   // Ten cells a face is 5.8 mm a cell with the cubes at 58 mm on A4: about as
@@ -90,14 +90,90 @@ export const INFINITY_CUBE: CubeRingObject = {
  */
 export const FRAME_RING: CubeRingObject = {
   id: 'frame-ring',
-  label: 'Twelve cubes — plank, block and frame',
+  label: 'Twelve cubes — a frame, a block and three planks',
   blurb: 'Shuts into five shapes, one of them a frame with a hole through it.',
   ring: plankRing(12),
   hinges: [3, 0, 2, 3, 0, 1, 0, 1, 2, 0, 1, 1],
   maxCells: 10,
 };
 
-export const CUBE_RING_OBJECTS: readonly CubeRingObject[] = [INFINITY_CUBE, FRAME_RING];
+/**
+ * Ten cubes, which is the fewest that can shut into a frame at all.
+ *
+ * The same demand as the twelve-cube rings — one printed pattern, perfect on a
+ * sphere and perfect on a torus — asked of the smallest object that can make
+ * it. Eight cubes cannot, and that is exhaustive rather than unlucky: a pose
+ * of genus 1 has to be flat, the only flat ring of eight cells with a hole in
+ * it is the 3 by 3 annulus, and of its 65536 tapings 3896 shut into a shape of
+ * genus 0 as well while *none* of them can be folded from the one to the other
+ * (`.dev/probe-fold-hunt2.ts`). Ten cubes can: 396 of the 1048576 tapings of
+ * the 3 by 4 frame fold between the genera.
+ *
+ * This is the best of those — three shapes and no strays, which is as much as
+ * ten cubes manage while changing genus. Two of the three are the frame, built
+ * two ways round: the same silhouette with different squares buried, which is
+ * a different state and a different maze on show. The third is a 2 by 5 plank.
+ * Six folds from end to end, and eleven sheets to print rather than thirteen.
+ */
+export const SMALLEST_FRAME: CubeRingObject = {
+  id: 'smallest-frame',
+  label: 'Ten cubes — two frames and a plank',
+  blurb: 'Shuts into three shapes, two of them a frame — the fewest cubes that can.',
+  ring: rectRing(3, 4),
+  hinges: [2, 0, 1, 0, 1, 0, 2, 3, 0, 3],
+  maxCells: 10,
+};
+
+/**
+ * Twelve cubes taped on the frame itself: three shapes, as unlike one another
+ * as this mechanism gets.
+ *
+ * The same twelve cubes as `FRAME_RING` and a different object, because the
+ * layout the tape goes on is part of what an object is. Taped round the 4 by 4
+ * frame it shuts into three shapes rather than five — the frame, a 2 by 6
+ * plank and a solid 3 by 2 by 2 block — and they show 48, 40 and 32 of the 72
+ * cube faces. The block shows two thirds of what the frame does — 128 cells
+ * against 192 at two across a face — and that is the widest swing of anything
+ * here, so nothing else asks the one printed pattern to be a perfect maze over
+ * as wide a range of passage counts.
+ *
+ * Against the five-shape ring it trades shapes for tape. Four folds reach
+ * anything from anything, where that one takes ten, and the tape is what wears
+ * out first on an object that is meant to be folded all evening. It also has
+ * the one thing here that cannot be taped where it is laid out: two of its
+ * twelve strips are pressed into the frame's own corners, so the pattern says
+ * to lay the cubes out as the plank and tape them there (`fold-sheet-model`).
+ */
+export const SQUARE_FRAME: CubeRingObject = {
+  id: 'square-frame',
+  label: 'Twelve cubes — a frame, a plank and a block',
+  blurb: 'Shuts into three shapes, and shows half as much again of itself in one as in another.',
+  ring: rectRing(4, 4),
+  hinges: [2, 0, 2, 2, 0, 2, 3, 0, 3, 0, 1, 0],
+  maxCells: 10,
+};
+
+/**
+ * The objects on offer, fewest cubes first.
+ *
+ * Each is here for a silhouette the others do not have: eight cubes for the
+ * cube and the plank, ten for the smallest frame there is, twelve for the
+ * widest swing between one shape and the next and for the most shapes. Three
+ * counts and four objects, because what an object does is decided by how it is
+ * laid out and taped rather than by how many cubes are in it: two of these are
+ * twelve cubes and neither folds like the other.
+ *
+ * What is *not* a reason to be here is a large number of poses. Ten cubes can
+ * be taped to shut sixteen ways — exactly one taping does, and it is the most
+ * any ten cubes have (`.dev/probe-fold-most.ts`, 6.3 million tapings,
+ * exhaustive) — but all sixteen of those shapes are the same flat five-by-four
+ * blob with the same 38 faces on show, so folding it changes which squares are
+ * out and nothing a hand can feel. Counting states is not counting shapes, and
+ * the shapes are what this is for.
+ */
+export const CUBE_RING_OBJECTS: readonly CubeRingObject[] = [
+  INFINITY_CUBE, SMALLEST_FRAME, SQUARE_FRAME, FRAME_RING,
+];
 
 export const DEFAULT_CUBE_RING = INFINITY_CUBE;
 

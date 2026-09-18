@@ -6,10 +6,11 @@
  * so what is left to set is which of them, how finely it is ruled, and which
  * maze.
  *
- * Which object is a select and not a slider, because the two on offer are not
- * two settings of one thing: a different ring folds into a different number of
- * different shapes. It stands first, where the polyhedral page puts the solid,
- * since everything under it is read in terms of it.
+ * Which object is a select and not a slider, because the ones on offer are not
+ * settings of one thing: a different layout, or the same layout taped another
+ * way, folds into a different number of different shapes. It stands first,
+ * where the polyhedral page puts the solid, since everything under it is read
+ * in terms of it.
  *
  * Which maze is a *seed*, and the two Shuffles beside it are the polyhedral
  * page's, doing the same thing: one asks for a different maze on the same

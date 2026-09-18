@@ -9,16 +9,19 @@
  * counters the search used.
  *
  * Most of this is about the eight-cube ring, which is the one with the longest
- * history here. The last part is about what is asked of *any* object of this
- * kind, and about the twelve-cube one, which does the thing the eight cannot:
- * it shuts into a frame, so the same printed pattern has to be a perfect maze
- * on a torus as well as on a sphere.
+ * history here. The last parts are about what is asked of *any* object of this
+ * kind, and then about each of the others for the one thing it does that the
+ * eight-cube ring cannot: shut into a frame, so that the same printed pattern
+ * has to be a perfect maze on a torus as well as on a sphere; do that on ten
+ * cubes, which is the fewest that can; or swing between shapes that show half
+ * as much of themselves again as one another.
  */
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { createCubeRing, hingeLine } from '../kinetic/mechanisms/cube-ring.ts';
 import {
-  CUBE_RING_OBJECTS, DEFAULT_HINGES, FRAME_RING, INFINITY_CUBE, PLANK_RING, createInfinityCube,
+  CUBE_RING_OBJECTS, DEFAULT_HINGES, FRAME_RING, INFINITY_CUBE, PLANK_RING,
+  SMALLEST_FRAME, SQUARE_FRAME, createInfinityCube,
 } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
 import { applyPlacement, type KineticCell, type Placement } from '../kinetic/types.ts';
@@ -505,6 +508,66 @@ describe('the twelve-cube ring, which shuts into a frame', () => {
       const out = skin.visibleOfState(state);
       expect(ends.start.filter(cell => out[cell]).length).toBe(1);
       expect(ends.goal.filter(cell => out[cell]).length).toBe(1);
+    }
+  });
+});
+
+describe('the ten-cube ring, which is the fewest that can change genus', () => {
+  const ten = createCubeRing(SMALLEST_FRAME, { cells: 2 });
+  const skin = buildSurface(ten, { maxStates: ten.states.length });
+
+  it('does on ten cubes what the eight-cube ring cannot do at all', () => {
+    expect(ten.pieceCount).toBe(10);
+    expect(ten.states.length).toBe(3);
+    expect(ten.poses.filter(pose => pose.genus === 1).length).toBe(2);
+    expect(ten.poses.filter(pose => pose.genus === 0).length).toBe(1);
+  });
+
+  it('builds the same frame twice over, and they are not the same state', () => {
+    const [first, second] = ten.poses.filter(pose => pose.genus === 1);
+    // The same shape in the hand — same silhouette, same amount of it on show
+    // — reached by a different set of turns, so different squares are buried
+    // and the maze on the outside is a different maze.
+    expect([...first!.span].sort()).toEqual([...second!.span].sort());
+    expect(first!.exposed).toBe(second!.exposed);
+    expect([...first!.turns]).not.toEqual([...second!.turns]);
+  });
+
+  it('is a perfect maze in all three, on a design found here', () => {
+    const found = contractedSearch(skin, { rng: createRng(1) });
+    expect(found.rate.rate).toBe(1);
+    for (let state = 0; state < skin.stateCount; state++) {
+      const stats = stateStats(skin, found.design, state);
+      expect(stats.perfect).toBe(true);
+      expect(stats.edges).toBe(skin.visibleCount[state]! - 1);
+    }
+  });
+});
+
+describe('the twelve-cube ring taped on the frame itself', () => {
+  const square = createCubeRing(SQUARE_FRAME, { cells: 2 });
+  const skin = buildSurface(square, { maxStates: square.states.length });
+
+  it('is a different object from the other twelve, though the cubes are the same', () => {
+    const other = createCubeRing(FRAME_RING, { cells: 2 });
+    expect(square.pieceCount).toBe(other.pieceCount);
+    expect(square.states.length).toBe(3);
+    expect(other.states.length).toBe(5);
+  });
+
+  it('shows half as much again of itself in one shape as in another', () => {
+    const counts = [...skin.visibleCount];
+    expect(counts).toEqual([192, 160, 128]);
+    expect(Math.max(...counts)).toBe(Math.min(...counts) * 1.5);
+  });
+
+  it('is a perfect maze in all three, on a design found here', () => {
+    const found = contractedSearch(skin, { rng: createRng(1) });
+    expect(found.rate.rate).toBe(1);
+    for (let state = 0; state < skin.stateCount; state++) {
+      const stats = stateStats(skin, found.design, state);
+      expect(stats.perfect).toBe(true);
+      expect(stats.edges).toBe(skin.visibleCount[state]! - 1);
     }
   });
 });
