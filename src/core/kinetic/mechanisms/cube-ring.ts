@@ -24,7 +24,9 @@
  *   only until someone lets go of it.
  * - **The tape has to be reachable.** A hinge with all four cubes round it
  *   present is buried inside the object; the shape exists on paper and not in
- *   the hand.
+ *   the hand. That is asked of every pose unless the object says it only
+ *   has to be reachable where it goes on (`CubeRingObject.tapeReachable`),
+ *   and two strips can never pass through each other (`tapesCross`).
  * - **A pose nobody can fold to is not a state.** Short of peeling the tape
  *   off there is no way into it, so it is counted as a stray and left out —
  *   but every pose in the same component of the fold graph is kept, because a
@@ -63,6 +65,16 @@ export interface CubeRingObject {
   readonly hinges: readonly number[];
   /** The finest ruling worth offering: how small a cell can be cut out. */
   readonly maxCells: number;
+  /**
+   * Where each strip of tape has to be reachable: in every pose (the rule the
+   * first four objects were found and shipped under), or only in the layout
+   * it is applied in. The second is what an object needs whose cube shuts
+   * with a hinge in its middle, as Conway's does: the strip goes on while the
+   * cubes lie flat, and folded shut it is a tenth of a millimetre of tape
+   * between two faces, which card absorbs — the argument `honeycomb-ring.ts`
+   * makes for the prisms. Unset means every pose.
+   */
+  readonly tapeReachable?: 'every-pose' | 'layout';
 }
 
 /**
@@ -99,6 +111,8 @@ export interface CubeRingPose {
   readonly layers: string;
   /** What to call it: Cube 1, Plank 2, Frame 1. */
   readonly label: string;
+  /** Whether a strip of tape is shut inside the object here (only where the object allows it). */
+  readonly tapeBuried: boolean;
 }
 
 export interface CubeRingMechanism extends Mechanism {
@@ -420,6 +434,37 @@ function tapeOutside(
   return true;
 }
 
+/**
+ * Whether two strips of tape lie on one edge with their pairs across it.
+ *
+ * Four cubes can sit round one edge, and two hinges can both lie on it: that is
+ * how Conway's ring of eight shuts, two strips side by side down the middle of
+ * the cube. What cannot happen is the two pairs sitting *diagonally* across
+ * the edge, cube to opposite cube, each pair through the other: the strips
+ * would pass through one another. Such a closure exists on paper and not in the
+ * hand, and no fold can pass through it either. None of the first four objects
+ * has one; the census of rings of eight (Komatsu and Shizukawa count Conway's
+ * ring as four cubes, and it is four only once these are gone) is what found
+ * the rule.
+ */
+function tapesCross(
+  placed: readonly Placement[],
+  frames: readonly { mid: Vec3; axis: Vec3 }[],
+): boolean {
+  const diagonal = new Set<string>();
+  for (let i = 0; i < placed.length; i++) {
+    const at = placed[i]!;
+    const next = placed[(i + 1) % placed.length]!;
+    const apart = [0, 1, 2].filter(a => Math.abs(at.offset[a]! - next.offset[a]!) > 0.5).length;
+    if (apart !== 2) continue;
+    const mid = applyMat(at.rot, frames[i]!.mid);
+    const key = offsetKey([mid[0] + at.offset[0], mid[1] + at.offset[1], mid[2] + at.offset[2]]);
+    if (diagonal.has(key)) return true;
+    diagonal.add(key);
+  }
+  return false;
+}
+
 interface Skin {
   /** Genus of the boundary, summed over its components. */
   readonly genus: number;
@@ -613,7 +658,7 @@ export interface CubeRingShape {
 const shapes = new Map<string, CubeRingShape>();
 
 const shapeKey = (object: CubeRingObject): string =>
-  `${object.ring.map(cell => cell.join(',')).join(' ')}|${object.hinges.join('')}`;
+  `${object.ring.map(cell => cell.join(',')).join(' ')}|${object.hinges.join('')}|${object.tapeReachable ?? 'every-pose'}`;
 
 /**
  * Everything about an object that the ruling does not touch.
@@ -632,16 +677,24 @@ export function cubeRingShape(
   const had = shapes.get(key);
   if (had) return had;
 
-  const { shapes: closures, turns } = ringClosures(object.ring, object.hinges, options);
+  const frames = tapeFrames(object.ring, object.hinges);
+  const found = ringClosures(object.ring, object.hinges, options);
+  const kept = found.shapes.map((_unused, i) => i).filter(i => !tapesCross(found.shapes[i]!, frames));
+  const closures = kept.map(i => found.shapes[i]!);
+  const turns = kept.map(i => found.turns[i]!);
   if (closures.length === 0) throw new Error('this taping never closes');
 
-  const frames = tapeFrames(object.ring, object.hinges);
+  const everyPose = (object.tapeReachable ?? 'every-pose') === 'every-pose';
+  if (!everyPose && !tapeOutside(object.ring.map(cell => ({ rot: IDENTITY, offset: centreOf(cell) })), frames)) {
+    throw new Error('this taping cannot be applied in its own layout');
+  }
   const pieces = object.ring.length;
   const candidates: { closure: number; turns: number[]; genus: number; exposed: number;
-    span: number[]; layers: string }[] = [];
+    span: number[]; layers: string; tapeBuried: boolean }[] = [];
   const seen = new Set<string>();
   closures.forEach((placed, closure) => {
-    if (!tapeOutside(placed, frames)) return;
+    const buried = !tapeOutside(placed, frames);
+    if (buried && everyPose) return;
     if (!standsUp(placed)) return;
     const skin = skinOf(placed.map(p => p.offset));
     if (!skin.manifold || skin.comps !== 1 || skin.pinched) return;
@@ -658,6 +711,7 @@ export function cubeRingShape(
       exposed: skin.exposed,
       span: spanOf(placed),
       layers: drawLayers(placed),
+      tapeBuried: buried,
     });
   });
   if (candidates.length === 0) throw new Error('this taping shuts into nothing a hand can hold');
@@ -683,7 +737,28 @@ export function cubeRingShape(
     if (list) list.push(i);
     else parts.set(g, [i]);
   });
-  const reachable = [...parts.values()].sort((a, b) => b.length - a.length)[0]!;
+  // Which component is the object's is decided by where the tape went on,
+  // when that is somewhere the object can be folded from: the ring of eight
+  // Conway-style with two pairs of cubes that never meet (`HINGED_DIAMOND`)
+  // has two components of four, and the one a builder gets is the one the
+  // layout lies in. The first four objects were chosen as the largest, and
+  // their layouts lie in it, so for them this is the same answer.
+  const layout = turns.findIndex(t => t.every(step => step === 0));
+  const fromLayout = new Set<number>([layout]);
+  if (!everyPose && layout >= 0) {
+    const queue = [layout];
+    for (let head = 0; head < queue.length; head++) {
+      for (const { to } of over.folds[queue[head]!]!) {
+        if (fromLayout.has(to)) continue;
+        fromLayout.add(to);
+        queue.push(to);
+      }
+    }
+  }
+  const layoutPart = everyPose
+    ? undefined
+    : [...parts.values()].find(part => part.some(i => fromLayout.has(candidates[i]!.closure)));
+  const reachable = layoutPart ?? [...parts.values()].sort((a, b) => b.length - a.length)[0]!;
   const inComponent = new Set(reachable);
 
   const counted = new Map<string, number>();

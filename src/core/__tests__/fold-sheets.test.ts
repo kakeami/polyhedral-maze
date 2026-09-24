@@ -9,7 +9,7 @@
  * get wrong on its own, which is falling off the sheet.
  */
 import { describe, it, expect } from 'vitest';
-import { CUBE_RING_OBJECTS, createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
+import { CUBE_RING_OBJECTS, DIAMOND_RING, createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { createCubeRing } from '../kinetic/mechanisms/cube-ring.ts';
 import { contractedSearch } from '../kinetic/maze-contracted.ts';
 import { cubeRingDesigns } from '../kinetic/mechanisms/cube-ring-designs.ts';
@@ -271,5 +271,24 @@ describe('a ring whose tape cannot go on where it lies', () => {
       .filter(item => item.kind === 'text' && /^\d+$/.test(item.text))
       .map(item => Number(item.kind === 'text' ? item.text : '0'));
     expect(new Set(numbered).size).toBe(stair.pieceCount);
+  });
+});
+
+describe('a ring taped in a layout it never stops in', () => {
+  it('draws the diamond it is taped in, though the diamond is not a shape', () => {
+    // The diamond touches itself corner to corner, so it is no pose; but it is
+    // flat and every strip can be pressed on there, so it is what is drawn,
+    // with a dot where a strip runs down a corner between two cubes.
+    const ring = createCubeRing(DIAMOND_RING, { cells: 2 });
+    const skin = buildSurface(ring, { maxStates: ring.states.length });
+    const stored = cubeRingDesigns(DIAMOND_RING.id, 2)[0]!;
+    const sheets = buildFoldSheets(ring, skin, { open: decodeOpenClasses(stored) });
+    const notes = sheets.sheets[0]!.items
+      .filter(item => item.kind === 'text')
+      .map(item => (item.kind === 'text' ? item.text : ''))
+      .join(' ');
+    expect(ring.poses.some(pose => pose.span.every((x, axis) => x === [4, 4, 1][axis]))).toBe(false);
+    expect(notes).toContain('lay the eight cubes out');
+    expect(notes).toContain('orange dot');
   });
 });

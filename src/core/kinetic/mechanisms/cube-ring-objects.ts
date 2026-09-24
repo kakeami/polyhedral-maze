@@ -58,13 +58,91 @@ export const DEFAULT_HINGES: readonly number[] = [2, 3, 2, 3, 2, 1, 2, 3];
  */
 export const INFINITY_CUBE: CubeRingObject = {
   id: 'infinity-cube',
-  label: 'Eight cubes — two cubes and four planks',
-  blurb: 'Shuts into six shapes, four planks and two cubes.',
+  label: '8 cubes · 2 cubes, 4 planks · all faces swapped',
+  blurb: 'Shuts into six shapes, four planks and two cubes, and the two cubes show none of the same faces.',
   ring: PLANK_RING,
   hinges: DEFAULT_HINGES,
   // Ten cells a face is 5.8 mm a cell with the cubes at 58 mm on A4: about as
   // small as a knife and a pair of eyes can be asked to follow.
   maxCells: 10,
+};
+
+/**
+ * Eight cubes that shut into two cubes by half turns alone, with a strip of
+ * tape inside the object in every shape it takes.
+ *
+ * The first of three rings of eight that a census of every ring shut into a
+ * 2x2x2 turned up beside the one above (`.dev/probe-cube-ring-census.ts`):
+ * each has two cubes a hand can fold between, which is the question Conway
+ * asked of these objects. Like Conway's own ring it has a pair of hinges in
+ * the middle of the cube, and like Conway's it shuts into two more cubes that
+ * no fold reaches (`strays`).
+ *
+ * What it asks of the maze is different from the ring above: two thirds of
+ * the squares on show in one cube are on show in the other, so the two cubes
+ * share most of a maze and swap a third of it. Four folds from cube to cube,
+ * every one a half turn.
+ *
+ * It cannot be taped lying flat. Its hinges run down the middle of every
+ * plank it makes, so it is laid out as two rows of four, one set on the other
+ * a row across, and taped there; the strips inside the finished cube are why
+ * the tape only has to be reachable where it goes on.
+ */
+export const HALF_TURN_RING: CubeRingObject = {
+  id: 'half-turn-ring',
+  label: '8 cubes · 2 cubes, 2 planks · a third swapped by half turns',
+  blurb: 'Shuts into two cubes and two planks by half turns, and the two cubes swap a third of their faces.',
+  ring: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0], [3, 1, 1], [2, 1, 1], [1, 1, 1], [0, 1, 1]],
+  hinges: [2, 1, 2, 0, 3, 0, 3, 0],
+  maxCells: 10,
+  tapeReachable: 'layout',
+};
+
+/**
+ * Eight cubes taped on the plank, which reach a cube only by quarter turns.
+ *
+ * The same layout as the infinity cube and a different taping, and the motion
+ * is not the same at all: each plank is two half turns from one cube, and
+ * from one cube to the other is six folds, four of them quarter turns, through
+ * the flat diamond `DIAMOND_RING` is taped in and past no plank. The two cubes
+ * swap a third of their faces, as the half-turn ring's do, and get there by a
+ * motion a hand has to learn separately.
+ *
+ * Found by the same census. It is taped flat, and each cube shuts with its
+ * tape inside.
+ */
+export const QUARTER_TURN_RING: CubeRingObject = {
+  id: 'quarter-turn-ring',
+  label: '8 cubes · 2 cubes, 2 planks · a third swapped by quarter turns',
+  blurb: 'Taped on the plank like the first, it goes from cube to cube by quarter turns, and the two cubes swap a third of their faces.',
+  ring: PLANK_RING,
+  hinges: [2, 3, 2, 2, 2, 1, 2, 0],
+  maxCells: 10,
+  tapeReachable: 'layout',
+};
+
+/**
+ * Eight cubes taped as a diamond: two cubes with the same faces on show.
+ *
+ * Laid out flat, the ring is a diamond whose corners meet edge to edge rather
+ * than face to face, so it cannot be set down as a shape of its own — it is
+ * only where the tape goes on. It shuts into two cubes that show exactly the
+ * same squares, put together differently: the same printed squares are the
+ * outside of both, and only how they meet changes — the opposite of the
+ * infinity cube, where no square is on show in both.
+ *
+ * Found by the same census, which also says the ring has a second pair of
+ * cubes and planks that no fold from the diamond reaches (`strays`): there are
+ * two ways to shut it, and the layout chooses one.
+ */
+export const DIAMOND_RING: CubeRingObject = {
+  id: 'diamond-ring',
+  label: '8 cubes · 2 cubes, 2 planks · no faces swapped',
+  blurb: 'Taped flat as a diamond, it shuts into two cubes that show the same faces, put together differently.',
+  ring: [[1, 0, 0], [2, 0, 0], [3, 1, 0], [3, 2, 0], [2, 3, 0], [1, 3, 0], [0, 2, 0], [0, 1, 0]],
+  hinges: [2, 0, 1, 0, 2, 0, 1, 0],
+  maxCells: 10,
+  tapeReachable: 'layout',
 };
 
 /**
@@ -90,7 +168,7 @@ export const INFINITY_CUBE: CubeRingObject = {
  */
 export const FRAME_RING: CubeRingObject = {
   id: 'frame-ring',
-  label: 'Twelve cubes — a frame, a block and three planks',
+  label: '12 cubes · 1 frame, 1 block, 3 planks · most silhouettes',
   blurb: 'Shuts into five shapes, one of them a frame with a hole through it.',
   ring: plankRing(12),
   hinges: [3, 0, 2, 3, 0, 1, 0, 1, 2, 0, 1, 1],
@@ -117,7 +195,7 @@ export const FRAME_RING: CubeRingObject = {
  */
 export const SMALLEST_FRAME: CubeRingObject = {
   id: 'smallest-frame',
-  label: 'Ten cubes — two frames and a plank',
+  label: '10 cubes · 2 frames, 1 plank · fewest cubes for a hole',
   blurb: 'Shuts into three shapes, two of them a frame — the fewest cubes that can.',
   ring: rectRing(3, 4),
   hinges: [2, 0, 1, 0, 1, 0, 2, 3, 0, 3],
@@ -146,7 +224,7 @@ export const SMALLEST_FRAME: CubeRingObject = {
  */
 export const SQUARE_FRAME: CubeRingObject = {
   id: 'square-frame',
-  label: 'Twelve cubes — a frame, a plank and a block',
+  label: '12 cubes · 1 frame, 1 plank, 1 block · widest swing in faces shown',
   blurb: 'Shuts into three shapes, and shows half as much again of itself in one as in another.',
   ring: rectRing(4, 4),
   hinges: [2, 0, 2, 2, 0, 2, 3, 0, 3, 0, 1, 0],
@@ -156,12 +234,18 @@ export const SQUARE_FRAME: CubeRingObject = {
 /**
  * The objects on offer, fewest cubes first.
  *
- * Each is here for a silhouette the others do not have: eight cubes for the
- * cube and the plank, ten for the smallest frame there is, twelve for the
- * widest swing between one shape and the next and for the most shapes. Three
- * counts and four objects, because what an object does is decided by how it is
- * laid out and taped rather than by how many cubes are in it: two of these are
- * twelve cubes and neither folds like the other.
+ * Each is here for something the others do not have. Eight cubes for the cube
+ * and the plank — four times over, because the four rings of eight fold
+ * between the same two silhouettes and differ in what the fold does to the
+ * surface: every face swapped between the two cubes, a third of them by half
+ * turns, a third by quarter turns, or none at all. Ten for the smallest frame
+ * there is, twelve for the widest swing between one shape and the next and
+ * for the most silhouettes. What an object does is decided by how it is laid
+ * out and taped rather than by how many cubes are in it: two of these are
+ * twelve cubes and neither folds like the other, and four are eight.
+ *
+ * The label says it in that order — how many pieces, what it shuts into, and
+ * the one thing it is here for — so the list reads as a table.
  *
  * What is *not* a reason to be here is a large number of poses. Ten cubes can
  * be taped to shut sixteen ways — exactly one taping does, and it is the most
@@ -172,7 +256,8 @@ export const SQUARE_FRAME: CubeRingObject = {
  * the shapes are what this is for.
  */
 export const CUBE_RING_OBJECTS: readonly CubeRingObject[] = [
-  INFINITY_CUBE, SMALLEST_FRAME, SQUARE_FRAME, FRAME_RING,
+  INFINITY_CUBE, HALF_TURN_RING, QUARTER_TURN_RING, DIAMOND_RING,
+  SMALLEST_FRAME, SQUARE_FRAME, FRAME_RING,
 ];
 
 export const DEFAULT_CUBE_RING = INFINITY_CUBE;

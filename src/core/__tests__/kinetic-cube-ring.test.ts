@@ -18,19 +18,19 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
-import { createCubeRing, hingeLine } from '../kinetic/mechanisms/cube-ring.ts';
+import { createCubeRing, cubeRingShape, hingeLine } from '../kinetic/mechanisms/cube-ring.ts';
 import {
-  CUBE_RING_OBJECTS, DEFAULT_HINGES, FRAME_RING, INFINITY_CUBE, PLANK_RING,
-  SMALLEST_FRAME, SQUARE_FRAME, createInfinityCube,
+  CUBE_RING_OBJECTS, DEFAULT_HINGES, DIAMOND_RING, FRAME_RING, HALF_TURN_RING, INFINITY_CUBE,
+  PLANK_RING, QUARTER_TURN_RING, SMALLEST_FRAME, SQUARE_FRAME, createInfinityCube,
 } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
-import { applyPlacement, type KineticCell, type Placement } from '../kinetic/types.ts';
+import { applyPlacement, type KineticCell, type KineticState, type Placement } from '../kinetic/types.ts';
 import {
   longestWalk, pickPrintedEnds, pickStartGoal, searchAllStates, stateStats,
   type KineticDesign,
 } from '../kinetic/maze.ts';
 import { contractedSearch } from '../kinetic/maze-contracted.ts';
-import { poseDistances } from '../kinetic/fold-path.ts';
+import { foldPath, poseDistances } from '../kinetic/fold-path.ts';
 import { UnionFind } from '../graph.ts';
 import { createRng } from '../prng.ts';
 import type { Vec3 } from '../types.ts';
@@ -568,6 +568,97 @@ describe('the twelve-cube ring taped on the frame itself', () => {
       const stats = stateStats(skin, found.design, state);
       expect(stats.perfect).toBe(true);
       expect(stats.edges).toBe(skin.visibleCount[state]! - 1);
+    }
+  });
+});
+
+describe('two strips of tape on one edge', () => {
+  // Conway's ring of eight, laid out on the plank: the infinity cube with one
+  // pair of hinges moved to the middle of the cube. Komatsu and Shizukawa
+  // count four 2x2x2 shapes for it, two of them out of reach of any fold, and
+  // that is what comes out once a closure whose two strips would pass through
+  // each other — the pairs diagonal across one edge — is refused.
+  const conway = cubeRingShape({
+    id: 'conway', label: 'Conway', blurb: '', ring: PLANK_RING,
+    hinges: [3, 2, 3, 1, 1, 2, 1, 1], maxCells: 2, tapeReachable: 'layout',
+  });
+  const isCube = (state: KineticState): boolean => [0, 1, 2].every(axis => {
+    const xs = state.map(at => at.offset[axis]!);
+    return Math.max(...xs) - Math.min(...xs) === 1;
+  });
+
+  it('never let them cross, which leaves Conway\'s ring its four cubes', () => {
+    expect(conway.closures.filter(isCube).length).toBe(4);
+    expect(conway.poses.filter(pose => pose.label.startsWith('Cube')).length).toBe(2);
+    expect(conway.strays.filter(pose => pose.label === 'Cube').length).toBe(2);
+  });
+
+  it('let a pose keep a strip inside it only where the object says so', () => {
+    const everyPose = cubeRingShape({
+      id: 'conway-every-pose', label: 'Conway', blurb: '', ring: PLANK_RING,
+      hinges: [3, 2, 3, 1, 1, 2, 1, 1], maxCells: 2,
+    });
+    expect(conway.poses.some(pose => pose.tapeBuried)).toBe(true);
+    expect(everyPose.poses.every(pose => !pose.tapeBuried)).toBe(true);
+    expect(everyPose.poses.length).toBeLessThan(conway.poses.length);
+  });
+});
+
+describe('the three other rings of eight', () => {
+  // Each folds between two cubes, which is what the infinity cube does, and
+  // each does something different to the surface on the way.
+  const rings = [HALF_TURN_RING, QUARTER_TURN_RING, DIAMOND_RING].map(object => {
+    const mech = createCubeRing(object, { cells: 2 });
+    const skin = buildSurface(mech, { maxStates: mech.states.length });
+    const cubes = mech.poses.flatMap((pose, index) => (pose.label.startsWith('Cube') ? [index] : []));
+    const [a, b] = cubes.map(index => skin.visibleOfState(index));
+    let both = 0;
+    for (let cell = 0; cell < skin.cellCount; cell++) if (a![cell] && b![cell]) both++;
+    return { object, mech, skin, cubes, both };
+  });
+
+  it('each shut into two cubes and two planks, and are taped where they lie', () => {
+    for (const { object, mech, cubes } of rings) {
+      expect(object.tapeReachable).toBe('layout');
+      expect(mech.poses.length).toBe(4);
+      expect(cubes.length).toBe(2);
+      // Every cube has a strip shut inside it: the reason for the tape rule.
+      for (const index of cubes) expect(mech.poses[index]!.tapeBuried).toBe(true);
+    }
+  });
+
+  it('swap a third of the faces between the cubes, or none', () => {
+    // 96 cells on show in a cube at two across a face: the infinity cube
+    // shares none of them between its two cubes, these share 64, 64 and 96.
+    expect(rings.map(ring => ring.both)).toEqual([64, 64, 96]);
+  });
+
+  it('get from cube to cube by half turns only, or by quarter turns', () => {
+    const angles = rings.map(({ mech, cubes }) => {
+      const path = foldPath(mech.foldGraph(), cubes[0]!, cubes[1]!)!;
+      return path.map(step => Math.round(Math.abs(step.angle) * 180 / Math.PI));
+    });
+    expect(angles[0]!.every(angle => angle === 180)).toBe(true);
+    expect(angles[1]!.filter(angle => angle === 90).length).toBe(4);
+    expect(angles[2]!.filter(angle => angle === 90).length).toBe(4);
+  });
+
+  it('keep the shape the diamond was taped in, not the other pair of cubes', () => {
+    // Two components of four, and the diamond lies in one of them.
+    const diamond = rings[2]!.mech;
+    expect(diamond.strays.length).toBe(4);
+    expect(diamond.poses.length).toBe(4);
+  });
+
+  it('are perfect mazes in every shape, on a design found here', () => {
+    for (const { skin } of rings) {
+      const found = contractedSearch(skin, { rng: createRng(1) });
+      expect(found.rate.rate).toBe(1);
+      for (let state = 0; state < skin.stateCount; state++) {
+        const stats = stateStats(skin, found.design, state);
+        expect(stats.perfect).toBe(true);
+        expect(stats.edges).toBe(skin.visibleCount[state]! - 1);
+      }
     }
   });
 });

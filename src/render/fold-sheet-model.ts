@@ -39,7 +39,7 @@ import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
 import { pickPrintedEnds, treeRate } from '../core/kinetic/maze.ts';
 import type { CubeRingMechanism, TapeSeam } from '../core/kinetic/mechanisms/cube-ring.ts';
 import type { KineticState, Mat3 } from '../core/kinetic/types.ts';
-import { applyPlacement } from '../core/kinetic/types.ts';
+import { IDENTITY, applyPlacement } from '../core/kinetic/types.ts';
 
 export interface FoldSheetOptions {
   /** Edge of one cube, in mm. Defaults to the largest the sheet allows. */
@@ -895,9 +895,19 @@ function drawnArrangement(
   const closures = mech.closures();
   const rank = (shape: Arrangement): number =>
     (shape.flat ? 1000 : 0) + shape.tapes.filter(tape => tape.free).length;
+  // An object whose tape need only be reachable where it goes on is taped in
+  // its layout, and the layout need not be a pose at all: the diamond the
+  // ring of eight lies in for taping (`HINGED_DIAMOND`) touches itself
+  // corner to corner, and a hand cannot set it down as a shape.
+  const layout: KineticState = mech.ring.map(cell => ({
+    rot: IDENTITY, offset: cell.map(x => x + 0.5) as unknown as Vec3,
+  }));
+  const states = mech.object.tapeReachable === 'layout'
+    ? [layout, ...mech.poses.map(pose => closures[pose.closure]!)]
+    : mech.poses.map(pose => closures[pose.closure]!);
   let best: Arrangement | null = null;
-  for (const pose of mech.poses) {
-    const made = arrangementAt(seams, closures[pose.closure]!);
+  for (const state of states) {
+    const made = arrangementAt(seams, state);
     if (!best || rank(made) > rank(best)) best = made;
   }
   return best ?? arrangementAt(seams, closures[0]!);
@@ -916,6 +926,20 @@ function arrangementAt(seams: readonly TapeSeam[], state: KineticState): Arrange
     const middle = scale(add(ends[0], ends[1]), 0.5);
     const shared = scale(add(state[a]!.offset, state[b]!.offset), 0.5);
     const normal = sub(middle, shared).map(x => Math.round(x * 2)) as unknown as Vec3;
+    if (normal.every(x => x === 0)) {
+      // Two cubes meeting corner to corner share the edge and nothing else, so
+      // the strip is folded into one of the two empty corners beside them —
+      // and faces neither view straight on, so it is marked as a dot.
+      const apart = sub(cells[b]!, cells[a]!);
+      const beside = [0, 1, 2].filter(axis => apart[axis] !== 0).map(axis => {
+        const step: Vec3 = [0, 0, 0];
+        step[axis] = apart[axis]!;
+        return add(cells[a]!, step);
+      });
+      const open = beside.find(cell => !filled.has(cell.join(',')));
+      const toward = open ? sub(add(open, [0.5, 0.5, 0.5]), middle) : ([0, 0, 0] as Vec3);
+      return { seam, ends, normal: toward.map(x => Math.sign(Math.round(x * 2))) as unknown as Vec3, free: open !== undefined };
+    }
     const free = !seam.pieces.some(piece => filled.has(add(cells[piece]!, normal).join(',')));
     return { seam, ends, normal, free };
   });
