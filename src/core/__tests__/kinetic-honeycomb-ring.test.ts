@@ -200,6 +200,19 @@ describe('six hexagonal prisms round a hole', () => {
     expect(shape.poses.map(p => p.exposed)).toEqual([36, 34, 34, 30, 34]);
   });
 
+  it('turns four prisms through a third of a turn as one arc', () => {
+    // Block 2 to Block 4 is one fold. It used to read as three: the four
+    // prisms' rotations differ in the last digit (0.8660254037844386 against
+    // ...388), and the fold test compared rotations exactly, so an arc that
+    // turned as one body looked like four pieces each doing something else.
+    const distances = poseDistances(shape.foldGraph);
+    expect(distances[2]![4]).toBe(1);
+    const arc = shape.foldGraph.folds[shape.poses[2]!.closure]!
+      .find(f => f.to === shape.poses[4]!.closure)!.step;
+    expect(arc.pieces.length).toBe(4);
+    expect(Math.abs(arc.angle)).toBeCloseTo((2 * Math.PI) / 3, 9);
+  });
+
   it('can be folded from any shape to any other', () => {
     const distances = poseDistances(shape.foldGraph);
     for (const row of distances) {

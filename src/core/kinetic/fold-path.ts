@@ -611,8 +611,24 @@ function contiguous(pieces: readonly number[], pieceCount: number): boolean {
   return breaks === 2;
 }
 
+/**
+ * A placement as a key, rotation and offset both rounded.
+ *
+ * The rotation used to go in exactly, which is right for a cube — every entry
+ * is 0 or 1 — and wrong for anything else: a third of a turn is
+ * `0.8660254037844386` on one piece and `...388` on its neighbour, so an arc
+ * that turned as one body read as pieces that each did something different,
+ * and the fold was lost. On the ring of hexagonal prisms that was a whole fold
+ * (Block 2 to Block 4, four prisms through a third of a turn).
+ */
 const placementKey = (p: Placement): string =>
-  `${p.rot.map(row => row.join(',')).join(';')}|${p.offset.map(x => x.toFixed(3)).join(',')}`;
+  `${p.rot.map(row => row.map(x => fixed(x, 6)).join(',')).join(';')}|${p.offset.map(x => fixed(x, 3)).join(',')}`;
+
+/** `toFixed`, without the `-0.000` that a value a hair below zero rounds to. */
+function fixed(x: number, digits: number): string {
+  const text = x.toFixed(digits);
+  return Number(text) === 0 ? (0).toFixed(digits) : text;
+}
 
 const stateKey = (state: KineticState): string => state.map(placementKey).join('/');
 
