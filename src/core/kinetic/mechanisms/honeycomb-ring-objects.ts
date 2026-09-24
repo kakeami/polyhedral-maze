@@ -59,7 +59,7 @@ import type { HoneycombRingMechanism, HoneycombRingOptions } from './honeycomb-r
  */
 export const HEX_RING: HoneycombRingObject = {
   id: 'hex-ring',
-  label: '6 hexagonal prisms · 1 ring, 4 blocks · fewest pieces for a hole',
+  label: '6 hexagonal prisms (1 ring, 4 blocks; fewest pieces for a hole)',
   blurb: 'A ring with a hole through it, and the four blocks it shuts into.',
   honeycomb: 'hexprism',
   ring: hexPrismHole(),

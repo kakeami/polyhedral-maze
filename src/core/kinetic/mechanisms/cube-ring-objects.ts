@@ -58,7 +58,7 @@ export const DEFAULT_HINGES: readonly number[] = [2, 3, 2, 3, 2, 1, 2, 3];
  */
 export const INFINITY_CUBE: CubeRingObject = {
   id: 'infinity-cube',
-  label: '8 cubes · 2 cubes, 4 planks · all faces swapped',
+  label: '8 cubes (2 cubes, 4 planks; all faces swapped)',
   blurb: 'Shuts into six shapes, four planks and two cubes, and the two cubes show none of the same faces.',
   ring: PLANK_RING,
   hinges: DEFAULT_HINGES,
@@ -90,7 +90,7 @@ export const INFINITY_CUBE: CubeRingObject = {
  */
 export const HALF_TURN_RING: CubeRingObject = {
   id: 'half-turn-ring',
-  label: '8 cubes · 2 cubes, 2 planks · a third swapped by half turns',
+  label: '8 cubes (2 cubes, 2 planks; a third swapped by half turns)',
   blurb: 'Shuts into two cubes and two planks by half turns, and the two cubes swap a third of their faces.',
   ring: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0], [3, 1, 1], [2, 1, 1], [1, 1, 1], [0, 1, 1]],
   hinges: [2, 1, 2, 0, 3, 0, 3, 0],
@@ -113,7 +113,7 @@ export const HALF_TURN_RING: CubeRingObject = {
  */
 export const QUARTER_TURN_RING: CubeRingObject = {
   id: 'quarter-turn-ring',
-  label: '8 cubes · 2 cubes, 2 planks · a third swapped by quarter turns',
+  label: '8 cubes (2 cubes, 2 planks; a third swapped by quarter turns)',
   blurb: 'Taped on the plank like the first, it goes from cube to cube by quarter turns, and the two cubes swap a third of their faces.',
   ring: PLANK_RING,
   hinges: [2, 3, 2, 2, 2, 1, 2, 0],
@@ -137,7 +137,7 @@ export const QUARTER_TURN_RING: CubeRingObject = {
  */
 export const DIAMOND_RING: CubeRingObject = {
   id: 'diamond-ring',
-  label: '8 cubes · 2 cubes, 2 planks · no faces swapped',
+  label: '8 cubes (2 cubes, 2 planks; no faces swapped)',
   blurb: 'Taped flat as a diamond, it shuts into two cubes that show the same faces, put together differently.',
   ring: [[1, 0, 0], [2, 0, 0], [3, 1, 0], [3, 2, 0], [2, 3, 0], [1, 3, 0], [0, 2, 0], [0, 1, 0]],
   hinges: [2, 0, 1, 0, 2, 0, 1, 0],
@@ -168,7 +168,7 @@ export const DIAMOND_RING: CubeRingObject = {
  */
 export const FRAME_RING: CubeRingObject = {
   id: 'frame-ring',
-  label: '12 cubes · 1 frame, 1 block, 3 planks · most silhouettes',
+  label: '12 cubes (1 frame, 1 block, 3 planks; most silhouettes)',
   blurb: 'Shuts into five shapes, one of them a frame with a hole through it.',
   ring: plankRing(12),
   hinges: [3, 0, 2, 3, 0, 1, 0, 1, 2, 0, 1, 1],
@@ -195,7 +195,7 @@ export const FRAME_RING: CubeRingObject = {
  */
 export const SMALLEST_FRAME: CubeRingObject = {
   id: 'smallest-frame',
-  label: '10 cubes · 2 frames, 1 plank · fewest cubes for a hole',
+  label: '10 cubes (2 frames, 1 plank; fewest cubes for a hole)',
   blurb: 'Shuts into three shapes, two of them a frame — the fewest cubes that can.',
   ring: rectRing(3, 4),
   hinges: [2, 0, 1, 0, 1, 0, 2, 3, 0, 3],
@@ -224,7 +224,7 @@ export const SMALLEST_FRAME: CubeRingObject = {
  */
 export const SQUARE_FRAME: CubeRingObject = {
   id: 'square-frame',
-  label: '12 cubes · 1 frame, 1 plank, 1 block · widest swing in faces shown',
+  label: '12 cubes (1 frame, 1 plank, 1 block; widest swing in faces shown)',
   blurb: 'Shuts into three shapes, and shows half as much again of itself in one as in another.',
   ring: rectRing(4, 4),
   hinges: [2, 0, 2, 2, 0, 2, 3, 0, 3, 0, 1, 0],
