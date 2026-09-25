@@ -22,6 +22,7 @@ import {
 import { buildSurface } from '../kinetic/surface.ts';
 import { stateStats } from '../kinetic/maze.ts';
 import { createRng } from '../prng.ts';
+import { UnionFind } from '../graph.ts';
 
 describe('writing a design down', () => {
   it('comes back the same, at any size', () => {
@@ -87,6 +88,47 @@ describe('the mazes the folding page ships with', () => {
       // stopped varying its seed.
       const shapes = new Set(designs.map(d => d.open));
       expect(shapes.size).toBe(designs.length);
+    });
+  }
+
+  // A face no pose shows is still printed, and still seen mid-fold. Its grid
+  // lines are walls like any other, and a design draws one tree across each
+  // such face rather than leaving it ruled solid — which is what it did when
+  // those lines were taken for rim, one class a side.
+  for (const id of ['diamond-ring', 'frame-loop']) {
+    it(`draws a tree across every face the ${id} never shows`, () => {
+      const object = CUBE_RING_OBJECTS.find(o => o.id === id)!;
+      const cells = cubeRingRulings(object)[1]!;
+      const mech = createCubeRing(object, { cells });
+      const surface = buildSurface(mech, { maxStates: mech.states.length });
+      const shown = new Uint8Array(surface.cellCount);
+      for (let state = 0; state < surface.stateCount; state++) {
+        surface.visibleOfState(state).forEach((bit, cell) => { if (bit) shown[cell] = 1; });
+      }
+      const hidden = [...shown.keys()].filter(cell => !shown[cell]);
+      expect(hidden.length).toBe(8 * cells * cells);
+      for (const cell of hidden) {
+        for (let side = surface.sideStart[cell]!; side < surface.sideStart[cell + 1]!; side++) {
+          expect(surface.classKind[surface.classOf[side]!]).not.toBe('rim');
+        }
+      }
+      for (const stored of cubeRingDesigns(id, cells)) {
+        const open = decodeOpenClasses(stored);
+        const faces = new UnionFind<number>();
+        const tree = new UnionFind<number>();
+        let openWalls = 0;
+        for (const e of surface.internalEdges) {
+          if (shown[e.a]) continue;
+          faces.union(e.a, e.b);
+          if (!open.has(e.classId)) continue;
+          expect(tree.connected(e.a, e.b)).toBe(false);
+          tree.union(e.a, e.b);
+          openWalls++;
+        }
+        const faceCount = new Set(hidden.map(cell => faces.find(cell))).size;
+        expect(faceCount).toBe(8);
+        expect(openWalls).toBe(hidden.length - faceCount);
+      }
     });
   }
 });

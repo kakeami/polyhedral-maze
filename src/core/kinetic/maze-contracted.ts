@@ -218,6 +218,16 @@ function makeEngine(
   });
   let widest = 0;
   for (const patch of patches) widest = Math.max(widest, patch.length);
+  /**
+   * Patches no state ever shows. Nothing is asked of them, so they are drawn
+   * once — a spanning tree, so that a face nobody can walk still looks like
+   * maze wherever it is seen (on the paper, and mid-fold) — and never moved.
+   */
+  const unseen = new Uint8Array(patchCount).fill(1);
+  for (let s = 0; s < surface.stateCount; s++) {
+    const visible = surface.visibleOfState(s);
+    for (let cell = 0; cell < surface.cellCount; cell++) if (visible[cell]) unseen[patchOf[cell]!] = 0;
+  }
 
   // --- walls, by patch -----------------------------------------------------
   const walls = surface.internalEdges;
@@ -604,6 +614,7 @@ function makeEngine(
 
   const legal = (move: number): boolean => {
     if (move < 0) return true;
+    if (unseen[wallPatch[move]!]) return false;
     if (wallOpen[move]) return true; // closing a wall always splits a block
     return blockRoot[wallA[move]!] !== blockRoot[wallB[move]!];
   };
@@ -665,6 +676,7 @@ function makeEngine(
       }
       const extra = Math.max(0, Math.round(want / states));
       for (let p = 0; p < patchCount; p++) {
+        if (unseen[p]) continue;
         const open = wallsOfPatch[p]!.filter(w => wallOpen[w]);
         rng.shuffle(open);
         for (let i = 0; i < extra && i < open.length; i++) wallOpen[open[i]!] = 0;

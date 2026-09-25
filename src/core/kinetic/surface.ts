@@ -233,6 +233,59 @@ function touchingSides(
   return [...bySegment.values()];
 }
 
+/**
+ * Grid lines inside the part of an object that is never on show, as side pairs.
+ *
+ * A cell that is buried in every state takes part in no pairing — a walk never
+ * reaches it — so the lines between two such cells used to come out as 'rim',
+ * one class a side, and be drawn in full wherever they are drawn at all: on the
+ * printed net, and on screen mid-fold, when the faces come apart. They are
+ * grid lines like any other, the same two cells of one piece in every state,
+ * so they are paired here in the piece's own frame and become internal walls
+ * the search can draw a tree across. Only sides nothing else claimed are
+ * taken, so no class that meant something before changes by it.
+ */
+function neverShownGridLines(
+  mech: Mechanism,
+  sideStart: Int32Array,
+  visibleByState: readonly Uint8Array[],
+  uf: UnionFind<number>,
+): [number, number][] {
+  const cellCount = mech.cells.length;
+  const shown = new Uint8Array(cellCount);
+  for (const visible of visibleByState) {
+    for (let cell = 0; cell < cellCount; cell++) if (visible[cell]) shown[cell] = 1;
+  }
+  if (shown.every(bit => bit === 1)) return [];
+
+  const classSize = new Map<number, number>();
+  for (let side = 0; side < sideStart[cellCount]!; side++) {
+    const root = uf.find(side);
+    classSize.set(root, (classSize.get(root) ?? 0) + 1);
+  }
+  const welder = new VertexWelder();
+  const bySegment = new Map<string, number[]>();
+  mech.cells.forEach((cell, cellIndex) => {
+    if (shown[cellIndex]) return;
+    const ids = cell.corners.map(c => welder.id(c));
+    for (let s = 0; s < ids.length; s++) {
+      const side = sideStart[cellIndex]! + s;
+      if (classSize.get(uf.find(side)) !== 1) continue;
+      const u = ids[s]!;
+      const v = ids[(s + 1) % ids.length]!;
+      const key = `${cell.piece}:${u < v ? `${u}:${v}` : `${v}:${u}`}`;
+      const bucket = bySegment.get(key);
+      if (bucket) bucket.push(side);
+      else bySegment.set(key, [side]);
+    }
+  });
+  const pairs: [number, number][] = [];
+  for (const sides of bySegment.values()) {
+    if (sides.length === 2) pairs.push([sides[0]!, sides[1]!]);
+  }
+  return pairs;
+}
+
 function sideStarts(mech: Mechanism): Int32Array {
   const cellCount = mech.cells.length;
   const sideStart = new Int32Array(cellCount + 1);
@@ -350,10 +403,14 @@ export function buildSurfaceByState(
     });
   }
 
+  const neverShown = neverShownGridLines(mech, sideStart, visibleByState, uf);
+  for (const [a, b] of neverShown) uf.union(a, b);
+
   const { classOf, classSides } = classify(uf, sideCount);
   const classCount = classSides.length;
 
   const kind: SideClassKind[] = new Array(classCount).fill('rim');
+  for (const [a] of neverShown) kind[classOf[a]!] = 'internal';
   const adjByState: SurfaceAdjacency[][] = [];
   for (const pairs of pairsByState) {
     const adj: SurfaceAdjacency[] = [];
@@ -380,6 +437,21 @@ export function buildSurfaceByState(
       seen.add(e.classId);
       internalEdges.push(e);
     }
+  }
+  // Last, so that an object with nothing it never shows keeps the list, and
+  // the order a seeded search shuffles, that it always had.
+  const cellOfSide = (side: number): number => {
+    let lo = 0;
+    let hi = cellCount - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (sideStart[mid]! <= side) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  for (const [a, b] of neverShown) {
+    internalEdges.push({ a: cellOfSide(a), b: cellOfSide(b), classId: classOf[a]!, intra: true });
   }
   for (let c = 0; c < classCount; c++) {
     if (kind[c] === 'internal' && classSides[c]!.length !== 2) {
