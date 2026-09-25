@@ -9,7 +9,7 @@ import {
 } from '../../ui/fold-param-codec.ts';
 import { cubeRingDesign } from '../kinetic/mechanisms/cube-ring-designs.ts';
 import {
-  CUBE_RING_OBJECTS, DEFAULT_CUBE_RING, FRAME_RING, cubeRingRulings,
+  CUBE_RING_OBJECTS, DEFAULT_CUBE_RING, FRAME_LOOP, FRAME_RING, cubeRingRulings,
 } from '../kinetic/mechanisms/cube-ring-objects.ts';
 
 describe('the folding maze in a URL', () => {
@@ -36,11 +36,14 @@ describe('the folding maze in a URL', () => {
   });
 
   it('carries which object it is, and opens on the default when it cannot', () => {
-    const other = clampFoldParams({ ...DEFAULT_FOLD_PARAMS, object: FRAME_RING.id });
-    expect(encodeFoldParams(other)).toContain(`object=${FRAME_RING.id}`);
-    expect(decodeFoldParams(encodeFoldParams(other)).object).toBe(FRAME_RING.id);
-    // A link to an object this page no longer has opens on the one it does.
+    const other = clampFoldParams({ ...DEFAULT_FOLD_PARAMS, object: FRAME_LOOP.id });
+    expect(encodeFoldParams(other)).toContain(`object=${FRAME_LOOP.id}`);
+    expect(decodeFoldParams(encodeFoldParams(other)).object).toBe(FRAME_LOOP.id);
+    // A link to an object this page no longer has opens on the one it does —
+    // one that never existed, and one that was offered once and is archived.
     expect(decodeFoldParams('?object=a-ring-of-forty').object).toBe(DEFAULT_CUBE_RING.id);
+    expect(clampFoldParams({ ...DEFAULT_FOLD_PARAMS, object: FRAME_RING.id }).object).toBe(DEFAULT_CUBE_RING.id);
+    expect(clampFoldParams({ ...DEFAULT_FOLD_PARAMS, object: 'hex-ring' }).object).toBe(DEFAULT_CUBE_RING.id);
     expect(CUBE_RING_OBJECTS.map(object => object.id)).toContain(DEFAULT_CUBE_RING.id);
   });
 

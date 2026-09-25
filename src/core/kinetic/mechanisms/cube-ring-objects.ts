@@ -232,31 +232,64 @@ export const SQUARE_FRAME: CubeRingObject = {
 };
 
 /**
+ * Twelve cubes round the 4 by 4 frame that fold round in a loop: frame, block,
+ * plank, plank, and back to the frame.
+ *
+ * The same layout as `SQUARE_FRAME` and the same three silhouettes, taped so
+ * that the shapes form a ring instead of a path. From the frame, three folds
+ * shut it into a solid 3 by 2 by 2 block; one opens the block into a 2 by 6
+ * plank; one turns that plank into the other plank; and three open the second
+ * plank back into the frame — eight folds round, and no shape more than four
+ * from any other. It is not two flips side by side: the opposite sides of that
+ * square turn different arcs of the ring, so a hand goes round it rather than
+ * back and forth.
+ *
+ * Found by building the loop from the block rather than sweeping tapings
+ * (`.dev/probe-cycle-hunt.ts`): a strip of tape is placed only when a fold
+ * needs it, on that fold's line. Six of the twelve seams are fixed by the
+ * loop; of the ways to tape the other six, this one has the fewest open shapes
+ * in between — forty, where the rest run to nearly three hundred — so the
+ * object has the least play and no stray shape.
+ *
+ * The genus changes on the way round, frame to block, and the faces on show
+ * swing from 48 to 32 of the 72. Folded shut, some strips are pressed between
+ * cubes, so like the other rings with a buried strip it is taped where it is
+ * laid out, as the frame.
+ */
+export const FRAME_LOOP: CubeRingObject = {
+  id: 'frame-loop',
+  label: '12 cubes (1 frame, 1 block, 2 planks; folds round in a loop)',
+  blurb: 'Folds from a frame to a block, a plank, another plank and back to the frame, round and round.',
+  ring: rectRing(4, 4),
+  hinges: [3, 0, 3, 1, 1, 1, 1, 0, 1, 2, 1, 0],
+  maxCells: 10,
+  tapeReachable: 'layout',
+};
+
+/**
  * The objects on offer, fewest cubes first.
  *
- * Each is here for something the others do not have. Eight cubes for the cube
- * and the plank — four times over, because the four rings of eight fold
+ * Every one of them goes round a loop, which is what the page is for: the
+ * rings of eight between two cubes and their planks, and the ring of twelve
+ * between a frame, a block and two planks. The four rings of eight fold
  * between the same two silhouettes and differ in what the fold does to the
  * surface: every face swapped between the two cubes, a third of them by half
- * turns, a third by quarter turns, or none at all. Ten for the smallest frame
- * there is, twelve for the widest swing between one shape and the next and
- * for the most silhouettes. What an object does is decided by how it is laid
- * out and taped rather than by how many cubes are in it: two of these are
- * twelve cubes and neither folds like the other, and four are eight.
+ * turns, a third by quarter turns, or none at all.
  *
  * The label says it in that order — how many pieces, what it shuts into, and
  * the one thing it is here for — so the list reads as a table.
- *
- * What is *not* a reason to be here is a large number of poses. Ten cubes can
- * be taped to shut sixteen ways — exactly one taping does, and it is the most
- * any ten cubes have (`.dev/probe-fold-most.ts`, 6.3 million tapings,
- * exhaustive) — but all sixteen of those shapes are the same flat five-by-four
- * blob with the same 38 faces on show, so folding it changes which squares are
- * out and nothing a hand can feel. Counting states is not counting shapes, and
- * the shapes are what this is for.
  */
 export const CUBE_RING_OBJECTS: readonly CubeRingObject[] = [
-  INFINITY_CUBE, HALF_TURN_RING, QUARTER_TURN_RING, DIAMOND_RING,
+  INFINITY_CUBE, HALF_TURN_RING, QUARTER_TURN_RING, DIAMOND_RING, FRAME_LOOP,
+];
+
+/**
+ * Objects the page used to offer, kept so they can still be built and tested.
+ *
+ * Their shapes form a path or a tree rather than a loop, so they are no longer
+ * listed; a link that names one lands on the default object.
+ */
+export const ARCHIVED_CUBE_RINGS: readonly CubeRingObject[] = [
   SMALLEST_FRAME, SQUARE_FRAME, FRAME_RING,
 ];
 

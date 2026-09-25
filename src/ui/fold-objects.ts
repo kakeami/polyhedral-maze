@@ -1,5 +1,6 @@
 /**
- * What the folding page offers: rings of cubes, and rings of prisms.
+ * What the folding page offers: rings of cubes, and — kept, no longer listed —
+ * a ring of prisms.
  *
  * Two mechanisms, one page, because to a visitor they are one object with a
  * different solid in it — a closed ring of hinged pieces, folded by hand, with
@@ -18,13 +19,11 @@
  */
 
 import {
-  CUBE_RING_OBJECTS, DEFAULT_CUBE_RING, cubeRingObject, cubeRingRulings,
+  CUBE_RING_OBJECTS, DEFAULT_CUBE_RING, cubeRingRulings,
 } from '../core/kinetic/mechanisms/cube-ring-objects.ts';
 import { createCubeRing } from '../core/kinetic/mechanisms/cube-ring.ts';
 import type { CubeRingMechanism, CubeRingObject } from '../core/kinetic/mechanisms/cube-ring.ts';
-import {
-  HONEYCOMB_RING_OBJECTS, honeycombRingObject, honeycombRingRulings,
-} from '../core/kinetic/mechanisms/honeycomb-ring-objects.ts';
+import { honeycombRingRulings } from '../core/kinetic/mechanisms/honeycomb-ring-objects.ts';
 import { createHoneycombRing } from '../core/kinetic/mechanisms/honeycomb-ring.ts';
 import type {
   HoneycombRingMechanism, HoneycombRingObject,
@@ -42,17 +41,15 @@ export interface FoldObjectSummary {
 }
 
 /**
- * The objects, rings of cubes first.
+ * The objects the page offers: the rings of cubes whose shapes go round a loop.
  *
- * In that order because the cube rings are what the page shipped with and what
- * a visitor is likeliest to have in a drawer, and because the prisms are the
- * longer read: the ring of six hexagonal prisms is the one whose *genus*
- * changes, which is the thing ten cubes were needed for.
+ * The ring of six hexagonal prisms is no longer among them — its blocks go
+ * round a loop too, but that loop is two independent flips side by side, and
+ * the ring itself hangs off it — so it stays in `HONEYCOMB_RING_OBJECTS`, built
+ * and tested but not listed. Everything below still knows how to build and
+ * print a ring of prisms, which is what keeping it means.
  */
-export const FOLD_OBJECTS: readonly FoldObject[] = [
-  ...CUBE_RING_OBJECTS,
-  ...HONEYCOMB_RING_OBJECTS,
-];
+export const FOLD_OBJECTS: readonly FoldObject[] = [...CUBE_RING_OBJECTS];
 
 export const DEFAULT_FOLD_OBJECT: FoldObject = DEFAULT_CUBE_RING;
 
@@ -73,14 +70,7 @@ export function isCubeRingMechanism(mech: FoldMechanism): mech is CubeRingMechan
 
 /** The object of that name, or the default if a link names one that is gone. */
 export function foldObject(id: string): FoldObject {
-  const had = FOLD_OBJECTS.find(object => object.id === id);
-  if (had) return had;
-  // Ask each catalogue in turn rather than guessing: either may have renamed
-  // something, and each knows its own default.
-  const prism = HONEYCOMB_RING_OBJECTS.some(object => object.id === id)
-    ? honeycombRingObject(id)
-    : null;
-  return prism ?? cubeRingObject(id);
+  return FOLD_OBJECTS.find(object => object.id === id) ?? DEFAULT_FOLD_OBJECT;
 }
 
 /** Cells across a face: what an object can be ruled into, coarsest to finest. */

@@ -20,7 +20,7 @@ import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { createCubeRing, cubeRingShape, hingeLine } from '../kinetic/mechanisms/cube-ring.ts';
 import {
-  CUBE_RING_OBJECTS, DEFAULT_HINGES, DIAMOND_RING, FRAME_RING, HALF_TURN_RING, INFINITY_CUBE,
+  CUBE_RING_OBJECTS, DEFAULT_HINGES, DIAMOND_RING, FRAME_LOOP, FRAME_RING, HALF_TURN_RING, INFINITY_CUBE,
   PLANK_RING, QUARTER_TURN_RING, SMALLEST_FRAME, SQUARE_FRAME, createInfinityCube,
 } from '../kinetic/mechanisms/cube-ring-objects.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
@@ -568,6 +568,40 @@ describe('the twelve-cube ring taped on the frame itself', () => {
       const stats = stateStats(skin, found.design, state);
       expect(stats.perfect).toBe(true);
       expect(stats.edges).toBe(skin.visibleCount[state]! - 1);
+    }
+  });
+});
+
+describe('the twelve-cube ring that folds round in a loop', () => {
+  const loop = createCubeRing(FRAME_LOOP, { cells: 1 });
+
+  it('goes frame, block, plank, plank and back, with nothing in between', () => {
+    expect(loop.closures().length).toBe(40);
+    expect(loop.strays.length).toBe(0);
+    expect(loop.poses.map(pose => pose.label)).toEqual(['Frame 1', 'Plank 1', 'Block 1', 'Plank 2']);
+    expect(loop.poses.map(pose => pose.genus)).toEqual([1, 0, 0, 0]);
+    // Frame 1 -3- Block 1 -1- Plank 1 -1- Plank 2 -3- Frame 1: each pose has
+    // two neighbours, and the two across the square are reached through one.
+    expect(poseDistances(loop.foldGraph())).toEqual([
+      [0, 4, 3, 3],
+      [4, 0, 1, 1],
+      [3, 1, 0, 2],
+      [3, 1, 2, 0],
+    ]);
+  });
+
+  it('is laid out where its tape can go on, and buries some strips folded', () => {
+    expect(loop.poses.some(pose => pose.tapeBuried)).toBe(true);
+    expect(loop.poses[0]!.tapeBuried).toBe(false);
+  });
+
+  it('is a perfect maze in all four, on a design found here', () => {
+    const skin = buildSurface(createCubeRing(FRAME_LOOP, { cells: 2 }));
+    expect([...skin.visibleCount]).toEqual([192, 160, 128, 160]);
+    const found = contractedSearch(skin, { rng: createRng(1) });
+    expect(found.rate.rate).toBe(1);
+    for (let state = 0; state < skin.stateCount; state++) {
+      expect(stateStats(skin, found.design, state).perfect).toBe(true);
     }
   });
 });

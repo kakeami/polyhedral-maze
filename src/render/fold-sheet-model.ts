@@ -910,7 +910,44 @@ function drawnArrangement(
     const made = arrangementAt(seams, state);
     if (!best || rank(made) > rank(best)) best = made;
   }
-  return best ?? arrangementAt(seams, closures[0]!);
+  if (!best) return arrangementAt(seams, closures[0]!);
+  return best.flat ? arrangementAt(seams, lyingFlat(best.state)) : best;
+}
+
+/**
+ * The same shape turned so that its one layer lies on the table.
+ *
+ * A shape one layer thick is drawn from above and from below, and those two
+ * views show every cube only if the layer is horizontal. A plank standing on
+ * its long edge is still one layer thick, and seen from above it is a single
+ * row of cubes: the drawing would show half the object and hide every strip
+ * of tape on its faces. Turning it over first costs nothing, since which way
+ * up a hand lays the cubes out is no part of the object.
+ */
+function lyingFlat(state: KineticState): KineticState {
+  const span = [0, 1, 2].map(axis => {
+    const xs = state.map(at => at.offset[axis]!);
+    return Math.max(...xs) - Math.min(...xs);
+  });
+  const thin = span.findIndex(extent => extent < 1e-9);
+  if (thin < 0 || thin === 2) return state;
+  // A quarter turn that takes the thin axis onto z.
+  const turn: number[][] = thin === 0
+    ? [[0, 0, -1], [0, 1, 0], [1, 0, 0]]
+    : [[1, 0, 0], [0, 0, -1], [0, 1, 0]];
+  const apply = (v: readonly number[]): number[] =>
+    turn.map(row => row[0]! * v[0]! + row[1]! * v[1]! + row[2]! * v[2]!);
+  const turned = state.map(at => ({
+    rot: turn.map(row => [0, 1, 2].map(c =>
+      row[0]! * at.rot[0]![c]! + row[1]! * at.rot[1]![c]! + row[2]! * at.rot[2]![c]!)),
+    offset: apply(at.offset),
+  }));
+  // Back onto cells at the origin, so a cube's centre is still a cell plus a half.
+  const low = [0, 1, 2].map(axis => Math.min(...turned.map(at => at.offset[axis]!)) - 0.5);
+  return turned.map(at => ({
+    rot: at.rot as unknown as Mat3,
+    offset: at.offset.map((x, axis) => x - low[axis]!) as unknown as Vec3,
+  }));
 }
 
 function arrangementAt(seams: readonly TapeSeam[], state: KineticState): Arrangement {
