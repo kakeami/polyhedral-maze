@@ -46,16 +46,21 @@ export interface PieceLayout {
  * The faces are renumbered 0, 1, 2, ... because the unfolder reaches for
  * `faces[id]`: leave a gap in the numbering and it walks off the end of its own
  * array. Everything else keeps the solid's real face ids, so the translation
- * happens here and nowhere else.
+ * happens here and nowhere else — including in `mayFold`, which is asked about
+ * the solid's faces and not the unfolder's numbers.
  */
-export function layOutPiece(polyhedron: Polyhedron, faces: readonly Face[]): PieceLayout {
+export function layOutPiece(
+  polyhedron: Polyhedron,
+  faces: readonly Face[],
+  mayFold?: (a: Face, b: Face) => boolean,
+): PieceLayout {
   const netIdOf = new Map(faces.map((face, index) => [face.id, index]));
   const renumbered = faces.map((face, index) => ({ ...face, id: index }));
   const layout = computeNetLayout({
     faces: () => renumbered,
     faceAdjacency: () => polyhedron.faceAdjacency(),
     gridForFace: (face, n) => polyhedron.gridForFace(face, n),
-  });
+  }, mayFold ? { mayFold: (a, b) => mayFold(faces[a]!, faces[b]!) } : {});
   const byNetId = new Map(layout.faces.map(f => [f.faceId, f.vertices2d]));
   const flatOf = new Map<number, Vec2[]>();
   for (const face of faces) {

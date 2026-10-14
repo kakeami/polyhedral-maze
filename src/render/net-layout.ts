@@ -53,7 +53,22 @@ export interface NetLayout {
 
 // ─── Main entry ───────────────────────────────────────────────────
 
-export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
+export interface NetLayoutOptions {
+  /**
+   * Whether the paper may stay joined across the edge between two faces, by
+   * their ids. Unset, any edge may.
+   *
+   * For a piece the solid's own rules do not settle. A half cube is not
+   * convex — three of its creases are grooves — and a net folded along one of
+   * those has to be folded the other way there, which nothing printed says; an
+   * edge that is taped to another piece has to be a cut, or the label naming
+   * the piece is printed on the model. Leaving those out of the tree settles
+   * both, as long as what is left still joins every face.
+   */
+  readonly mayFold?: (a: number, b: number) => boolean;
+}
+
+export function computeNetLayout(polyhedron: Polyhedron, options: NetLayoutOptions = {}): NetLayout {
   const faces = polyhedron.faces();
   if (faces.length === 0) {
     return {
@@ -80,12 +95,16 @@ export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
   // can paint themselves into a corner, in which case the unfolding is
   // retried from every other root and the cleanest layout wins.
   const score = (r: UnfoldResult) => r.overlapForced * 1e6 + r.flushAccepted;
-  let best = unfoldFrom(faces, adj, 0, eps, flushTol);
+  const { mayFold } = options;
+  let best = unfoldFrom(faces, adj, 0, eps, flushTol, mayFold);
   for (let root = 1; root < faces.length && score(best) > 0; root++) {
-    const attempt = unfoldFrom(faces, adj, root, eps, flushTol);
+    const attempt = unfoldFrom(faces, adj, root, eps, flushTol, mayFold);
     if (score(attempt) < score(best)) best = attempt;
   }
   const { placed, foldPairs } = best;
+  if (placed.size < faces.length) {
+    throw new Error('the edges a net may fold along do not join every face');
+  }
 
   const edgeSeg = (fid: number, i: number): [Vec2, Vec2] => {
     const vs = placed.get(fid)!;
@@ -98,6 +117,7 @@ export function computeNetLayout(polyhedron: Polyhedron): NetLayout {
       if (e.neighborId <= fid) continue; // handle each pair once
       const pairKey = `${fid}:${e.neighborId}`;
       if (foldPairs.has(pairKey)) continue;
+      if (mayFold && !mayFold(fid, e.neighborId)) continue;
       const [a, b] = edgeSeg(fid, edgeIdxOf(e.parentIdx));
       const [c, d] = edgeSeg(e.neighborId, edgeIdxOf(e.childIdx));
       if (sameSegment(a, b, c, d, flushTol)) foldPairs.add(pairKey);
@@ -196,6 +216,7 @@ function unfoldFrom(
   root: number,
   eps: number,
   flushTol: number,
+  mayFold?: (a: number, b: number) => boolean,
 ): UnfoldResult {
   const placed = new Map<number, Vec2[]>();
   const foldPairs = new Set<string>();
@@ -256,6 +277,7 @@ function unfoldFrom(
       const pid = queue.shift()!;
       for (const edge of adj.get(pid)!) {
         if (placed.has(edge.neighborId)) continue;
+        if (mayFold && !mayFold(pid, edge.neighborId)) continue;
         const cand = unfold(pid, edge);
         if (overlapsPlaced(cand) || unrelatedFlush(cand, edge.neighborId)) {
           // Defer: the face may unfold cleanly across a different edge.
