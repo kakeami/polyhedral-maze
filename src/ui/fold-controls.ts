@@ -64,9 +64,16 @@ export interface FoldMetrics {
   readonly poses: readonly FoldPose[];
   readonly poseIndex: number;
   readonly perfectPoses: number;
-  readonly cellsPerFace: number;
+  /** What one piece is ruled into, named for the piece: squares to a cube. */
+  readonly pieceCells: { readonly label: string; readonly count: number };
   /** Steps from the entrance to the exit in the pose on show. */
   readonly solutionLength: number;
+  /**
+   * Entrance-exit pairs on show in this pose: one, except on an object that
+   * has to show a mark twice somewhere (`pickPrintedEnds`), where the
+   * solution is the shortest of them.
+   */
+  readonly routes: number;
   /** Set when the maze on show was searched for rather than read off the cache. */
   readonly searched?: boolean;
 }
@@ -83,6 +90,12 @@ export interface FoldControlsContext {
    * pressed is worse than one that says why it is not there.
    */
   setExport(state: { enabled: boolean; label: string }): void;
+  /**
+   * What the legend says about the marks: each on a pair of cells that take
+   * turns on the outside, or — for an object with no such pairs — on cells
+   * that are sometimes out together.
+   */
+  setMarkerNote(marks: 'pairs' | 'repeats'): void;
   /** Follows a shuffle that picked a different object. */
   setObject(id: string): void;
   /** The rulings there are mazes for, and which one is on show. */
@@ -134,6 +147,7 @@ export function createFoldControls(
   const solution = el<HTMLInputElement>('fold-solution');
   const styleSelect = el<HTMLSelectElement>('fold-style');
   const styleNote = el<HTMLDivElement>('fold-style-note');
+  const markerNote = el<HTMLDivElement>('fold-marker-note');
   const exportBtn = el<HTMLButtonElement>('fold-export-pdf');
   const copyBtn = el<HTMLButtonElement>('fold-copy-url');
   const shuffleSeedBtn = el<HTMLButtonElement>('fold-shuffle-seed');
@@ -218,6 +232,9 @@ export function createFoldControls(
         ? 'How the pieces go together, then one sheet for each piece, to print, cut and tape'
         : 'This object has no printed pattern yet';
     },
+    setMarkerNote(marks) {
+      markerNote.innerHTML = marks === 'pairs' ? PAIRED_MARKS : REPEATED_MARKS;
+    },
     setRulings(next, current) {
       rulings = next;
       const at = Math.max(0, next.indexOf(current));
@@ -252,9 +269,9 @@ export function createFoldControls(
         ['Cells on show', pose ? String(pose.cells) : '—'],
         ['Passages here', pose ? String(pose.passages) : '—'],
         ['Longest walk here', pose ? String(pose.longestWalk) : '—'],
-        ['Solution here', `${m.solutionLength} steps`],
+        ['Solution here', `${m.solutionLength} steps${m.routes > 1 ? ` (shortest of ${m.routes})` : ''}`],
         ['Perfect in', `${m.perfectPoses} of ${m.poses.length} poses`],
-        ['Squares to a cube', `${m.cellsPerFace * m.cellsPerFace * 6}`],
+        [m.pieceCells.label, `${m.pieceCells.count}`],
       ].map(([k, v]) => `<div><span>${esc(k!)}</span><span>${esc(v!)}</span></div>`).join('');
     },
     setStatus(text) {
@@ -311,6 +328,18 @@ export function createFoldControls(
   };
 }
 
+const PAIRED_MARKS = `Each mark is printed on <b>two</b> squares, and exactly one of
+        the two is on the outside in any pose &mdash; a ring of cubes buries part of
+        itself, and what it buries changes as it folds. Fold the object and the mark you
+        were looking at goes inside while its twin comes out. Here only the one on the
+        outside has a pin; the paper carries both.`;
+
+const REPEATED_MARKS = `Each mark is printed on <b>two</b> cells. This object has no two
+        cells that take turns on the outside, so in some poses both of a mark are out:
+        start from any S and finish at any G. Every pose is a perfect maze, so each of
+        those walks has exactly one way, and <b>Show solution draws the shortest of
+        them</b> &mdash; which is the one Solution here counts.`;
+
 const BLURB =
   'Cubes taped into a ring, folded into every shape the tape allows. ' +
   'The maze is printed once and never changes; what changes is which part of ' +
@@ -351,7 +380,7 @@ function buildHTML(p: FoldParams): string {
     <div class="shape-info" id="fold-style-note"></div>
 
     <div class="checkboxes">
-      <label title="The way from the entrance to the exit in the pose on show. It is a different way in every pose"><input id="fold-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
+      <label title="The way from the entrance to the exit in the pose on show. It is a different way in every pose. Where two of a mark are on show, it is the shortest way between them"><input id="fold-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
       <label title="It goes from pose to pose on its own, a fold at a time, and keeps out of your way for a few seconds after you have asked for something. Off, it stays where it is put"><input id="fold-autofold" type="checkbox" ${p.fold ? 'checked' : ''} /> Cubes fold</label>
       <label title="The view drifts around the object. This turns the camera, not the object"><input id="fold-autorotate" type="checkbox" ${p.autoRotate ? 'checked' : ''} /> Auto-rotate</label>
     </div>
@@ -374,11 +403,7 @@ function buildHTML(p: FoldParams): string {
         <span><b>Start</b> &mdash; where the walk begins</span></div>
       <div class="key"><span class="dot" style="color:#dd2222;">&#9679;</span>
         <span><b>Goal</b> &mdash; where it ends</span></div>
-      <div class="note">Each mark is printed on <b>two</b> squares, and exactly one of
-        the two is on the outside in any pose &mdash; a ring of cubes buries part of
-        itself, and what it buries changes as it folds. Fold the object and the mark you
-        were looking at goes inside while its twin comes out. Both are drawn here, so the
-        buried one is hidden in the cube it is pressed against.</div>
+      <div class="note" id="fold-marker-note">${PAIRED_MARKS}</div>
     </div>
 
     ${sourceLinkHTML()}

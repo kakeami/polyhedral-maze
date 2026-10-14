@@ -67,6 +67,18 @@ export interface FoldModel {
    * answer appears to walk through it.
    */
   readonly wallsByPose: readonly (readonly Vec3[][])[];
+  /**
+   * Which cells are on the outside in each pose — what decides which pins
+   * stand up.
+   *
+   * Every printed mark has a pin, and a mark is printed on more than one
+   * cell, so in any pose some pins are on buried cells. On a ring of cubes
+   * those were hidden inside the cube pressed against them; on a ring of half
+   * cubes the piece pressed against a square is a pyramid, and a pin comes
+   * straight out of the other side of it. So a pin is shown where its cell is
+   * on show, and mid-fold where it is on show at both ends of the fold.
+   */
+  readonly visibleByPose: readonly Uint8Array[];
 }
 
 export interface FoldSceneContext {
@@ -130,6 +142,8 @@ export function createFoldScene(
   let lineMaterials: LineMaterial[] = [];
   /** Per piece: the walls it carries in each pose, and all of them. */
   let wallSets: { all: THREE.Object3D | null; byPose: (THREE.Object3D | null)[] }[] = [];
+  /** Every pin, and the cell it stands on. */
+  let pins: { pin: THREE.Object3D; cell: number }[] = [];
   let solutionLine: Line2 | null = null;
   let solutionMaterial: LineMaterial | null = null;
   let solutionPath: readonly Vec3[] | null = null;
@@ -153,6 +167,7 @@ export function createFoldScene(
     }
     pieceGroups = [];
     wallSets = [];
+    pins = [];
     lineMaterials = [];
   }
 
@@ -201,7 +216,11 @@ export function createFoldScene(
         rim.layers.enable(BLOOM_LAYER);
         group.add(rim);
       }
-      for (const marker of piece.markers) group.add(makePin(marker, res, lineMaterials));
+      piece.markers.forEach((marker, index) => {
+        const pin = makePin(marker, res, lineMaterials);
+        group.add(pin);
+        pins.push({ pin, cell: piece.markerCells[index]! });
+      });
 
       pieceGroups.push(group);
       object.add(group);
@@ -292,6 +311,15 @@ export function createFoldScene(
     const state = model.states[pose];
     if (state) applyState(state);
     showWalls(pose);
+    showPins(pose, pose);
+  }
+
+  /** Pins on cells on show in both poses: one pose at rest, two mid-fold. */
+  function showPins(from: number, to: number) {
+    if (!model) return;
+    const a = model.visibleByPose[from];
+    const b = model.visibleByPose[to];
+    for (const { pin, cell } of pins) pin.visible = (a?.[cell] ?? 1) === 1 && (b?.[cell] ?? 1) === 1;
   }
 
   /**
@@ -373,6 +401,7 @@ export function createFoldScene(
     }
     clearSolution(); // a route through a shape that is about to stop existing
     showWalls(null);
+    showPins(pose, target);
     playing = { steps, step: 0, elapsed: 0, to: target };
   }
 

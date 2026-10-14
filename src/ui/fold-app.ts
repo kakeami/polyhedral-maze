@@ -35,10 +35,12 @@ import { createRng } from '../core/prng.ts';
 import { buildSurface } from '../core/kinetic/surface.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import {
-  FOLD_OBJECTS, createFoldMechanism, foldObject, foldRulings, isCubeRingMechanism, isPrismRing,
+  FOLD_OBJECTS, createFoldMechanism, foldObject, foldRulings, isCubeRingMechanism,
+  isHalfCubeRing, isHalfCubeRingMechanism, isPrismRing,
 } from './fold-objects.ts';
 import type { FoldMechanism, FoldObject } from './fold-objects.ts';
 import { cubeRingDesign } from '../core/kinetic/mechanisms/cube-ring-designs.ts';
+import { halfCubeRingDesign } from '../core/kinetic/mechanisms/half-cube-ring-designs.ts';
 import { decodeOpenClasses } from '../core/kinetic/stored-design.ts';
 import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
 import { longestWalk, pickPrintedEnds, stateStats, treeRate } from '../core/kinetic/maze.ts';
@@ -47,7 +49,7 @@ import type { FoldGraph } from '../core/kinetic/fold-path.ts';
 import {
   buildKineticPieces, kineticSolutionPath, kineticWalls, solutionLength,
 } from '../render/kinetic-geometry.ts';
-import { exportFoldPDF, exportHoneycombPDF } from '../render/pdf-kinetic-sheets.ts';
+import { exportFoldPDF, exportHalfCubePDF, exportHoneycombPDF } from '../render/pdf-kinetic-sheets.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
@@ -118,11 +120,16 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
    * moment ago.
    */
   function storedDesign(ruling: Ruling, wanted: number): KineticDesign | null {
-    // Only the rings of cubes have a shelf of mazes; a ring of prisms is
-    // searched for, which takes a few milliseconds at any ruling it offers.
-    const stored = isPrismRing(ruling.mech.object)
-      ? null
-      : cubeRingDesign(ruling.mech.object.id, ruling.mech.cellsPerFace, wanted);
+    // A ring of prisms has no shelf of mazes: it is searched for, which takes
+    // a few milliseconds at any ruling it offers. A ring of half cubes keeps
+    // seed 42 only, the one the ruling slider holds on to; any other seed is
+    // one to four seconds of searching.
+    const { mech } = ruling;
+    const stored = isCubeRingMechanism(mech)
+      ? cubeRingDesign(mech.object.id, mech.cellsPerFace, wanted)
+      : isHalfCubeRingMechanism(mech)
+        ? halfCubeRingDesign(mech.object.id, mech.cellsPerFace, wanted)
+        : null;
     if (!stored || stored.classCount !== ruling.surface.classCount) return null;
     const design: KineticDesign = {
       open: decodeOpenClasses(stored),
@@ -144,6 +151,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       // paper does; a pose that presses two cubes together does not.
       wallsByPose: next.mech.states.map((_, state) =>
         kineticWalls(next.mech, next.surface, next.design, next.surface.visibleOfState(state))),
+      visibleByPose: next.mech.states.map((_, state) => next.surface.visibleOfState(state)),
     });
     // Cut to the pose rather than fold to it: the object on screen a moment ago
     // was a different maze, so there was no journey.
@@ -152,6 +160,11 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.setAutoFold(controls.isAutoFolding());
     controls.setPoses(next.poses, pose);
     controls.setSeed(next.seed, next.cached);
+    controls.setMarkerNote(next.mech.states.some((_unused, state) => {
+      const visible = next.surface.visibleOfState(state);
+      return next.ends.start.filter(cell => visible[cell]).length > 1
+        || next.ends.goal.filter(cell => visible[cell]).length > 1;
+    }) ? 'repeats' : 'pairs');
     refreshPose();
     syncUrl();
   }
@@ -170,6 +183,8 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     if (!build) return;
     const { mech, surface, design, ends } = build;
     const here = ends.byState[poseIndex] ?? ends.byState[0]!;
+    const visible = surface.visibleOfState(poseIndex);
+    const onShow = (cells: readonly number[]) => cells.filter(cell => visible[cell]).length;
     // Read from the panel rather than from the build: whether the answer is on
     // screen is a switch the visitor holds, and it outlives any one pose.
     scene.setSolution(
@@ -181,8 +196,9 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       poses: build.poses,
       poseIndex,
       perfectPoses: build.perfectPoses,
-      cellsPerFace: mech.cellsPerFace,
+      pieceCells: piecesRuled(mech),
       solutionLength: solutionLength(surface, design, poseIndex, here),
+      routes: onShow(ends.start) * onShow(ends.goal),
       searched: !build.cached,
     });
   }
@@ -375,7 +391,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   function showExport() {
     controls.setExport({
       enabled: true,
-      label: isPrismRing(object) ? 'Export prisms PDF' : 'Export cubes PDF',
+      label: `Export ${isPrismRing(object) ? 'prisms' : isHalfCubeRing(object) ? 'half cubes' : 'cubes'} PDF`,
     });
   }
 
@@ -389,10 +405,12 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
       try {
         const plan = isCubeRingMechanism(mech)
           ? exportFoldPDF(mech, surface, design, from, { ends })
-          : exportHoneycombPDF(mech, surface, design, from, { ends });
+          : isHalfCubeRingMechanism(mech)
+            ? exportHalfCubePDF(mech, surface, design, from, { ends })
+            : exportHoneycombPDF(mech, surface, design, from, { ends });
         controls.showToast(
           `${plan.sheets.length} sheets — ${mech.pieceCount} ` +
-          `${isCubeRingMechanism(mech) ? 'cubes' : 'prisms'} ` +
+          `${isCubeRingMechanism(mech) ? 'cubes' : isHalfCubeRingMechanism(mech) ? 'half cubes' : 'prisms'} ` +
           `${plan.edgeMm.toFixed(0)} mm on a side`,
         );
       } catch (error) {
@@ -432,6 +450,13 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   // Opened in the pose the link asked for, and cut to it rather than folded:
   // there is nothing to have come from.
   rebuild(true);
+}
+
+/** What one piece is ruled into, as the panel names it. */
+function piecesRuled(mech: FoldMechanism): { label: string; count: number } {
+  const count = mech.cells.length / mech.pieceCount;
+  if (isCubeRingMechanism(mech)) return { label: 'Squares to a cube', count };
+  return { label: isHalfCubeRingMechanism(mech) ? 'Cells to a half cube' : 'Cells to a prism', count };
 }
 
 /** The ruling nearest the one on show, among those the object offers. */

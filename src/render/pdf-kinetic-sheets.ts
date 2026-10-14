@@ -1,8 +1,8 @@
 /**
  * The PDFs of the turning and folding patterns: the rings, the glued pair, the
- * cut solid, the ring of cubes and the ring of prisms.
+ * cut solid, the ring of cubes, the ring of prisms and the ring of half cubes.
  *
- * All five are the same three lines — build the plan, open a document, paint
+ * All six are the same three lines — build the plan, open a document, paint
  * each sheet — because all four patterns are already a list of sheets of
  * `PageItem`s, DOM-free, in page millimetres, and `pdf-face-page-painter.ts`
  * paints those unchanged. Only the mechanism and the name of the file differ,
@@ -29,6 +29,11 @@ import {
   type HoneycombSheetOptions,
   type HoneycombSheetPlan,
 } from './honeycomb-sheet-model.ts';
+import {
+  buildHalfCubeSheets,
+  type HalfCubeSheetOptions,
+  type HalfCubeSheetPlan,
+} from './half-cube-sheet-model.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign } from '../core/kinetic/maze.ts';
 import type { StackMechanism } from '../core/kinetic/mechanisms/stack.ts';
@@ -36,6 +41,7 @@ import type { JoinedPairMechanism } from '../core/kinetic/mechanisms/joined.ts';
 import type { GyrationMechanism } from '../core/kinetic/mechanisms/gyration.ts';
 import type { CubeRingMechanism } from '../core/kinetic/mechanisms/cube-ring.ts';
 import type { HoneycombRingMechanism } from '../core/kinetic/mechanisms/honeycomb-ring.ts';
+import type { HalfCubeRingMechanism } from '../core/kinetic/mechanisms/half-cube-ring.ts';
 
 export interface SheetPdf<P> {
   readonly doc: jsPDF;
@@ -156,5 +162,26 @@ export function exportHoneycombPDF(
 ): HoneycombSheetPlan {
   const { doc, plan } = buildHoneycombPDF(mech, surface, design, options);
   doc.save(`polyhedral-maze-${mech.id}-${maze}-fold.pdf`);
+  return plan;
+}
+
+export function buildHalfCubePDF(
+  mech: HalfCubeRingMechanism,
+  surface: KineticSurface,
+  design: KineticDesign,
+  options: HalfCubeSheetOptions = {},
+): SheetPdf<HalfCubeSheetPlan> {
+  return paintPlan(buildHalfCubeSheets(mech, surface, design, options));
+}
+
+export function exportHalfCubePDF(
+  mech: HalfCubeRingMechanism,
+  surface: KineticSurface,
+  design: KineticDesign,
+  maze: number,
+  options: HalfCubeSheetOptions = {},
+): HalfCubeSheetPlan {
+  const { doc, plan } = buildHalfCubePDF(mech, surface, design, options);
+  doc.save(`folding-maze-${mech.object.id}-${mech.cellsPerFace}-${maze}.pdf`);
   return plan;
 }

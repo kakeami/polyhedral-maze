@@ -67,6 +67,11 @@ export interface KineticPieceGeometry {
   readonly rim: Vec3[];
   /** Start / goal pins carried by this piece, body frame. */
   readonly markers: MazeMarker[];
+  /**
+   * The cell each pin stands on, in the same order: what a view needs to show
+   * a pin only where its cell is on the outside.
+   */
+  readonly markerCells: number[];
   readonly bounds: PieceBounds;
 }
 
@@ -146,13 +151,14 @@ export function buildKineticPieces(
     normals: number[];
     rim: Vec3[];
     markers: MazeMarker[];
+    markerCells: number[];
     radius: number;
     zMin: number;
     zMax: number;
     /** Every corner of the piece, kept only long enough to close its ends. */
     corners: Vec3[];
   }[] = Array.from({ length: mech.pieceCount }, () => ({
-    positions: [], normals: [], rim: [], markers: [],
+    positions: [], normals: [], rim: [], markers: [], markerCells: [],
     radius: 0, zMin: Infinity, zMax: -Infinity, corners: [] as Vec3[],
   }));
 
@@ -185,6 +191,7 @@ export function buildKineticPieces(
     const marker = marked.get(index);
     if (marker) {
       piece.markers.push({ kind: marker, at: shrink(cellCentre(cell), cell.piece), normal });
+      piece.markerCells.push(index);
     }
   });
 
@@ -208,6 +215,7 @@ export function buildKineticPieces(
     walls: walls[piece]!,
     rim: p.rim,
     markers: p.markers,
+    markerCells: p.markerCells,
     bounds: {
       radius: p.radius,
       zMin: p.zMin === Infinity ? 0 : p.zMin,
@@ -269,10 +277,11 @@ export function kineticWalls(
  *
  * Both shapes an answer to "where does the maze start" can take. On an object
  * that hides part of itself there is nowhere to print a marker that is always
- * on show, so each one is printed on a pair of cells that are on show one at a
- * time (`pickPrintedEnds`), and both of the pair are drawn: the buried one is
- * inside the object, under the cube pressed against it, and comes back out
- * with the rest of that face when the object is unfolded.
+ * on show, so each one is printed on more than one cell (`pickPrintedEnds`),
+ * and every one of them gets a pin here, as every one is on the paper. Which
+ * of them stand up in a pose is the view's business (`FoldModel.visibleByPose`):
+ * a pin on a buried cell points through whatever buried it, and on a ring of
+ * half cubes that is straight out of the other side.
  */
 function markedCells(ends?: StartGoal | PrintedEnds | null): Map<number, MarkerKind> {
   const marked = new Map<number, MarkerKind>();

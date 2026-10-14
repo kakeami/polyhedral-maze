@@ -1,6 +1,6 @@
 /**
- * What the folding page offers: rings of cubes, and — kept, no longer listed —
- * a ring of prisms.
+ * What the folding page offers: rings of cubes, a ring of half cubes, and —
+ * kept, no longer listed — a ring of prisms.
  *
  * Two mechanisms, one page, because to a visitor they are one object with a
  * different solid in it — a closed ring of hinged pieces, folded by hand, with
@@ -28,10 +28,16 @@ import { createHoneycombRing } from '../core/kinetic/mechanisms/honeycomb-ring.t
 import type {
   HoneycombRingMechanism, HoneycombRingObject,
 } from '../core/kinetic/mechanisms/honeycomb-ring.ts';
+import {
+  HALF_CUBE_RING_OBJECTS, createHalfCubeRing, halfCubeRingRulings,
+} from '../core/kinetic/mechanisms/half-cube-ring.ts';
+import type {
+  HalfCubeRingMechanism, HalfCubeRingObject,
+} from '../core/kinetic/mechanisms/half-cube-ring.ts';
 
 /** An object the page can offer, whichever mechanism it belongs to. */
-export type FoldObject = CubeRingObject | HoneycombRingObject;
-export type FoldMechanism = CubeRingMechanism | HoneycombRingMechanism;
+export type FoldObject = CubeRingObject | HoneycombRingObject | HalfCubeRingObject;
+export type FoldMechanism = CubeRingMechanism | HoneycombRingMechanism | HalfCubeRingMechanism;
 
 /** What the panel needs of an object: a name, a label and a line about it. */
 export interface FoldObjectSummary {
@@ -41,7 +47,9 @@ export interface FoldObjectSummary {
 }
 
 /**
- * The objects the page offers: the rings of cubes whose shapes go round a loop.
+ * The objects the page offers: the rings of cubes whose shapes go round a loop,
+ * and the infinity cube with every cube cut in half, which goes round the same
+ * loop and is a different shape at two points of it.
  *
  * The ring of six hexagonal prisms is no longer among them — its blocks go
  * round a loop too, but that loop is two independent flips side by side, and
@@ -49,7 +57,7 @@ export interface FoldObjectSummary {
  * and tested but not listed. Everything below still knows how to build and
  * print a ring of prisms, which is what keeping it means.
  */
-export const FOLD_OBJECTS: readonly FoldObject[] = [...CUBE_RING_OBJECTS];
+export const FOLD_OBJECTS: readonly FoldObject[] = [...CUBE_RING_OBJECTS, ...HALF_CUBE_RING_OBJECTS];
 
 export const DEFAULT_FOLD_OBJECT: FoldObject = DEFAULT_CUBE_RING;
 
@@ -58,14 +66,24 @@ export function isPrismRing(object: FoldObject): object is HoneycombRingObject {
   return 'honeycomb' in object;
 }
 
+/** Whether this one is a ring of half cubes. */
+export function isHalfCubeRing(object: FoldObject): object is HalfCubeRingObject {
+  return 'halves' in object;
+}
+
 /**
- * Whether this mechanism is a ring of cubes, which is what has a pattern.
+ * Whether this mechanism is a ring of whole cubes: what has the cube pattern,
+ * and what the shelf of shipped mazes is for.
  *
  * On the mechanism rather than on the object, because narrowing the object
  * narrows nothing about what holds it: the pattern needs the *mechanism*.
  */
 export function isCubeRingMechanism(mech: FoldMechanism): mech is CubeRingMechanism {
-  return !isPrismRing(mech.object);
+  return !isPrismRing(mech.object) && !isHalfCubeRing(mech.object);
+}
+
+export function isHalfCubeRingMechanism(mech: FoldMechanism): mech is HalfCubeRingMechanism {
+  return isHalfCubeRing(mech.object);
 }
 
 /** The object of that name, or the default if a link names one that is gone. */
@@ -75,14 +93,16 @@ export function foldObject(id: string): FoldObject {
 
 /** Cells across a face: what an object can be ruled into, coarsest to finest. */
 export function foldRulings(object: FoldObject): number[] {
-  return isPrismRing(object) ? honeycombRingRulings(object) : cubeRingRulings(object);
+  if (isPrismRing(object)) return honeycombRingRulings(object);
+  if (isHalfCubeRing(object)) return halfCubeRingRulings(object);
+  return cubeRingRulings(object);
 }
 
 export function createFoldMechanism(
   object: FoldObject,
   options: { cells: number },
 ): FoldMechanism {
-  return isPrismRing(object)
-    ? createHoneycombRing(object, options)
-    : createCubeRing(object, options);
+  if (isPrismRing(object)) return createHoneycombRing(object, options);
+  if (isHalfCubeRing(object)) return createHalfCubeRing(object, options);
+  return createCubeRing(object, options);
 }
