@@ -67,7 +67,9 @@ describe('the pattern for six hexagonal prisms', () => {
       fineSurface,
       fineDesign,
     )).toThrow(/knife|cells of/);
-  });
+    // A search at the finest ruling: about three seconds alone and nearer five
+    // with the rest of the suite running beside it, which is the default limit.
+  }, 20000);
 
   it('names, on each piece, the pieces the ring order joins it to', () => {
     const seams = mech.tapeSeams();
