@@ -1,7 +1,9 @@
+import type { Vec3 } from '../types.ts';
 import type { Mechanism, KineticState } from './types.ts';
 import { applyPlacement } from './types.ts';
 import { UnionFind } from '../graph.ts';
 import { VertexWelder } from './weld.ts';
+import { cross, dot, mean, normalize, sub } from '../vec3.ts';
 import type { Pairing, SurfaceParts } from './placement-pairs.ts';
 import { decomposeByPlacement, relOfState } from './placement-pairs.ts';
 
@@ -129,6 +131,12 @@ function visibleCells(mech: Mechanism, state: KineticState): Uint8Array {
  * by leaving them out that a segment is shared by at most two sides. Where
  * four cubes of a folded ring meet along an interior edge, all eight sides
  * incident to it belong to hidden cells, so nothing at all is left there.
+ *
+ * More than two sides on a segment is two pieces meeting along an edge and no
+ * more — each brings two faces to the line, and nothing is buried because
+ * nothing is pressed together. Those are paired round the line
+ * (`pairRoundALine`). Before that existed it was an error, so no mechanism
+ * that built a surface then pairs anything differently now.
  */
 function pairSides(
   mech: Mechanism,
@@ -139,12 +147,15 @@ function pairSides(
   const welder = new VertexWelder();
   const bySegment = new Map<string, number[]>();
   const cellOfSide: number[] = [];
+  const world: Vec3[][] = [];
 
   mech.cells.forEach((cell, cellIndex) => {
     if (!visible[cellIndex]) return;
     const placement = state[cell.piece];
     if (!placement) throw new Error(`state is missing a placement for piece ${cell.piece}`);
-    const ids = cell.corners.map(c => welder.id(applyPlacement(placement, c)));
+    const corners = cell.corners.map(c => applyPlacement(placement, c));
+    world[cellIndex] = corners;
+    const ids = corners.map(c => welder.id(c));
     for (let s = 0; s < ids.length; s++) {
       const u = ids[s]!;
       const v = ids[(s + 1) % ids.length]!;
@@ -161,15 +172,183 @@ function pairSides(
   const pairs: Pairing[] = [];
   for (const [key, sides] of bySegment) {
     if (sides.length === 1) continue; // free rim
-    if (sides.length !== 2) {
-      throw new Error(`segment ${key} is shared by ${sides.length} sides (expected 1 or 2)`);
+    if (sides.length === 2) {
+      const sideA = sides[0]!;
+      const sideB = sides[1]!;
+      pairs.push({ sideA, sideB, cellA: cellOfSide[sideA]!, cellB: cellOfSide[sideB]! });
+      continue;
     }
-    const sideA = sides[0]!;
-    const sideB = sides[1]!;
-    pairs.push({ sideA, sideB, cellA: cellOfSide[sideA]!, cellB: cellOfSide[sideB]! });
+    const found = pairRoundALine(sides, cellOfSide, sideStart, world);
+    if (!found) {
+      throw new Error(`segment ${key} is shared by ${sides.length} sides that do not pair round it`);
+    }
+    pairs.push(...found);
   }
   return pairs;
 }
+
+/**
+ * Sides on one line, paired by the order they come round it.
+ *
+ * A finger crossing the line steps onto whichever face is next round the
+ * empty wedge — not onto the other face of its own piece, and not through a
+ * piece. Which wedges are empty is read off the cells' winding, which every
+ * mechanism keeps counter-clockwise seen from outside (`cellNormal` in
+ * `render/kinetic-geometry.ts` rests on the same convention): a face whose
+ * outward normal points round the line the way the angle grows opens onto the
+ * wedge after it, and one whose normal points back opens onto the wedge before
+ * it. Two neighbours that open onto the same wedge are a pair.
+ *
+ * Null when that does not give every side exactly one partner, which would
+ * mean two pieces passing through each other there.
+ */
+function pairRoundALine(
+  sides: readonly number[],
+  cellOfSide: readonly number[],
+  sideStart: Int32Array,
+  world: readonly Vec3[][],
+): Pairing[] | null {
+  const first = sides[0]!;
+  const firstCell = world[cellOfSide[first]!]!;
+  const s0 = first - sideStart[cellOfSide[first]!]!;
+  const p0 = firstCell[s0]!;
+  const p1 = firstCell[(s0 + 1) % firstCell.length]!;
+  const along = normalize(sub(p1, p0));
+  const seed: Vec3 = Math.abs(along[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const e1 = normalize(cross(along, seed));
+  const e2 = cross(along, e1);
+
+  const entries = sides.map(side => {
+    const corners = world[cellOfSide[side]!]!;
+    const centre = mean(corners);
+    const w = sub(centre, p0);
+    const depth = dot(w, along);
+    const across: Vec3 = [w[0] - depth * along[0], w[1] - depth * along[1], w[2] - depth * along[2]];
+    const angle = Math.atan2(dot(across, e2), dot(across, e1));
+    const normal = cross(sub(corners[1]!, corners[0]!), sub(corners[2]!, corners[1]!));
+    const forward: Vec3 = [
+      -Math.sin(angle) * e1[0] + Math.cos(angle) * e2[0],
+      -Math.sin(angle) * e1[1] + Math.cos(angle) * e2[1],
+      -Math.sin(angle) * e1[2] + Math.cos(angle) * e2[2],
+    ];
+    return { side, angle, opensForward: dot(normal, forward) > 0 };
+  }).sort((a, b) => a.angle - b.angle);
+
+  const pairs: Pairing[] = [];
+  const taken = new Set<number>();
+  for (let i = 0; i < entries.length; i++) {
+    const a = entries[i]!;
+    const b = entries[(i + 1) % entries.length]!;
+    if (!a.opensForward || b.opensForward) continue;
+    if (taken.has(a.side) || taken.has(b.side)) return null;
+    taken.add(a.side);
+    taken.add(b.side);
+    pairs.push({ sideA: a.side, sideB: b.side, cellA: cellOfSide[a.side]!, cellB: cellOfSide[b.side]! });
+  }
+  return taken.size === sides.length ? pairs : null;
+}
+
+/**
+ * Hides any part of the surface that is shut inside the object.
+ *
+ * Folded one way, a ring of half cubes is a cube with a star-shaped hollow in
+ * it: the hollow is lined with faces, and those faces touch the outside only
+ * along lines, so the pairing above leaves them as a surface of their own,
+ * which nobody can see or reach. A component counts as shut in when it lies
+ * inside the one that bounds the outside — the component holding the point
+ * of the object furthest along a fixed direction — by the parity of a ray.
+ * Anything else is left alone, so two pieces that merely drift apart are both
+ * still on show.
+ *
+ * Every mechanism before that one has one component in every state, and this
+ * returns at once for them.
+ */
+function sealOff(
+  mech: Mechanism,
+  state: KineticState,
+  visible: Uint8Array,
+  pairs: readonly Pairing[],
+): Pairing[] {
+  const uf = new UnionFind<number>();
+  for (let cell = 0; cell < visible.length; cell++) if (visible[cell]) uf.find(cell);
+  for (const p of pairs) uf.union(p.cellA, p.cellB);
+  const groups = new Map<number, number[]>();
+  for (let cell = 0; cell < visible.length; cell++) {
+    if (!visible[cell]) continue;
+    const root = uf.find(cell);
+    const list = groups.get(root);
+    if (list) list.push(cell);
+    else groups.set(root, [cell]);
+  }
+  if (groups.size < 2) return [...pairs];
+
+  const cornersOf = (cell: number): Vec3[] => {
+    const c = mech.cells[cell]!;
+    return c.corners.map(v => applyPlacement(state[c.piece]!, v));
+  };
+  // A direction no lattice lines up with, so the furthest point is one vertex.
+  const look: Vec3 = normalize([1, Math.SQRT2, Math.PI]);
+  let outer = -1;
+  let furthest = -Infinity;
+  for (const [root, cells] of groups) {
+    for (const cell of cells) {
+      for (const v of cornersOf(cell)) {
+        const at = dot(v, look);
+        if (at > furthest + 1e-9) {
+          furthest = at;
+          outer = root;
+        }
+      }
+    }
+  }
+  const shell: [Vec3, Vec3, Vec3][] = [];
+  for (const cell of groups.get(outer)!) {
+    const corners = cornersOf(cell);
+    for (let k = 1; k + 1 < corners.length; k++) shell.push([corners[0]!, corners[k]!, corners[k + 1]!]);
+  }
+  const rays: Vec3[] = [normalize([0.577, 0.613, 0.539]), normalize([-0.31, 0.79, 0.53]), normalize([0.67, -0.29, 0.68])];
+  const inside = (cell: number): boolean => {
+    const corners = cornersOf(cell);
+    const centre = mean(corners);
+    const normal = normalize(cross(sub(corners[1]!, corners[0]!), sub(corners[2]!, corners[1]!)));
+    // Just off the face, on the side it is seen from.
+    const from: Vec3 = [centre[0] + normal[0] * 1e-6, centre[1] + normal[1] * 1e-6, centre[2] + normal[2] * 1e-6];
+    let odd = 0;
+    for (const ray of rays) {
+      let hits = 0;
+      for (const [a, b, c] of shell) if (rayHits(from, ray, a, b, c)) hits++;
+      if (hits % 2 === 1) odd++;
+    }
+    return odd * 2 > rays.length;
+  };
+
+  const sealed = new Set<number>();
+  for (const [root, cells] of groups) {
+    if (root === outer || !inside(cells[0]!)) continue;
+    for (const cell of cells) {
+      visible[cell] = 0;
+      sealed.add(cell);
+    }
+  }
+  return sealed.size === 0 ? [...pairs] : pairs.filter(p => !sealed.has(p.cellA) && !sealed.has(p.cellB));
+}
+
+/** Whether a ray from `from` along `dir` passes through triangle abc. */
+function rayHits(from: Vec3, dir: Vec3, a: Vec3, b: Vec3, c: Vec3): boolean {
+  const e1 = sub(b, a);
+  const e2 = sub(c, a);
+  const p = cross(dir, e2);
+  const det = dot(e1, p);
+  if (Math.abs(det) < 1e-12) return false;
+  const s = sub(from, a);
+  const u = dot(s, p) / det;
+  if (u < 0 || u > 1) return false;
+  const q = cross(s, e1);
+  const v = dot(dir, q) / det;
+  if (v < 0 || u + v > 1) return false;
+  return dot(e2, q) / det > 1e-9;
+}
+
 
 export interface BuildSurfaceOptions {
   readonly maxStates?: number;
@@ -361,7 +540,13 @@ export function buildSurfaceByState(
   const sideStart = sideStarts(mech);
   const sideCount = sideStart[cellCount]!;
 
+  // Buried cells first, because the pairing leaves them out; then the pairing,
+  // because what is shut inside the object is only known once the surface is.
   const visibleByState = mech.states.map(state => visibleCells(mech, state));
+  const pairsByState = mech.states.map((state, index) => {
+    const visible = visibleByState[index]!;
+    return sealOff(mech, state, visible, pairSides(mech, state, sideStart, visible));
+  });
   const visibleCount = Int32Array.from(visibleByState, v => {
     let n = 0;
     for (const bit of v) n += bit;
@@ -372,10 +557,6 @@ export function buildSurfaceByState(
     if (visibleByState.every(v => v[cell] === 1)) alwaysVisible.push(cell);
   }
   const hidesCells = alwaysVisible.length < cellCount;
-
-  const pairsByState = mech.states.map((state, index) =>
-    pairSides(mech, state, sideStart, visibleByState[index]!),
-  );
 
   // One design boolean per class: sides that ever meet must agree (L0).
   const uf = new UnionFind<number>();

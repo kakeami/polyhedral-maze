@@ -973,12 +973,20 @@ export function pickStartGoal(
  * (`.dev/probe-fold-marks.ts`). Which is why this asks the surface rather than
  * the mechanism: the rule is complementary visibility, and where the geometry
  * puts that is the geometry's business.
+ *
+ * Some objects have no such pair at all, and then a mark is shown twice in a
+ * few poses rather than never in some (`pickRepeatedEnds`). Every pose is a
+ * perfect maze, so any entrance on show reaches any exit on show by exactly
+ * one way; the walk given for a pose is the shortest of them.
  */
 export interface PrintedEnds {
-  /** Cells the entrance is printed on: exactly one is on show in any state. */
+  /**
+   * Cells the entrance is printed on: at least one is on show in any state,
+   * and exactly one wherever the object allows it.
+   */
   readonly start: readonly number[];
   readonly goal: readonly number[];
-  /** The pair the walk runs between, one per state. */
+  /** The pair the walk runs between, one per state: the nearest pair on show. */
   readonly byState: readonly StartGoal[];
 }
 
@@ -1025,7 +1033,7 @@ export function pickPrintedEnds(
 
   const leaves = markerPairs(surface, degree, showsIn, complement, true);
   const pairs = leaves.length > 1 ? leaves : markerPairs(surface, degree, showsIn, complement, false);
-  if (pairs.length < 2) throw new Error('no pair of cells is on show one at a time');
+  if (pairs.length < 2) return pickRepeatedEnds(surface, neighbours, degree, showsIn);
 
   const walks = new Map<number, Int32Array[]>();
   const walksFrom = (cell: number): Int32Array[] => {
@@ -1098,6 +1106,181 @@ export function pickPrintedEnds(
 }
 
 const EMPTY = new Int32Array(0);
+
+/**
+ * Markers for an object with no two cells on show one at a time.
+ *
+ * A ring of half cubes is one: as a star it shows triangles and nothing else,
+ * as a cube squares and nothing else, every triangle is on show in every
+ * plank, and every square in some plank. So a mark that is never missing is
+ * shown twice somewhere, and the choice is only where. Each mark goes on two
+ * cells whose patterns between them cover every state and overlap in as few
+ * as possible — the overlap is where both show — and the entrance and the
+ * exit take the same two patterns, so that the states with two of one have
+ * two of the other and every other state has one of each.
+ *
+ * What a visitor may then do is walk from any entrance on show to any exit on
+ * show, and in a perfect maze each of those is one way; the easiest of them is
+ * what the maze is worth there. So the cells are chosen to make the easiest
+ * walk long in every state, as a share of the longest walk that state has —
+ * a share and not a count, because the states differ in size by a factor of
+ * three on the half cubes and a count would let the smallest decide alone.
+ * Dead ends first, as for the pairs above.
+ *
+ * Chosen in two halves and then together, because all four cells at once is
+ * far too many: the best few pairs from the first pattern, the best few from
+ * the second, and the best combination of those.
+ */
+function pickRepeatedEnds(
+  surface: KineticSurface,
+  neighbours: readonly number[][][],
+  degree: readonly Int32Array[],
+  showsIn: (cell: number) => string,
+): PrintedEnds {
+  const states = surface.stateCount;
+  const longest = neighbours.map((near, state) => {
+    const visible = surface.visibleOfState(state);
+    const first = visible.indexOf(1);
+    if (first < 0) return 1;
+    const once = distancesFrom(near, first);
+    let far = first;
+    for (let cell = 0; cell < once.length; cell++) if (once[cell]! > once[far]!) far = cell;
+    return Math.max(1, Math.max(...distancesFrom(near, far)));
+  });
+  const visibleIn = (cell: number, state: number) => surface.visibleOfState(state)[cell] === 1;
+
+  for (const leavesOnly of [true, false]) {
+    const byPattern = new Map<string, number[]>();
+    for (let cell = 0; cell < surface.cellCount; cell++) {
+      let anywhere = false;
+      let leaf = true;
+      for (let state = 0; state < states; state++) {
+        if (!visibleIn(cell, state)) continue;
+        anywhere = true;
+        if (degree[state]![cell] !== 1) leaf = false;
+      }
+      if (!anywhere || (leavesOnly && !leaf)) continue;
+      const bits = showsIn(cell);
+      (byPattern.get(bits) ?? byPattern.set(bits, []).get(bits)!).push(cell);
+    }
+
+    // Pattern pairs that cover every state, fewest states shown twice.
+    const patterns = [...byPattern.keys()].sort();
+    let fewest = Infinity;
+    const covers: [string, string][] = [];
+    for (let i = 0; i < patterns.length; i++) {
+      for (let j = i + 1; j < patterns.length; j++) {
+        const p = patterns[i]!;
+        const q = patterns[j]!;
+        let twice = 0;
+        let covered = true;
+        for (let state = 0; state < states; state++) {
+          if (p[state] === '0' && q[state] === '0') covered = false;
+          if (p[state] === '1' && q[state] === '1') twice++;
+        }
+        if (!covered || byPattern.get(p)!.length < 2 || byPattern.get(q)!.length < 2) continue;
+        if (twice < fewest) {
+          fewest = twice;
+          covers.length = 0;
+        }
+        if (twice === fewest) covers.push([p, q]);
+      }
+    }
+
+    let best: { score: number; ends: PrintedEnds } | null = null;
+    for (const [p, q] of covers) {
+      const found = repeatedOver(byPattern.get(p)!, byPattern.get(q)!, p, q);
+      if (found && (!best || found.score > best.score)) best = found;
+    }
+    if (best) return best.ends;
+  }
+  throw new Error('no two cells between them are on show in every state');
+
+  function repeatedOver(
+    first: readonly number[],
+    second: readonly number[],
+    p: string,
+    q: string,
+  ): { score: number; ends: PrintedEnds } | null {
+    const statesOf = (bits: string) => [...bits].flatMap((bit, state) => (bit === '1' ? [state] : []));
+    const both = statesOf(p).filter(state => q[state] === '1');
+    const KEEP = 32;
+
+    /** The best few pairs of one pattern, judged in the states it shows in. */
+    const bestPairs = (cells: readonly number[], shown: readonly number[]) => {
+      const kept: { a: number; b: number; score: number }[] = [];
+      for (const a of cells) {
+        const from = shown.map(state => distancesFrom(neighbours[state]!, a));
+        for (const b of cells) {
+          if (b <= a) continue;
+          let score = Infinity;
+          for (let k = 0; k < shown.length; k++) {
+            score = Math.min(score, from[k]![b]! / longest[shown[k]!]!);
+          }
+          if (kept.length === KEEP && score <= kept[KEEP - 1]!.score) continue;
+          kept.push({ a, b, score });
+          kept.sort((x, y) => y.score - x.score);
+          if (kept.length > KEEP) kept.pop();
+        }
+      }
+      return kept;
+    };
+    const ones = bestPairs(first, statesOf(p));
+    const twos = bestPairs(second, statesOf(q));
+    if (ones.length === 0 || twos.length === 0) return null;
+
+    // Walks across the two patterns, in the states both show in.
+    const across = new Map<number, Int32Array[]>();
+    const walksFrom = (cell: number) => {
+      const had = across.get(cell);
+      if (had) return had;
+      const made = both.map(state => distancesFrom(neighbours[state]!, cell));
+      across.set(cell, made);
+      return made;
+    };
+
+    let best: { score: number; start: [number, number]; goal: [number, number] } | null = null;
+    for (const one of ones) {
+      for (const two of twos) {
+        for (const [sb, gb] of [[two.a, two.b], [two.b, two.a]] as const) {
+          let score = Math.min(one.score, two.score);
+          if (best && score <= best.score) continue;
+          const fromStart = walksFrom(one.a);
+          const fromOther = walksFrom(sb);
+          both.forEach((state, k) => {
+            score = Math.min(
+              score,
+              fromStart[k]![gb]! / longest[state]!,
+              fromOther[k]![one.b]! / longest[state]!,
+            );
+          });
+          if (!best || score > best.score) best = { score, start: [one.a, sb], goal: [one.b, gb] };
+        }
+      }
+    }
+    if (!best) return null;
+    const { start, goal } = best;
+
+    // The walk each state is given: the nearest entrance and exit on show.
+    const byState: StartGoal[] = [];
+    for (let state = 0; state < states; state++) {
+      let pick: StartGoal | null = null;
+      let shortest = Infinity;
+      for (const s of start) {
+        if (!visibleIn(s, state)) continue;
+        const from = distancesFrom(neighbours[state]!, s);
+        for (const g of goal) {
+          if (!visibleIn(g, state) || from[g]! >= shortest) continue;
+          shortest = from[g]!;
+          pick = { start: s, goal: g };
+        }
+      }
+      if (!pick) return null;
+      byState.push(pick);
+    }
+    return { score: best.score, ends: { start, goal, byState } };
+  }
+}
 
 /**
  * Cells that are on show one at a time, taken two at a time.
