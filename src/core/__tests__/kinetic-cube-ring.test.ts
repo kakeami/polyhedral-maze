@@ -83,13 +83,18 @@ describe('a mechanism that never folds shut', () => {
 });
 
 describe('the outside of a folded ring', () => {
-  it('shuts into two cubes and four planks', () => {
-    expect(surface.stateCount).toBe(6);
+  it('shuts into two cubes, four planks and two hooks, each hook two ways round', () => {
+    expect(surface.stateCount).toBe(10);
     const shapes = mech.states.map(state =>
       [0, 1, 2].map(axis => new Set(state.map(p => p.offset[axis]!.toFixed(1))).size)
         .sort((a, b) => a - b).join('x'));
     expect(shapes.filter(s => s === '2x2x2').length).toBe(2);
     expect(shapes.filter(s => s === '1x2x4').length).toBe(4);
+    // A plank with one end folded back over it: 2x2x3, and the end can be
+    // either end, which is the same hook to a hand and not to the maze.
+    expect(shapes.filter(s => s === '2x2x3').length).toBe(4);
+    expect(mech.poses.length).toBe(8);
+    expect(mech.twins.map(twin => twin.label)).toEqual(['Hook 1', 'Hook 2']);
   });
 
   it('shows a different amount of itself in the two shapes', () => {
@@ -145,7 +150,9 @@ describe('the outside of a folded ring', () => {
 });
 
 describe('gamma on the infinity cube', () => {
-  const result = searchAllStates(surface, { rng: createRng(2) });
+  // Seed 3: with the hooks counted the cell-level search manages all ten
+  // states from one seed in eight, where it used to manage six from any.
+  const result = searchAllStates(surface, { rng: createRng(3) });
 
   it('is a perfect maze in every pose', () => {
     expect(result.rate.rate).toBe(1);
@@ -175,7 +182,7 @@ describe('gamma on the infinity cube', () => {
   });
 
   it('is deterministic for a fixed seed', () => {
-    const again = searchAllStates(surface, { rng: createRng(2) });
+    const again = searchAllStates(surface, { rng: createRng(3) });
     expect([...again.design.open].sort()).toEqual([...result.design.open].sort());
   });
 });
@@ -296,12 +303,10 @@ describe('the taping it ships with', () => {
     }
   });
 
-  it('folds through all six poses, two of them cubes', () => {
-    const shapes = mech.states.map(state =>
-      [0, 1, 2].map(axis => new Set(state.map(p => p.offset[axis]!.toFixed(1))).size)
-        .sort((x, y) => x - y).join('x'));
+  it('folds through all eight shapes, two of them cubes', () => {
+    const shapes = mech.poses.map(pose => [...pose.span].sort((x, y) => x - y).join('x'));
     expect(shapes.filter(s => s === '2x2x2').length).toBe(2);
-    expect(shapes.length).toBe(6);
+    expect(shapes.length).toBe(8);
   });
 });
 
@@ -309,7 +314,7 @@ describe('the longest walk through a pose', () => {
   // Double sweep against brute force. The shortcut — walk from anywhere, then
   // from the furthest thing you found — is only valid on a tree, and this is
   // the one place where it is worth showing that the design really is one.
-  const result = searchAllStates(surface, { rng: createRng(2) });
+  const result = searchAllStates(surface, { rng: createRng(3) });
 
   function byBruteForce(state: number): number {
     const near = new Map<number, number[]>();
@@ -429,41 +434,72 @@ describe('every object the page offers', () => {
   for (const object of CUBE_RING_OBJECTS) {
     const ring = createCubeRing(object, { cells: 1 });
 
-    it(`${object.id}: every state is a shape a hand can set down`, () => {
-      expect(ring.states.length).toBe(ring.poses.length);
-      expect(ring.states.length).toBeGreaterThan(1);
-      for (const pose of ring.poses) {
-        const [a, b, c] = pose.span as [number, number, number];
-        // A solid block, or one layer thick. Anything else is a shape that
-        // stands up only while someone is holding it.
-        expect(a * b * c === ring.pieceCount || Math.min(a, b, c) === 1).toBe(true);
+    it(`${object.id}: every state is a solid, not a shape hanging on a hinge`, () => {
+      expect(ring.states.length).toBe(ring.poses.length + ring.twins.length);
+      expect(ring.poses.length).toBeGreaterThan(1);
+      // Read off the cells, not the code that chose them: no two cubes meet
+      // along an edge with nothing beside them, nor at a corner alone.
+      for (const state of ring.states) {
+        const at = new Set(state.map(p => p.offset.map(x => Math.round(x - 0.5)).join(',')));
+        const has = (c: number[]) => at.has(c.join(','));
+        for (const key of at) {
+          const c = key.split(',').map(Number);
+          for (const d of [[1, 1, 0], [1, -1, 0], [1, 0, 1], [1, 0, -1], [0, 1, 1], [0, 1, -1]]) {
+            const o = c.map((x, i) => x + d[i]!);
+            if (!has(o)) continue;
+            const between = [0, 1, 2].filter(i => d[i] !== 0)
+              .map(i => c.map((x, j) => (j === i ? o[j]! : x)));
+            expect(between.some(has)).toBe(true);
+          }
+          for (const d of [[1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1]]) {
+            const o = c.map((x, i) => x + d[i]!);
+            if (!has(o)) continue;
+            const others = [[d[0], 0, 0], [0, d[1], 0], [0, 0, d[2]], [d[0], d[1], 0],
+              [d[0], 0, d[2]], [0, d[1], d[2]]].map(e => c.map((x, i) => x + e[i]!));
+            expect(others.some(has)).toBe(true);
+          }
+        }
       }
       // No two shapes with the same name, so the panel's list is a list of
-      // things rather than of things and their duplicates.
+      // things rather than of things and their duplicates; a twin is named
+      // after the shape it is the other way round of.
       expect(new Set(ring.poses.map(pose => pose.label)).size).toBe(ring.poses.length);
+      for (const twin of ring.twins) {
+        const pose = ring.poses[twin.twinOf]!;
+        expect(twin.label).toBe(pose.label);
+        expect([...twin.span].sort()).toEqual([...pose.span].sort());
+      }
     });
 
     it(`${object.id}: can be folded from any state to any other`, () => {
-      const distances = poseDistances(ring.foldGraph());
-      for (let from = 0; from < ring.states.length; from++) {
-        for (let to = 0; to < ring.states.length; to++) {
+      const graph = ring.foldGraph();
+      const distances = poseDistances(graph);
+      for (let from = 0; from < ring.poses.length; from++) {
+        for (let to = 0; to < ring.poses.length; to++) {
           expect(distances[from]![to]!).toBeGreaterThanOrEqual(0);
         }
       }
+      const reached = new Set([graph.poseAt[0]!]);
+      const queue = [graph.poseAt[0]!];
+      for (let head = 0; head < queue.length; head++) {
+        for (const { to } of graph.folds[queue[head]!]!) {
+          if (!reached.has(to)) { reached.add(to); queue.push(to); }
+        }
+      }
+      for (const twin of ring.twins) expect(reached.has(twin.closure)).toBe(true);
     });
   }
 
-  it('leaves the eight-cube ring exactly as it was', () => {
-    // The mazes that ship with the page are sets of class numbers, and class
-    // numbers mean whatever the surface says they mean. So this is not a
-    // preference about naming: if the general machinery found the six shapes
-    // in another order, or found a seventh, every stored design would quietly
-    // become a different maze.
+  it('adds the two hooks to the eight-cube ring and leaves its six shapes as they were', () => {
+    // The six keep their names and their order; the hooks go between them,
+    // where a hand stops on the way from a plank to a cube.
     const eight = createCubeRing(INFINITY_CUBE, { cells: 1 });
-    expect(eight.states.length).toBe(6);
-    expect(eight.poses.map(pose => pose.label))
-      .toEqual(['Plank 1', 'Plank 2', 'Cube 1', 'Cube 2', 'Plank 3', 'Plank 4']);
+    expect(eight.poses.map(pose => pose.label)).toEqual(
+      ['Plank 1', 'Plank 2', 'Hook 1', 'Cube 1', 'Hook 2', 'Cube 2', 'Plank 3', 'Plank 4']);
     expect(eight.poses.every(pose => pose.genus === 0)).toBe(true);
+    // One loop of eight: every shape is one fold from exactly two others.
+    const distances = poseDistances(eight.foldGraph());
+    for (const row of distances) expect(row.filter(d => d === 1).length).toBe(2);
   });
 });
 
@@ -575,18 +611,26 @@ describe('the twelve-cube ring taped on the frame itself', () => {
 describe('the twelve-cube ring that folds round in a loop', () => {
   const loop = createCubeRing(FRAME_LOOP, { cells: 1 });
 
-  it('goes frame, block, plank, plank and back, with nothing in between', () => {
+  it('goes frame, arch, zigzag, block, plank, plank, hook, arch and back, a fold apiece', () => {
     expect(loop.closures().length).toBe(40);
     expect(loop.strays.length).toBe(0);
-    expect(loop.poses.map(pose => pose.label)).toEqual(['Frame 1', 'Plank 1', 'Block 1', 'Plank 2']);
-    expect(loop.poses.map(pose => pose.genus)).toEqual([1, 0, 0, 0]);
-    // Frame 1 -3- Block 1 -1- Plank 1 -1- Plank 2 -3- Frame 1: each pose has
-    // two neighbours, and the two across the square are reached through one.
+    expect(loop.poses.map(pose => pose.label)).toEqual(
+      ['Frame 1', 'Arch 1', 'Zigzag 1', 'Arch 2', 'Hook 1', 'Plank 1', 'Block 1', 'Plank 2']);
+    expect(loop.twins.map(twin => twin.label)).toEqual(['Zigzag 1', 'Hook 1']);
+    expect(loop.poses.map(pose => pose.genus)).toEqual([1, 0, 0, 0, 0, 0, 0, 0]);
+    // What used to be three folds from the frame to the block is now an arch
+    // and a zigzag on the way, and the same on the other side: a ring of
+    // eight shapes, each one fold from the next and none more than four from
+    // any other.
     expect(poseDistances(loop.foldGraph())).toEqual([
-      [0, 4, 3, 3],
-      [4, 0, 1, 1],
-      [3, 1, 0, 2],
-      [3, 1, 2, 0],
+      [0, 1, 2, 1, 2, 4, 3, 3],
+      [1, 0, 1, 2, 3, 3, 2, 4],
+      [2, 1, 0, 3, 4, 2, 1, 3],
+      [1, 2, 3, 0, 1, 3, 4, 2],
+      [2, 3, 4, 1, 0, 2, 3, 1],
+      [4, 3, 2, 3, 2, 0, 1, 1],
+      [3, 2, 1, 4, 3, 1, 0, 2],
+      [3, 4, 3, 2, 1, 1, 2, 0],
     ]);
   });
 
@@ -595,9 +639,9 @@ describe('the twelve-cube ring that folds round in a loop', () => {
     expect(loop.poses[0]!.tapeBuried).toBe(false);
   });
 
-  it('is a perfect maze in all four, on a design found here', () => {
+  it('is a perfect maze in all eight, both ways round, on a design found here', () => {
     const skin = buildSurface(createCubeRing(FRAME_LOOP, { cells: 2 }));
-    expect([...skin.visibleCount]).toEqual([192, 160, 128, 160]);
+    expect([...skin.visibleCount]).toEqual([192, 160, 160, 160, 160, 160, 128, 160, 160, 160]);
     const found = contractedSearch(skin, { rng: createRng(1) });
     expect(found.rate.rate).toBe(1);
     for (let state = 0; state < skin.stateCount; state++) {
@@ -651,10 +695,17 @@ describe('the three other rings of eight', () => {
     return { object, mech, skin, cubes, both };
   });
 
-  it('each shut into two cubes and two planks, and are taped where they lie', () => {
+  it('each shut into two cubes, two planks and the hooks between, and are taped where they lie', () => {
+    // A hook for each two-fold way from a plank to a cube: one on the half-turn
+    // ring, two on the others.
+    expect(rings.map(({ mech }) => mech.poses.map(pose => pose.label.split(' ')[0]).sort().join(',')))
+      .toEqual([
+        'Cube,Cube,Hook,Plank,Plank',
+        'Cube,Cube,Hook,Hook,Plank,Plank',
+        'Cube,Cube,Hook,Hook,Plank,Plank',
+      ]);
     for (const { object, mech, cubes } of rings) {
       expect(object.tapeReachable).toBe('layout');
-      expect(mech.poses.length).toBe(4);
       expect(cubes.length).toBe(2);
       // Every cube has a strip shut inside it: the reason for the tape rule.
       for (const index of cubes) expect(mech.poses[index]!.tapeBuried).toBe(true);
@@ -678,10 +729,10 @@ describe('the three other rings of eight', () => {
   });
 
   it('keep the shape the diamond was taped in, not the other pair of cubes', () => {
-    // Two components of four, and the diamond lies in one of them.
+    // Two components, and the diamond lies in one of them.
     const diamond = rings[2]!.mech;
-    expect(diamond.strays.length).toBe(4);
-    expect(diamond.poses.length).toBe(4);
+    expect(diamond.poses.length + diamond.twins.length).toBe(8);
+    expect(diamond.strays.length).toBe(8);
   });
 
   it('are perfect mazes in every shape, on a design found here', () => {

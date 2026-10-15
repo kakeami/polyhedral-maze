@@ -44,11 +44,14 @@ function sameState(a: KineticState, b: KineticState): boolean {
 
 describe('the shapes the ring can take', () => {
   it('has more of them than it has poses', () => {
-    // The six poses are the shapes a hand stops at; the rest are the ring
-    // closed but splayed open, which it goes through on the way.
+    // The ten states are the solids a hand stops at — eight shapes, two of
+    // them made either way round — and the rest are the ring closed but
+    // splayed open on a hinge, which it goes through on the way.
     expect(graph.shapes.length).toBe(24);
-    expect(mech.states.length).toBe(6);
-    expect(new Set(graph.poseAt).size).toBe(6);
+    expect(mech.states.length).toBe(10);
+    expect(new Set(graph.poseAt).size).toBe(10);
+    // The page's own graph lists each shape once.
+    expect(new Set(mech.foldGraph().poseAt).size).toBe(8);
   });
 
   it('moves one unbroken arc at a time, and leaves the rest alone', () => {

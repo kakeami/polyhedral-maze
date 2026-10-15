@@ -26,6 +26,17 @@
  * faces come to one line and are paired round it, and the hollow, which is a
  * surface of its own and is hidden as shut inside.
  *
+ * And one thing it does not do that the ring of whole cubes does. Folded
+ * halfway between a plank and a 2x2x2 — one end turned over onto the plank —
+ * the infinity cube is a hook, a solid a hand stops at, and its maze holds up
+ * there. This one's does not: with its two hooks counted as well, no maze was
+ * found that is perfect in all of them (none in seven seeds at two, three and
+ * four cells across, and none in eight times the search, where the best came
+ * to nine shapes of ten). One hook alone is fine; two are already too many.
+ * Not shown impossible, only not found. So the shapes here are the six that
+ * are blocks or layers (`boxOrLayer`), and the object says, on the page and
+ * on the pattern, that halfway it is not a perfect maze.
+ *
  * DOM-free, like everything in `core/`.
  */
 
@@ -38,7 +49,7 @@ import { gridForPolygonFace } from '../../polyhedra/grids/dispatch.ts';
 import { Solid } from '../../polyhedra/_solid.ts';
 import type { Polyhedron } from '../../polyhedron.ts';
 import type { FoldGraph } from '../fold-path.ts';
-import { createCubeRing, cubeRingShape } from './cube-ring.ts';
+import { boxOrLayer, createCubeRing, cubeRingShape } from './cube-ring.ts';
 import type { CubeRingObject, TapeSeam } from './cube-ring.ts';
 import { INFINITY_CUBE } from './cube-ring-objects.ts';
 
@@ -89,8 +100,10 @@ export interface HalfCubeRingMechanism extends Mechanism {
  */
 export const STAR_CUBE: HalfCubeRingObject = {
   id: 'star-cube',
-  label: '8 half cubes (1 cube, 1 star, 4 planks; the shape changes)',
-  blurb: 'Each cube cut in half. It folds from a cube into a twelve-pointed star, and the two show none of the same cells.',
+  label: 'Star cube',
+  blurb: 'Eight cubes, each cut in half, that fold from a cube into a twelve-pointed star by way of four '
+    + 'planks; the two show none of the same cells. Folded only halfway, one end turned over, it is '
+    + 'not a perfect maze.',
   halves: INFINITY_CUBE,
   // Eight cells along an edge is 7.2 mm on the 58 mm a square prints at, and
   // a triangle's cells 5.1 mm from base to tip; nine would put those at 4.6,
@@ -212,6 +225,9 @@ function keptCorners(object: HalfCubeRingObject): Vec3[] {
 /**
  * The poses, named for what a hand holds: the star, the cube, and the planks.
  *
+ * The whole ring's blocks and layers only — not its hooks, for the reason the
+ * top of this file gives.
+ *
  * A 2x2x2 whose kept corners all sit at its middle is the star; one whose kept
  * corners are all its outer corners is a cube from outside. Listed cube first
  * and star second, then the rest in the order the ring found them, so that the
@@ -219,7 +235,8 @@ function keptCorners(object: HalfCubeRingObject): Vec3[] {
  */
 function namedPoses(object: HalfCubeRingObject, kept: readonly Vec3[]): HalfCubeRingPose[] {
   const shape = cubeRingShape(object.halves);
-  const named = shape.poses.map(pose => {
+  const pieces = object.halves.ring.length;
+  const named = shape.poses.filter(pose => boxOrLayer(pose.span, pieces)).map(pose => {
     const placed = shape.closures[pose.closure]!;
     let label = pose.label;
     if (pose.span.every(extent => extent === 2)) {

@@ -172,8 +172,12 @@ export function buildHalfCubeSheets(
     '5. The maze runs from S to G. Each is printed twice: once on a triangle, which is on the ' +
       'outside in every shape but the cube, and once on a square, which is on the outside in the ' +
       'cube. In one of the planks both of each are on the outside: start from either S and ' +
-      'finish at either G. Every shape is a perfect maze, so each of those walks has exactly ' +
-      'one way. (The web page draws the shortest of them.)',
+      'finish at either G. Every shape below is a perfect maze, so each of those walks has ' +
+      'exactly one way. (The web page draws the shortest of them.)',
+    '6. Halfway between a plank and the cube or the star, with one end of the plank turned over ' +
+      'onto it, the object will sit still as a shape of its own, but the maze there is not a ' +
+      'perfect one: it can run in a loop or leave part of itself cut off. Only the shapes below ' +
+      'are promised.',
   ]));
   flow.y += gap / 2;
 

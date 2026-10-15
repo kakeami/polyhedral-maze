@@ -23,8 +23,9 @@ export const PLANK_RING: readonly Lattice[] = plankRing(8);
  * Which edge of each seam the tape sits on, for the eight-cube ring.
  *
  * Of the 65536 tapings of the plank, exactly eight shut into two cubes, and
- * every one of those eight shuts into four planks as well — six shapes in all
- * — and shows *completely different faces* in its two cubes.
+ * every one of those eight shuts into four planks as well — six blocks and
+ * layers in all, which is what a shape was when this was searched — and shows
+ * *completely different faces* in its two cubes.
  * `.dev/probe-infinity.ts` lists them; `.dev/probe-tape-map.ts` reads a taping
  * back as "top, bottom or which side", which is the form a pair of hands
  * needs.
@@ -34,7 +35,7 @@ export const PLANK_RING: readonly Lattice[] = plankRing(8);
  * row of the plank to the other: tape those on the same face, in line with
  * each other, and the plank can be split along its length and opened, which is
  * the move that reaches the second cube. Tape them on opposite faces and only
- * three of the six shapes are reachable — `.dev/probe-taping-connectivity.ts`
+ * three of those six are reachable — `.dev/probe-taping-connectivity.ts`
  * counts it, and the taping first recommended here was one of those, chosen
  * because the search of the day happened to manage it.
  *
@@ -58,8 +59,9 @@ export const DEFAULT_HINGES: readonly number[] = [2, 3, 2, 3, 2, 1, 2, 3];
  */
 export const INFINITY_CUBE: CubeRingObject = {
   id: 'infinity-cube',
-  label: '8 cubes (2 cubes, 4 planks; all faces swapped)',
-  blurb: 'Shuts into six shapes, four planks and two cubes, and the two cubes show none of the same faces.',
+  label: 'Infinity cube',
+  blurb: 'Eight cubes that fold round eight shapes — two cubes, four planks and two hooks — '
+    + 'and the two cubes show none of the same faces.',
   ring: PLANK_RING,
   hinges: DEFAULT_HINGES,
   // Ten cells a face is 5.8 mm a cell with the cubes at 58 mm on A4: about as
@@ -90,8 +92,9 @@ export const INFINITY_CUBE: CubeRingObject = {
  */
 export const HALF_TURN_RING: CubeRingObject = {
   id: 'half-turn-ring',
-  label: '8 cubes (2 cubes, 2 planks; a third swapped by half turns)',
-  blurb: 'Shuts into two cubes and two planks by half turns, and the two cubes swap a third of their faces.',
+  label: 'Half-turn ring',
+  blurb: 'Eight cubes that fold by half turns into two cubes, two planks and a hook, '
+    + 'and the two cubes swap a third of their faces.',
   ring: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0], [3, 1, 1], [2, 1, 1], [1, 1, 1], [0, 1, 1]],
   hinges: [2, 1, 2, 0, 3, 0, 3, 0],
   maxCells: 10,
@@ -113,8 +116,9 @@ export const HALF_TURN_RING: CubeRingObject = {
  */
 export const QUARTER_TURN_RING: CubeRingObject = {
   id: 'quarter-turn-ring',
-  label: '8 cubes (2 cubes, 2 planks; a third swapped by quarter turns)',
-  blurb: 'Taped on the plank like the first, it goes from cube to cube by quarter turns, and the two cubes swap a third of their faces.',
+  label: 'Quarter-turn ring',
+  blurb: 'Eight cubes taped on the plank like the infinity cube, going from cube to cube by quarter '
+    + 'turns past two planks and two hooks; the two cubes swap a third of their faces.',
   ring: PLANK_RING,
   hinges: [2, 3, 2, 2, 2, 1, 2, 0],
   maxCells: 10,
@@ -137,8 +141,9 @@ export const QUARTER_TURN_RING: CubeRingObject = {
  */
 export const DIAMOND_RING: CubeRingObject = {
   id: 'diamond-ring',
-  label: '8 cubes (2 cubes, 2 planks; no faces swapped)',
-  blurb: 'Taped flat as a diamond, it shuts into two cubes that show the same faces, put together differently.',
+  label: 'Diamond ring',
+  blurb: 'Eight cubes taped flat as a diamond, folding into two cubes, two planks and two hooks; '
+    + 'the two cubes show the same faces, put together differently.',
   ring: [[1, 0, 0], [2, 0, 0], [3, 1, 0], [3, 2, 0], [2, 3, 0], [1, 3, 0], [0, 2, 0], [0, 1, 0]],
   hinges: [2, 0, 1, 0, 2, 0, 1, 0],
   maxCells: 10,
@@ -168,11 +173,13 @@ export const DIAMOND_RING: CubeRingObject = {
  */
 export const FRAME_RING: CubeRingObject = {
   id: 'frame-ring',
-  label: '12 cubes (1 frame, 1 block, 3 planks; most silhouettes)',
-  blurb: 'Shuts into five shapes, one of them a frame with a hole through it.',
+  label: 'Frame ring',
+  blurb: 'Twelve cubes taped on the plank, folding into three planks, a block and a frame with a '
+    + 'hole through it.',
   ring: plankRing(12),
   hinges: [3, 0, 2, 3, 0, 1, 0, 1, 2, 0, 1, 1],
   maxCells: 10,
+  stops: 'block-or-layer',
 };
 
 /**
@@ -195,11 +202,12 @@ export const FRAME_RING: CubeRingObject = {
  */
 export const SMALLEST_FRAME: CubeRingObject = {
   id: 'smallest-frame',
-  label: '10 cubes (2 frames, 1 plank; fewest cubes for a hole)',
-  blurb: 'Shuts into three shapes, two of them a frame — the fewest cubes that can.',
+  label: 'Smallest frame',
+  blurb: 'Ten cubes, the fewest that can fold into a frame with a hole through it.',
   ring: rectRing(3, 4),
   hinges: [2, 0, 1, 0, 1, 0, 2, 3, 0, 3],
   maxCells: 10,
+  stops: 'block-or-layer',
 };
 
 /**
@@ -224,11 +232,13 @@ export const SMALLEST_FRAME: CubeRingObject = {
  */
 export const SQUARE_FRAME: CubeRingObject = {
   id: 'square-frame',
-  label: '12 cubes (1 frame, 1 plank, 1 block; widest swing in faces shown)',
-  blurb: 'Shuts into three shapes, and shows half as much again of itself in one as in another.',
+  label: 'Square frame',
+  blurb: 'Twelve cubes taped round the frame, showing half as much again of themselves in one '
+    + 'shape as in another.',
   ring: rectRing(4, 4),
   hinges: [2, 0, 2, 2, 0, 2, 3, 0, 3, 0, 1, 0],
   maxCells: 10,
+  stops: 'block-or-layer',
 };
 
 /**
@@ -258,8 +268,9 @@ export const SQUARE_FRAME: CubeRingObject = {
  */
 export const FRAME_LOOP: CubeRingObject = {
   id: 'frame-loop',
-  label: '12 cubes (1 frame, 1 block, 2 planks; folds round in a loop)',
-  blurb: 'Folds from a frame to a block, a plank, another plank and back to the frame, round and round.',
+  label: 'Frame loop',
+  blurb: 'Twelve cubes that fold round in a loop: frame, arch, zigzag, block, plank, plank, hook, '
+    + 'arch, and back to the frame.',
   ring: rectRing(4, 4),
   hinges: [3, 0, 3, 1, 1, 1, 1, 0, 1, 2, 1, 0],
   maxCells: 10,
@@ -270,14 +281,16 @@ export const FRAME_LOOP: CubeRingObject = {
  * The objects on offer, fewest cubes first.
  *
  * Every one of them goes round a loop, which is what the page is for: the
- * rings of eight between two cubes and their planks, and the ring of twelve
- * between a frame, a block and two planks. The four rings of eight fold
- * between the same two silhouettes and differ in what the fold does to the
- * surface: every face swapped between the two cubes, a third of them by half
- * turns, a third by quarter turns, or none at all.
+ * rings of eight between two cubes, their planks and the hooks halfway, and
+ * the ring of twelve between a frame, a block, two planks and the arches,
+ * zigzag and hook between them. The four rings of eight fold between the same
+ * silhouettes and differ in what the fold does to the surface: every face
+ * swapped between the two cubes, a third of them by half turns, a third by
+ * quarter turns, or none at all.
  *
- * The label says it in that order — how many pieces, what it shuts into, and
- * the one thing it is here for — so the list reads as a table.
+ * The label is the object's name and nothing else, so the list stays short;
+ * the blurb under it says how many pieces, what it folds into and what it is
+ * here for.
  */
 export const CUBE_RING_OBJECTS: readonly CubeRingObject[] = [
   INFINITY_CUBE, HALF_TURN_RING, QUARTER_TURN_RING, DIAMOND_RING, FRAME_LOOP,
@@ -287,7 +300,10 @@ export const CUBE_RING_OBJECTS: readonly CubeRingObject[] = [
  * Objects the page used to offer, kept so they can still be built and tested.
  *
  * Their shapes form a path or a tree rather than a loop, so they are no longer
- * listed; a link that names one lands on the default object.
+ * listed; a link that names one lands on the default object. They keep the
+ * rule they were found under — a shape is a block or a layer
+ * (`CubeRingObject.stops`) — rather than every solid a hand can stop at,
+ * which would give them shapes nobody has measured a maze on.
  */
 export const ARCHIVED_CUBE_RINGS: readonly CubeRingObject[] = [
   SMALLEST_FRAME, SQUARE_FRAME, FRAME_RING,

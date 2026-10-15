@@ -31,12 +31,13 @@ import type { Vec3 } from '../core/types.ts';
 import { add, cross, dot, scale, sub } from '../core/vec3.ts';
 import type { PageItem } from './face-page-model.ts';
 import { glueTabQuad } from './kinetic-sheet-parts.ts';
+import { wrapped } from './ring-piece-sheet.ts';
 import type { SheetBox } from './kinetic-sheet-constants.ts';
 import { A4_SHEET } from './kinetic-sheet-constants.ts';
 import { FOLD_SHEET_STYLE as S, FOLD_SHEET_DEFAULTS as D } from './fold-sheet-constants.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
-import { pickPrintedEnds, treeRate } from '../core/kinetic/maze.ts';
+import { pickPrintedEnds, rateByState, treeRate } from '../core/kinetic/maze.ts';
 import type { CubeRingMechanism, TapeSeam } from '../core/kinetic/mechanisms/cube-ring.ts';
 import type { KineticState, Mat3 } from '../core/kinetic/types.ts';
 import { IDENTITY, applyPlacement } from '../core/kinetic/types.ts';
@@ -301,7 +302,7 @@ export function buildFoldSheets(
 
   sheets.push({
     piece: null,
-    items: assemblySheet(mech, surface, design, ends, seams, sheet, edge, rate.perfect),
+    items: assemblySheet(mech, surface, design, ends, seams, sheet, edge, perfectShapes(mech, surface, design)),
   });
 
   for (let piece = 0; piece < mech.pieceCount; piece++) {
@@ -758,8 +759,10 @@ function assemblySheet(
     'Glue each sheet to thin card, cut the outline, score the creases and glue the cube up.',
     'Four creases run between two notches in the outline; the fifth is marked by a tick at each end.',
     ...tapingNotes(mech, shape, dotted.length > 0),
-    shapesSentence(mech, perfect),
-    'Two squares carry an S and two carry a G: whichever way it is folded, one of each is outside.',
+    // Measured to the sheet rather than written to fit it: how many shapes, and
+    // which marks a pose shows, depend on the object.
+    ...flush(wrapped([shapesSentence(mech, perfect)])),
+    ...flush(wrapped([marksSentence(mech, surface, ends)])),
   ];
   for (const note of notes) {
     items.push({
@@ -1103,7 +1106,7 @@ function shapesSentence(mech: CubeRingMechanism, perfect: number): string {
     kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
   }
   const parts = [...kinds].map(([kind, count]) =>
-    (count === 1 ? `a ${kind}` : `${countWord(count)} ${kind}s`));
+    (count === 1 ? `${/^[aeiou]/.test(kind) ? 'an' : 'a'} ${kind}` : `${countWord(count)} ${plural(kind)}`));
   const list = parts.length > 1
     ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
     : parts[0] ?? '';
@@ -1120,6 +1123,41 @@ const NUMBERS = [
 ];
 
 const countWord = (n: number): string => NUMBERS[n] ?? String(n);
+
+/** Wrapped lines carried on flush left, as the hand-wrapped taping notes are. */
+const flush = (lines: readonly string[]): string[] => lines.map(line => line.trimStart());
+
+/**
+ * Where the S and the G are, which is one sentence when every pose shows one
+ * of each and another when some pose shows both (`pickRepeatedEnds`): the
+ * half-turn ring, once its hook counts, has no two squares that take turns.
+ */
+function marksSentence(mech: CubeRingMechanism, surface: KineticSurface, ends: PrintedEnds): string {
+  const twice = mech.states.some((_state, index) => {
+    const visible = surface.visibleOfState(index);
+    return ends.start.filter(cell => visible[cell]).length > 1
+      || ends.goal.filter(cell => visible[cell]).length > 1;
+  });
+  return twice
+    ? 'Two squares carry an S and two carry a G, and folded one way both of each are outside: then '
+      + 'start from either S and finish at either G. Every shape is a perfect maze, so each of '
+      + 'those walks has exactly one way.'
+    : 'Two squares carry an S and two carry a G: whichever way it is folded, one of each is outside.';
+}
+
+/** Planks, hooks, zigzags — and arches. */
+const plural = (noun: string): string => (/(ch|sh|s|x)$/.test(noun) ? `${noun}es` : `${noun}s`);
+
+/**
+ * How many of the shapes a design is a perfect maze in. A shape a hand can make
+ * two ways round (`CubeRingMechanism.twins`) is one shape, and counts only if
+ * it is perfect both ways.
+ */
+function perfectShapes(mech: CubeRingMechanism, surface: KineticSurface, design: KineticDesign): number {
+  const perfect = rateByState(surface, design).perfect;
+  return mech.poses.filter((_pose, index) => perfect[index] === 1
+    && mech.twins.every((twin, t) => twin.twinOf !== index || perfect[mech.poses.length + t] === 1)).length;
+}
 
 const capitalise = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 

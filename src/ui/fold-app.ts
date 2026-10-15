@@ -141,7 +141,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
 
   function show(next: Build, keepPose: boolean) {
     build = next;
-    const pose = keepPose ? Math.min(poseIndex, next.mech.states.length - 1) : 0;
+    const pose = keepPose ? Math.min(poseIndex, next.mech.poses.length - 1) : 0;
     poseIndex = pose;
     scene.setModel({
       pieces: buildKineticPieces(next.mech, next.surface, next.design, next.ends),
@@ -204,15 +204,15 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
   }
 
   function buildFrom(ruling: Ruling, design: KineticDesign, from: number, cached: boolean) {
-    const rate = treeRate(ruling.surface, design);
+    const poses = describePoses(ruling.mech, ruling.surface, design);
     return {
       mech: ruling.mech,
       surface: ruling.surface,
       graph: ruling.graph,
       design,
       ends: pickPrintedEnds(ruling.surface, design),
-      poses: describePoses(ruling.mech, ruling.surface, design),
-      perfectPoses: rate.perfect,
+      poses,
+      perfectPoses: poses.filter(pose => pose.perfect).length,
       seed: from,
       cached,
     };
@@ -269,21 +269,27 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
           const byRounds = progress.rounds / progress.maxRounds;
           const byPoses = progress.perfectStates / Math.max(1, progress.stateCount);
           controls.setProgress(Math.max(byRounds, byPoses * 0.9));
+          // Counted in shapes, as the buttons are: a shape that can be made two
+          // ways round counts once, and only when both of them are perfect.
+          const best = progress.perfectStates > 0
+            ? perfectShapes(ruling.mech, ruling.surface, search.result().design)
+            : 0;
           controls.setStatus(
-            `Attempt ${progress.rounds}: perfect in ${progress.perfectStates} of ` +
-            `${progress.stateCount} poses so far...`,
+            `Attempt ${progress.rounds}: perfect in ${best} of ` +
+            `${ruling.mech.poses.length} poses so far...`,
           );
           requestAnimationFrame(pump);
           return;
         }
         const found = search.result();
-        show(buildFrom(ruling, found.design, wanted, false), keepPose);
+        const next = buildFrom(ruling, found.design, wanted, false);
+        show(next, keepPose);
         controls.setProgress(null);
         controls.setBusy(false);
         controls.setStatus(
           found.rate.rate < 1
-            ? `Best found: a perfect maze in ${found.rate.perfect} of ` +
-              `${ruling.surface.stateCount} poses. Shuffle for another seed.`
+            ? `Best found: a perfect maze in ${next.perfectPoses} of ` +
+              `${next.poses.length} poses. Shuffle for another seed.`
             : '',
         );
       };
@@ -348,7 +354,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     const rulings = foldRulings(object);
     cells = rulings[Math.floor(Math.random() * rulings.length)] ?? cells;
     seed = randomSeed();
-    poseIndex = Math.floor(Math.random() * rulingFor(cells).mech.states.length);
+    poseIndex = Math.floor(Math.random() * rulingFor(cells).mech.poses.length);
     const style = SCENE_PRESETS[Math.floor(Math.random() * SCENE_PRESETS.length)];
     if (style) {
       controls.setStyle(style.id);
@@ -471,8 +477,12 @@ function nearestRulingOf(next: FoldObject, cells: number): number {
  *
  * The name comes from the mechanism, which reads it off the shape rather than
  * storing it: a frame has a hole through it, a plank lies flat, a cube is the
- * solid block that is square. Numbered in the order the mechanism found them,
- * which is the order the buttons stand in.
+ * solid block that is square, a hook is a plank with one end folded back over
+ * it. Numbered in the order the mechanism found them, which is the order the
+ * buttons stand in.
+ *
+ * A shape a hand can make two ways round (`CubeRingMechanism.twins`) is one
+ * button, shown as the first way, and is a perfect maze only if both are.
  */
 function describePoses(
   mech: FoldMechanism,
@@ -486,7 +496,19 @@ function describePoses(
       cells: surface.visibleCount[index] ?? 0,
       passages: stats.edges,
       longestWalk: longestWalk(surface, design, index),
-      perfect: stats.perfect,
+      perfect: statesOfPose(mech, index).every(state => stateStats(surface, design, state).perfect),
     };
   });
+}
+
+/** The states a listed pose stands for: itself, then any other way round of it. */
+function statesOfPose(mech: FoldMechanism, pose: number): number[] {
+  const twins = 'twins' in mech ? mech.twins : [];
+  return [pose, ...twins.flatMap((twin, t) => (twin.twinOf === pose ? [mech.poses.length + t] : []))];
+}
+
+/** How many listed poses a design is a perfect maze in, both ways round where there are two. */
+function perfectShapes(mech: FoldMechanism, surface: KineticSurface, design: KineticDesign): number {
+  return mech.poses.filter((_pose, index) =>
+    statesOfPose(mech, index).every(state => stateStats(surface, design, state).perfect)).length;
 }
