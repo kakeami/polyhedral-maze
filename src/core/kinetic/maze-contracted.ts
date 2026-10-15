@@ -901,13 +901,12 @@ function makeEngine(
    * passage; `loopsOf` names the passage and this names the rest.
    */
   const cycleRepairs = (
-    s: number, a: number, b: number, k: number, outWalls: number[], outSeams: number[], onlyPatch = -1,
+    s: number, a: number, b: number, k: number, outWalls: number[], outSeams: number[],
   ): void => {
     const start = blockRoot[a]!;
     const goal = blockRoot[b]!;
     pushSeam(outSeams, k);
     const takeWalls = (x: number, y: number): void => {
-      if (onlyPatch >= 0 && patchOf[x] !== onlyPatch) return;
       for (const w of pathWalls(x, y)) pushWall(outWalls, w);
     };
     if (start === goal) { takeWalls(a, b); return; }
@@ -962,11 +961,11 @@ function makeEngine(
     }
   };
   /** What closes a gap of state s: a closed wall between blocks on opposite banks, or a closed seam spanning them. */
-  const gapRepairs = (s: number, outWalls: number[], outSeams: number[], onlyClass = -1): void => {
+  const gapRepairs = (s: number, outWalls: number[], outSeams: number[]): void => {
     scan(s);
     const seen = patchSeen[s]!;
     for (let p = 0; p < patchCount; p++) {
-      if (!seen[p] || (onlyClass >= 0 && classOfPatch[p] !== onlyClass)) continue;
+      if (!seen[p]) continue;
       for (const w of wallsOfPatch[p]!) {
         if (wallOpen[w]) continue;
         const ra = blockRoot[wallA[w]!]!;
@@ -992,10 +991,10 @@ function makeEngine(
     }
   };
   const spare: number[] = [];
-  const splitsFor = (s: number, out: number[], onlyPatch = -1): void => {
+  const splitsFor = (s: number, out: number[]): void => {
     const loops = loopsOf[s]!;
     spare.length = 0;
-    for (let i = 0; i < loops.length; i += 3) cycleRepairs(s, loops[i]!, loops[i + 1]!, loops[i + 2]!, out, spare, onlyPatch);
+    for (let i = 0; i < loops.length; i += 3) cycleRepairs(s, loops[i]!, loops[i + 1]!, loops[i + 2]!, out, spare);
   };
   const seamClosesFor = (s: number, out: number[]): void => {
     const loops = loopsOf[s]!;
@@ -1020,7 +1019,6 @@ function makeEngine(
   const bufA: number[] = [];
   const bufB: number[] = [];
   const bufC: number[] = [];
-  const costWas = new Int32Array(states);
   interface Compound { readonly m1: number; readonly m2: number; readonly which: number[]; readonly delta: number }
   /**
    * One count-neutral move, applied: two atoms whose effect on every state's
@@ -1028,8 +1026,14 @@ function makeEngine(
    * on one of its cycles or a merge across one of its gaps, a seam closed on
    * the cycle or opened across the gap. The second undoes what that did to
    * the counts: a merge for a split (or the reverse) in a patch of the same
-   * visibility class, aimed at the damage the first atom did where it can be;
-   * a seam of the same pair counts, the other way, for a seam.
+   * visibility class, at random; a seam of the same pair counts, the other
+   * way, for a seam.
+   *
+   * At random, and that was measured rather than assumed: aiming the second
+   * atom at the damage the first did — the merge that mends the gap the split
+   * opened in some other state — wins attempts and loses time, 2.5x on the
+   * infinity cube and 1.7x on the frame loop at seven cells over sixteen
+   * seeds, because every proposal then pays for a scan of the damaged states.
    */
   const proposeNeutral = (rng: Rng): Compound | null => {
     failing.length = 0;
@@ -1067,22 +1071,13 @@ function makeEngine(
     const p1 = wallPatch[w1]!;
     const cls = classOfPatch[p1]!;
     const which1 = posesOfPatch[p1]!;
-    for (const q of which1) costWas[q] = costOf[q]!;
     apply(w1);
     const d1 = rescore(which1);
     let p2 = p1;
     if (classes[cls]!.length > 1 && rng.next() > SAME_PATCH) p2 = classes[cls]![rng.nextInt(classes[cls]!.length)]!;
     bufB.length = 0;
-    candStamp++;
-    if (fixLoop) {
-      // A split: now a merge, closing a gap the split opened if it opened one.
-      for (const q of which1) if (costOf[q]! > costWas[q]! && hasGaps(q)) gapRepairs(q, bufB, bufC, cls);
-      if (bufB.length === 0) mergeWallsOf(p2, bufB);
-    } else {
-      // A merge: now a split, breaking a cycle the merge closed if it closed one.
-      for (const q of which1) if (costOf[q]! > costWas[q]!) splitsFor(q, bufB, p2);
-      if (bufB.length === 0) openWallsOf(p2, bufB);
-    }
+    if (fixLoop) mergeWallsOf(p2, bufB); // a split: now a merge
+    else openWallsOf(p2, bufB); // a merge: now a split
     if (bufB.length === 0) { apply(w1); rescore(which1); return null; }
     const w2 = bufB[rng.nextInt(bufB.length)]!;
     const which = unionOf(which1, posesOfPatch[wallPatch[w2]!]!);
@@ -1154,6 +1149,75 @@ function makeEngine(
   };
 
   const localParent = new Int32Array(widest);
+  /**
+   * Deals each class's blocks out to its patches, within each patch's cap,
+   * and draws them: a spanning tree in every patch, cut into that many
+   * blocks, each cut chosen so that both sides keep a landing in every state
+   * the patch is on show in (a block without one is an island there from
+   * the start). Needs the seams and the class sums in place.
+   */
+  const dealBlocks = (rng: Rng): void => {
+    // Each class's blocks dealt out to its patches, within each patch's cap.
+    const want = new Int32Array(patchCount).fill(1);
+    for (let v = 0; v < classes.length; v++) {
+      const ps = classes[v]!;
+      let rest = classSum[v]! - ps.length;
+      for (let guard = 0; rest > 0 && guard < 100000; guard++) {
+        const p = ps[rng.nextInt(ps.length)]!;
+        if (want[p]! < cap[p]!) { want[p]!++; rest--; }
+      }
+    }
+    // A spanning tree in every patch, cut into that many blocks, each cut
+    // chosen so that both sides keep a landing in every state the patch is
+    // on show in — a block without one is an island there from the start.
+    wallOpen.fill(0);
+    blocks.fill(0);
+    nodes.fill(0);
+    for (let p = 0; p < patchCount; p++) {
+      const list = [...wallsOfPatch[p]!];
+      rng.shuffle(list);
+      const size = patches[p]!.length;
+      for (let i = 0; i < size; i++) localParent[i] = i;
+      const root = (x: number): number => {
+        let r = x;
+        while (localParent[r] !== r) r = localParent[r]!;
+        return r;
+      };
+      for (const w of list) {
+        const ra = root(localOf[wallA[w]!]!);
+        const rb = root(localOf[wallB[w]!]!);
+        if (ra === rb) continue;
+        localParent[ra] = rb;
+        wallOpen[w] = 1;
+      }
+      relabel(p);
+      if (unseen[p]) continue;
+      const mask = visMask[p]!;
+      for (let cuts = want[p]! - 1; cuts > 0; cuts--) {
+        const open: number[] = [];
+        openWallsOf(p, open);
+        rng.shuffle(open);
+        let done = false;
+        for (const w of open) {
+          wallOpen[w] = 0;
+          relabel(p);
+          let landedEverywhere = true;
+          for (const start of patches[p]!) {
+            if (blockRoot[start] !== start) continue;
+            let m = 0;
+            for (const cell of patches[p]!) if (blockRoot[cell] === start) m |= landing[cell]!;
+            if ((m & mask) !== mask) { landedEverywhere = false; break; }
+          }
+          if (landedEverywhere) { done = true; break; }
+          wallOpen[w] = 1;
+          relabel(p);
+        }
+        if (!done && open.length > 0) { wallOpen[open[0]!] = 0; relabel(p); }
+      }
+    }
+
+  };
+
   const attemptNeutral = (rng: Rng, restarts: number): Attempt => {
     classify();
     let bestCost = Infinity;
@@ -1170,70 +1234,16 @@ function makeEngine(
         if (chooseSeams(rng)) solved = solveCounts(rng);
       }
       if (!solved) continue;
-      // Each class's blocks dealt out to its patches, within each patch's cap.
-      const want = new Int32Array(patchCount).fill(1);
-      for (let v = 0; v < classes.length; v++) {
-        const ps = classes[v]!;
-        let rest = classSum[v]! - ps.length;
-        for (let guard = 0; rest > 0 && guard < 100000; guard++) {
-          const p = ps[rng.nextInt(ps.length)]!;
-          if (want[p]! < cap[p]!) { want[p]!++; rest--; }
-        }
-      }
-      // A spanning tree in every patch, cut into that many blocks, each cut
-      // chosen so that both sides keep a landing in every state the patch is
-      // on show in — a block without one is an island there from the start.
-      wallOpen.fill(0);
-      blocks.fill(0);
-      nodes.fill(0);
-      for (let p = 0; p < patchCount; p++) {
-        const list = [...wallsOfPatch[p]!];
-        rng.shuffle(list);
-        const size = patches[p]!.length;
-        for (let i = 0; i < size; i++) localParent[i] = i;
-        const root = (x: number): number => {
-          let r = x;
-          while (localParent[r] !== r) r = localParent[r]!;
-          return r;
-        };
-        for (const w of list) {
-          const ra = root(localOf[wallA[w]!]!);
-          const rb = root(localOf[wallB[w]!]!);
-          if (ra === rb) continue;
-          localParent[ra] = rb;
-          wallOpen[w] = 1;
-        }
-        relabel(p);
-        if (unseen[p]) continue;
-        const mask = visMask[p]!;
-        for (let cuts = want[p]! - 1; cuts > 0; cuts--) {
-          const open: number[] = [];
-          openWallsOf(p, open);
-          rng.shuffle(open);
-          let done = false;
-          for (const w of open) {
-            wallOpen[w] = 0;
-            relabel(p);
-            let landedEverywhere = true;
-            for (const start of patches[p]!) {
-              if (blockRoot[start] !== start) continue;
-              let m = 0;
-              for (const cell of patches[p]!) if (blockRoot[cell] === start) m |= landing[cell]!;
-              if ((m & mask) !== mask) { landedEverywhere = false; break; }
-            }
-            if (landedEverywhere) { done = true; break; }
-            wallOpen[w] = 1;
-            relabel(p);
-          }
-          if (!done && open.length > 0) { wallOpen[open[0]!] = 0; relabel(p); }
-        }
-      }
-
+      dealBlocks(rng);
       let cost = scoreAll();
       let lastImprove = 0;
       let sinceExit = EXIT_EVERY;
       let exitEvery = EXIT_EVERY;
       for (let step = 0; step < iterations && cost > 0; step++) {
+        // Not re-solved and redealt on the same seams either: that was tried
+        // (an attempt stuck high is often a class-sum vector no partition
+        // can connect) and it only trades attempts for longer ones — level at
+        // seven cells, 70% slower at ten.
         if (step - lastImprove > PLATEAU) break;
         if (sinceExit >= exitEvery && cost <= EXIT_COST) {
           sinceExit = 0;
@@ -1394,6 +1404,14 @@ function makeEngine(
  * 1000, and an attempt that has not moved in that long is on the plateau the
  * exact exit could not get it off. Three thousand is a tenth of the cap, and
  * what makes a failed attempt cost a tenth of what it did.
+ *
+ * Two ways of spending more on a stalled attempt were measured and withdrawn
+ * (2026-10-15): a four-atom exit that relocates the cycle with a cost-neutral
+ * pair before trying the pair exit (it relocates, and the pair exit still
+ * fails: no more hits, more time), and re-solving the counts on the same seams
+ * (above). On the frame loop most failed attempts stall at a cost of six to
+ * thirty, out of reach of either; a fresh attempt is the better use of the
+ * time.
  */
 const PLATEAU = 3000;
 
@@ -1402,6 +1420,7 @@ const EXIT_EVERY = 20;
 
 /** The total cost at or under which the exact exit is tried at all. */
 const EXIT_COST = 4;
+
 
 /** How often the folding strategy answers a complaint with a seam swap rather than a wall exchange. */
 const SWAP_SEAMS = 0.25;
