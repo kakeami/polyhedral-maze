@@ -239,8 +239,8 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
    * The ordinary way to get a maze this page does not already have: any seed
    * beyond the few that ship with it. The page has one thread, so the search
    * is walked an attempt per frame with the browser handed back in between,
-   * exactly as the kinetic page does it. An attempt is half a second to a
-   * second, and usually the first one is enough.
+   * exactly as the kinetic page does it. An attempt is a few tens to a few
+   * hundred milliseconds, and one to five of them is the usual number.
    */
   function searchInstead(ruling: Ruling, token: number, keepPose: boolean) {
     controls.setBusy(true);
@@ -249,9 +249,10 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     requestAnimationFrame(() => setTimeout(() => {
       if (token !== buildToken) return;
       const wanted = seed;
-      // The budget is the search's own: an attempt is a few hundred
-      // milliseconds, three to five is the usual number, and the ceiling is
-      // there for the unlucky seed rather than for the hard ruling.
+      // The budget is the search's own: an attempt that fails stops at its
+      // plateau in a few tens of milliseconds, one to five attempts is the
+      // usual number, and the ceiling is there for the unlucky seed rather
+      // than for the hard ruling.
       const search = createContractedSearch(ruling.surface, { rng: createRng(wanted) });
       const pump = () => {
         if (token !== buildToken) return;

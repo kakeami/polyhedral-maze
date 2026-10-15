@@ -32,6 +32,32 @@
  * It is much colder, and that is not a tuning detail: at the temperature the
  * cell-level search anneals from, moves this purposeful are a random walk over
  * good designs and it finds nothing. See `temperature`.
+ *
+ * On a mechanism that folds, that anneal is now the fallback and not the
+ * search (2026-10-15). Watched attempt by attempt, it got within two or three
+ * of a design inside a thousand steps and then stood still for the other
+ * nineteen thousand, and 58 of 59 failed attempts stood still on the same
+ * thing: the *count*. A state is a tree only if its blocks on show number one
+ * more than its open seam passages, which is one linear equation per state
+ * over the block counts of the patches — and a single move changes the count
+ * in every state the patch or seam is live in, four to eight of ten, so the
+ * repairs that fix one state's count break another's for ever. The folding
+ * strategy (`attemptNeutral`) therefore solves the count equations exactly
+ * before it anneals, and then moves only in pairs whose effect on every
+ * count cancels — a split and a merge in patches of one visibility class, two
+ * seams of equal pair counts swapped — so the counts never go wrong again, and
+ * the cost is pure connectivity. A state left with one cycle and one gap is
+ * the one shape no pair of aimed atoms reaches by chance, so that case is
+ * searched exhaustively (`exactExit`). Measured over every object the folding
+ * page offers, seeds 1-8 at four, seven and ten cells across a face: every
+ * seed found, 6-11 times faster than the repair anneal, and the attempts that
+ * fail stop at the plateau rather than at the iteration cap.
+ *
+ * The same equations decide something the search could not: the star cube
+ * with its four hooks has *no* design. Two of its hooks show, between them,
+ * exactly the faces its cube, its star and one plank show between them, and
+ * carry the same passages at every seam — but two trees want two edges fewer
+ * than nodes, and three trees want three. See `countsAreConsistent`.
  */
 
 import type { Rng } from '../prng.ts';
@@ -201,9 +227,14 @@ interface Engine {
 
 function makeEngine(
   surface: KineticSurface,
-  options: { iterations: number; temperature: number; fixedCuts?: readonly number[] },
+  options: {
+    iterations: number;
+    temperature: number;
+    fixedCuts?: readonly number[];
+    strategy: 'repair' | 'neutral';
+  },
 ): Engine {
-  const { iterations, temperature: startTemperature, fixedCuts } = options;
+  const { iterations, temperature: startTemperature, fixedCuts, strategy } = options;
   /** With the seams held, every move is a wall and the moves that open a seam are not offered. */
   const seamsFixed = fixedCuts !== undefined;
   const patches = findPatches(surface);
@@ -606,6 +637,7 @@ function makeEngine(
       seamOpen[k] = seamOpen[k] ? 0 : 1;
       openSeams = [];
       for (let i = 0; i < seamCount; i++) if (seamOpen[i]) openSeams.push(i);
+      if (strategy === 'neutral') refreshLandings();
       return;
     }
     wallOpen[move] = wallOpen[move] ? 0 : 1;
@@ -619,7 +651,636 @@ function makeEngine(
     return blockRoot[wallA[move]!] !== blockRoot[wallB[move]!];
   };
 
-  const attempt = (rng: Rng, restarts: number): Attempt => {
+
+  // --- the count-neutral strategy ------------------------------------------
+  //
+  // Everything below is for a mechanism that folds (`strategy === 'neutral'`):
+  // the states are few, all of them are scored, and the seam set is free.
+
+  /** Bit `s` set when the cell has an open seam passage in state s. */
+  const landing = new Int32Array(surface.cellCount);
+  const refreshLandings = (): void => {
+    landing.fill(0);
+    for (let s = 0; s < states; s++) {
+      const pairsOfState = seamPairs[s]!;
+      for (const k of openSeams) {
+        const pairs = pairsOfState[k]!;
+        for (let i = 0; i < pairs.length; i++) landing[pairs[i]!] = landing[pairs[i]!]! | (1 << s);
+      }
+    }
+  };
+
+  /** Patches grouped by the set of states they are on show in, and seams by their pair counts. */
+  let classOfPatch = new Int32Array(0);
+  let classes: number[][] = [];
+  let classStates: number[][] = [];
+  let visMask = new Int32Array(0);
+  let pairGroupOf = new Int32Array(0);
+  let pairGroups: number[][] = [];
+  let indicatorSeamsOfClass: number[][] = [];
+  let classified = false;
+  const classify = (): void => {
+    if (classified) return;
+    classified = true;
+    classOfPatch = new Int32Array(patchCount);
+    classes = [];
+    classStates = [];
+    visMask = new Int32Array(patchCount);
+    const byKey = new Map<string, number>();
+    for (let p = 0; p < patchCount; p++) {
+      const poses = posesOfPatch[p]!;
+      for (const s of poses) visMask[p] = visMask[p]! | (1 << s);
+      const key = poses.join(',');
+      let id = byKey.get(key);
+      if (id === undefined) {
+        id = classes.length;
+        byKey.set(key, id);
+        classes.push([]);
+        classStates.push(poses);
+      }
+      classes[id]!.push(p);
+      classOfPatch[p] = id;
+    }
+    pairGroupOf = new Int32Array(seamCount);
+    pairGroups = [];
+    const groupKey = new Map<string, number>();
+    for (let k = 0; k < seamCount; k++) {
+      const counts: number[] = [];
+      for (let s = 0; s < states; s++) counts.push(seamPairs[s]![k]!.length);
+      const key = counts.join(',');
+      let id = groupKey.get(key);
+      if (id === undefined) {
+        id = pairGroups.length;
+        groupKey.set(key, id);
+        pairGroups.push([]);
+      }
+      pairGroups[id]!.push(k);
+      pairGroupOf[k] = id;
+    }
+    // A seam with exactly one pair in each state of a class and none elsewhere
+    // changes the counts the way a split of that class does: the two cancel.
+    indicatorSeamsOfClass = classes.map((_patches, v) => {
+      const out: number[] = [];
+      for (let k = 0; k < seamCount; k++) {
+        let ok = true;
+        for (let s = 0; s < states && ok; s++) {
+          ok = seamPairs[s]![k]!.length / 2 === (classStates[v]!.includes(s) ? 1 : 0);
+        }
+        if (ok) out.push(k);
+      }
+      return out;
+    });
+  };
+
+  /**
+   * A seam set that joins the patches of every state, chosen greedily over a
+   * shuffle — `chooseCutClasses`, at the patch level. The same rule (a seam is
+   * kept when it joins two components in some state and closes no loop of
+   * seams alone in any), a hundredth of the time: the shipped one re-unions
+   * every adjacency of every state for every candidate, which at ten cells
+   * across a face is 150 ms, longer than the search it is the first line of.
+   */
+  const seamParent = new Int32Array(surface.cellCount);
+  const chooseSeams = (rng: Rng): boolean => {
+    const order: number[] = [];
+    for (let k = 0; k < seamCount; k++) order.push(k);
+    rng.shuffle(order);
+    seamOpen.fill(0);
+    // Patch-level components per state (stamped union-find over patch ids,
+    // kept across candidates because the greedy only ever adds).
+    const root = new Int32Array(states * patchCount);
+    for (let i = 0; i < root.length; i++) root[i] = i % patchCount;
+    const findPatch = (s: number, p: number): number => {
+      const base = s * patchCount;
+      let r = p;
+      while (root[base + r] !== r) r = root[base + r]!;
+      let x = p;
+      while (root[base + x] !== r) { const next = root[base + x]!; root[base + x] = r; x = next; }
+      return r;
+    };
+    let components = 0;
+    for (let s = 0; s < states; s++) for (let p = 0; p < patchCount; p++) if (patchSeen[s]![p]) components++;
+    // Cell-level forest of the seam passages alone, per state, for the loop rule.
+    const cellRoot = new Int32Array(states * surface.cellCount);
+    for (let i = 0; i < cellRoot.length; i++) cellRoot[i] = i % surface.cellCount;
+    const findCell = (s: number, c: number): number => {
+      const base = s * surface.cellCount;
+      let r = c;
+      while (cellRoot[base + r] !== r) r = cellRoot[base + r]!;
+      let x = c;
+      while (cellRoot[base + x] !== r) { const next = cellRoot[base + x]!; cellRoot[base + x] = r; x = next; }
+      return r;
+    };
+    void seamParent;
+    for (const k of order) {
+      if (components === states) break;
+      let joins = 0;
+      let loops = false;
+      for (let s = 0; s < states && !loops; s++) {
+        const pairs = seamPairs[s]![k]!;
+        for (let i = 0; i < pairs.length; i += 2) {
+          if (findPatch(s, patchOf[pairs[i]!]!) !== findPatch(s, patchOf[pairs[i + 1]!]!)) joins++;
+          if (findCell(s, pairs[i]!) === findCell(s, pairs[i + 1]!)) { loops = true; break; }
+        }
+      }
+      if (loops || joins === 0) continue;
+      seamOpen[k] = 1;
+      for (let s = 0; s < states; s++) {
+        const pairs = seamPairs[s]![k]!;
+        for (let i = 0; i < pairs.length; i += 2) {
+          const a = findPatch(s, patchOf[pairs[i]!]!);
+          const b = findPatch(s, patchOf[pairs[i + 1]!]!);
+          if (a !== b) { root[s * patchCount + a] = b; components--; }
+          const ca = findCell(s, pairs[i]!);
+          const cb = findCell(s, pairs[i + 1]!);
+          if (ca !== cb) cellRoot[s * surface.cellCount + ca] = cb;
+        }
+      }
+    }
+    openSeams = [];
+    for (let i = 0; i < seamCount; i++) if (seamOpen[i]) openSeams.push(i);
+    refreshLandings();
+    return components === states;
+  };
+
+  /**
+   * The count equations: in state q, blocks on show = seam passages + 1.
+   *
+   * One equation per state over the block count of every patch; summed over
+   * a visibility class, a system of `states` equations in as many unknowns
+   * as there are classes (14 on the infinity cube, 8 on the star cube). A
+   * block must hold a landing live in every state its patch is on show in,
+   * or it is an island there, which caps each patch; a patch has at least one
+   * block, which floors it. Solved by depth-first search over the classes
+   * with interval pruning, most-states-first — a couple of milliseconds at
+   * seven cells across a face, twenty at ten.
+   */
+  const cap = new Int32Array(patchCount);
+  const need: number[] = [];
+  const classSum: number[] = [];
+  const solveCounts = (rng: Rng): boolean => {
+    need.length = 0;
+    for (let s = 0; s < states; s++) {
+      let edges = 0;
+      for (const k of openSeams) edges += seamPairs[s]![k]!.length / 2;
+      need.push(edges + 1);
+    }
+    for (let p = 0; p < patchCount; p++) {
+      let fewest = Infinity;
+      for (const s of posesOfPatch[p]!) {
+        let landed = 0;
+        for (const cell of patches[p]!) if (landing[cell]! & (1 << s)) landed++;
+        fewest = Math.min(fewest, landed);
+      }
+      cap[p] = posesOfPatch[p]!.length === 0 ? 1 : fewest;
+    }
+    const V = classes.length;
+    const lo = classes.map(ps => ps.length);
+    const hi = classes.map(ps => ps.reduce((sum, p) => sum + cap[p]!, 0));
+    for (let v = 0; v < V; v++) if (hi[v]! < lo[v]!) return false;
+    const order: number[] = [];
+    for (let v = 0; v < V; v++) if (classStates[v]!.length > 0) order.push(v);
+    order.sort((a, b) => classStates[b]!.length - classStates[a]!.length);
+    classSum.length = V;
+    classSum.fill(0);
+    const rem = [...need];
+    const minRem = new Array<number>(states).fill(0);
+    const maxRem = new Array<number>(states).fill(0);
+    for (const v of order) for (const s of classStates[v]!) { minRem[s] = minRem[s]! + lo[v]!; maxRem[s] = maxRem[s]! + hi[v]!; }
+    let visited = 0;
+    const dfs = (i: number): boolean => {
+      if (++visited > SOLVE_LIMIT) return false;
+      if (i === order.length) return rem.every(r => r === 0);
+      const v = order[i]!;
+      const st = classStates[v]!;
+      for (const s of st) { minRem[s] = minRem[s]! - lo[v]!; maxRem[s] = maxRem[s]! - hi[v]!; }
+      let a = lo[v]!;
+      let b = hi[v]!;
+      for (const s of st) { a = Math.max(a, rem[s]! - maxRem[s]!); b = Math.min(b, rem[s]! - minRem[s]!); }
+      const span = b - a + 1;
+      // From a random point of the range, so that two attempts on one seam set
+      // do not land on the same block counts.
+      const offset = span > 0 ? rng.nextInt(span) : 0;
+      for (let j = 0; j < span; j++) {
+        const x = a + ((j + offset) % span);
+        classSum[v] = x;
+        for (const s of st) rem[s] = rem[s]! - x;
+        if (dfs(i + 1)) return true;
+        for (const s of st) rem[s] = rem[s]! + x;
+      }
+      for (const s of st) { minRem[s] = minRem[s]! + lo[v]!; maxRem[s] = maxRem[s]! + hi[v]!; }
+      return false;
+    };
+    return dfs(0);
+  };
+
+  // repairs of one state, walls and seams kept apart
+  const wallStamp = new Int32Array(wallCount).fill(-1);
+  const seamStamp = new Int32Array(seamCount).fill(-1);
+  let candStamp = 0;
+  const pushWall = (out: number[], w: number): void => {
+    if (wallStamp[w] === candStamp) return;
+    wallStamp[w] = candStamp;
+    out.push(w);
+  };
+  const pushSeam = (out: number[], k: number): void => {
+    if (seamStamp[k] === candStamp) return;
+    seamStamp[k] = candStamp;
+    out.push(k);
+  };
+  const adj = new Map<number, number[]>();
+  const prevRoot = new Map<number, number>();
+  const prevExit = new Map<number, number>();
+  const prevEntry = new Map<number, number>();
+  const prevSeam = new Map<number, number>();
+  /**
+   * What breaks the cycle of state s that the seam passage (a,b,k) closed: a
+   * wall on the tree path between where the cycle enters and leaves each block
+   * it crosses (a split), or a seam it runs along (closed). The cycle is found
+   * by searching the contracted graph from a's block to b's without that
+   * passage; `loopsOf` names the passage and this names the rest.
+   */
+  const cycleRepairs = (
+    s: number, a: number, b: number, k: number, outWalls: number[], outSeams: number[], onlyPatch = -1,
+  ): void => {
+    const start = blockRoot[a]!;
+    const goal = blockRoot[b]!;
+    pushSeam(outSeams, k);
+    const takeWalls = (x: number, y: number): void => {
+      if (onlyPatch >= 0 && patchOf[x] !== onlyPatch) return;
+      for (const w of pathWalls(x, y)) pushWall(outWalls, w);
+    };
+    if (start === goal) { takeWalls(a, b); return; }
+    adj.clear();
+    const pairsOfState = seamPairs[s]!;
+    let skipped = false;
+    for (const kk of openSeams) {
+      const pairs = pairsOfState[kk]!;
+      for (let i = 0; i < pairs.length; i += 2) {
+        const x = pairs[i]!;
+        const y = pairs[i + 1]!;
+        if (!skipped && kk === k && ((x === a && y === b) || (x === b && y === a))) { skipped = true; continue; }
+        const rx = blockRoot[x]!;
+        const ry = blockRoot[y]!;
+        let lx = adj.get(rx);
+        if (!lx) { lx = []; adj.set(rx, lx); }
+        lx.push(ry, x, y, kk);
+        let ly = adj.get(ry);
+        if (!ly) { ly = []; adj.set(ry, ly); }
+        ly.push(rx, y, x, kk);
+      }
+    }
+    prevRoot.clear(); prevExit.clear(); prevEntry.clear(); prevSeam.clear();
+    const bfs: number[] = [start];
+    prevRoot.set(start, start);
+    let found = false;
+    for (let head = 0; head < bfs.length && !found; head++) {
+      const at = bfs[head]!;
+      const list = adj.get(at);
+      if (!list) continue;
+      for (let i = 0; i < list.length; i += 4) {
+        const to = list[i]!;
+        if (prevRoot.has(to)) continue;
+        prevRoot.set(to, at);
+        prevExit.set(to, list[i + 1]!);
+        prevEntry.set(to, list[i + 2]!);
+        prevSeam.set(to, list[i + 3]!);
+        if (to === goal) { found = true; break; }
+        bfs.push(to);
+      }
+    }
+    if (!found) return;
+    let at = goal;
+    let exitCell = b;
+    for (;;) {
+      const entryCell = at === start ? a : prevEntry.get(at)!;
+      takeWalls(entryCell, exitCell);
+      if (at === start) break;
+      pushSeam(outSeams, prevSeam.get(at)!);
+      exitCell = prevExit.get(at)!;
+      at = prevRoot.get(at)!;
+    }
+  };
+  /** What closes a gap of state s: a closed wall between blocks on opposite banks, or a closed seam spanning them. */
+  const gapRepairs = (s: number, outWalls: number[], outSeams: number[], onlyClass = -1): void => {
+    scan(s);
+    const seen = patchSeen[s]!;
+    for (let p = 0; p < patchCount; p++) {
+      if (!seen[p] || (onlyClass >= 0 && classOfPatch[p] !== onlyClass)) continue;
+      for (const w of wallsOfPatch[p]!) {
+        if (wallOpen[w]) continue;
+        const ra = blockRoot[wallA[w]!]!;
+        const rb = blockRoot[wallB[w]!]!;
+        if (ra === rb) continue;
+        const ca = componentOf.get(ra);
+        const cb = componentOf.get(rb);
+        if (ca === undefined || cb === undefined || ca !== cb) pushWall(outWalls, w);
+      }
+    }
+    const pairsOfState = seamPairs[s]!;
+    for (let k = 0; k < seamCount; k++) {
+      if (seamOpen[k]) continue;
+      const pairs = pairsOfState[k]!;
+      for (let i = 0; i < pairs.length; i += 2) {
+        const ra = blockRoot[pairs[i]!]!;
+        const rb = blockRoot[pairs[i + 1]!]!;
+        if (ra === rb) continue;
+        const ca = componentOf.get(ra);
+        const cb = componentOf.get(rb);
+        if (ca === undefined || cb === undefined || ca !== cb) { pushSeam(outSeams, k); break; }
+      }
+    }
+  };
+  const spare: number[] = [];
+  const splitsFor = (s: number, out: number[], onlyPatch = -1): void => {
+    const loops = loopsOf[s]!;
+    spare.length = 0;
+    for (let i = 0; i < loops.length; i += 3) cycleRepairs(s, loops[i]!, loops[i + 1]!, loops[i + 2]!, out, spare, onlyPatch);
+  };
+  const seamClosesFor = (s: number, out: number[]): void => {
+    const loops = loopsOf[s]!;
+    spare.length = 0;
+    for (let i = 0; i < loops.length; i += 3) cycleRepairs(s, loops[i]!, loops[i + 1]!, loops[i + 2]!, spare, out);
+  };
+  const hasGaps = (s: number): boolean => costOf[s]! - loopsOf[s]!.length / 3 > 0;
+  const mergeWallsOf = (p: number, out: number[]): void => {
+    for (const w of wallsOfPatch[p]!) {
+      if (!wallOpen[w] && blockRoot[wallA[w]!] !== blockRoot[wallB[w]!]) out.push(w);
+    }
+  };
+  const openWallsOf = (p: number, out: number[]): void => {
+    for (const w of wallsOfPatch[p]!) if (wallOpen[w]) out.push(w);
+  };
+  const unionOf = (a: readonly number[], b: readonly number[]): number[] => {
+    const out = [...a];
+    for (const s of b) if (!out.includes(s)) out.push(s);
+    return out;
+  };
+
+  const bufA: number[] = [];
+  const bufB: number[] = [];
+  const bufC: number[] = [];
+  const costWas = new Int32Array(states);
+  interface Compound { readonly m1: number; readonly m2: number; readonly which: number[]; readonly delta: number }
+  /**
+   * One count-neutral move, applied: two atoms whose effect on every state's
+   * count cancels. The first answers a complaint of a failing state — a split
+   * on one of its cycles or a merge across one of its gaps, a seam closed on
+   * the cycle or opened across the gap. The second undoes what that did to
+   * the counts: a merge for a split (or the reverse) in a patch of the same
+   * visibility class, aimed at the damage the first atom did where it can be;
+   * a seam of the same pair counts, the other way, for a seam.
+   */
+  const proposeNeutral = (rng: Rng): Compound | null => {
+    failing.length = 0;
+    for (let s = 0; s < states; s++) if (costOf[s]! > 0) failing.push(s);
+    if (failing.length === 0) return null;
+    const s = failing[rng.nextInt(failing.length)]!;
+    candStamp++;
+    const loops = loopsOf[s]!.length / 3;
+    const gaps = costOf[s]! - loops;
+    const fixLoop = loops > 0 && (gaps === 0 || rng.next() < HALF);
+    if (rng.next() < SWAP_SEAMS) {
+      bufA.length = 0;
+      bufB.length = 0;
+      if (fixLoop) seamClosesFor(s, bufA);
+      else gapRepairs(s, bufB, bufA);
+      if (bufA.length > 0) {
+        const k1 = bufA[rng.nextInt(bufA.length)]!;
+        bufC.length = 0;
+        for (const k of pairGroups[pairGroupOf[k1]!]!) if (k !== k1 && seamOpen[k] !== seamOpen[k1]) bufC.push(k);
+        if (bufC.length > 0) {
+          const k2 = bufC[rng.nextInt(bufC.length)]!;
+          const which = unionOf(posesOfSeam[k1]!, posesOfSeam[k2]!);
+          apply(~k1);
+          apply(~k2);
+          return { m1: ~k1, m2: ~k2, which, delta: rescore(which) };
+        }
+      }
+      candStamp++;
+    }
+    bufA.length = 0;
+    if (fixLoop) splitsFor(s, bufA);
+    else { bufB.length = 0; gapRepairs(s, bufA, bufB); }
+    if (bufA.length === 0) return null;
+    const w1 = bufA[rng.nextInt(bufA.length)]!;
+    const p1 = wallPatch[w1]!;
+    const cls = classOfPatch[p1]!;
+    const which1 = posesOfPatch[p1]!;
+    for (const q of which1) costWas[q] = costOf[q]!;
+    apply(w1);
+    const d1 = rescore(which1);
+    let p2 = p1;
+    if (classes[cls]!.length > 1 && rng.next() > SAME_PATCH) p2 = classes[cls]![rng.nextInt(classes[cls]!.length)]!;
+    bufB.length = 0;
+    candStamp++;
+    if (fixLoop) {
+      // A split: now a merge, closing a gap the split opened if it opened one.
+      for (const q of which1) if (costOf[q]! > costWas[q]! && hasGaps(q)) gapRepairs(q, bufB, bufC, cls);
+      if (bufB.length === 0) mergeWallsOf(p2, bufB);
+    } else {
+      // A merge: now a split, breaking a cycle the merge closed if it closed one.
+      for (const q of which1) if (costOf[q]! > costWas[q]!) splitsFor(q, bufB, p2);
+      if (bufB.length === 0) openWallsOf(p2, bufB);
+    }
+    if (bufB.length === 0) { apply(w1); rescore(which1); return null; }
+    const w2 = bufB[rng.nextInt(bufB.length)]!;
+    const which = unionOf(which1, posesOfPatch[wallPatch[w2]!]!);
+    apply(w2);
+    return { m1: w1, m2: w2, which, delta: d1 + rescore(which) };
+  };
+
+  const exW: number[] = [];
+  const exK: number[] = [];
+  const gpW: number[] = [];
+  const gpK: number[] = [];
+  /**
+   * The way off the plateau. With the counts right, a state that fails has a
+   * cycle and a gap, and a single atom cannot mend one without breaking the
+   * other somewhere; this tries every count-neutral pair — one atom on a cycle
+   * of q, the other across a gap of q — and takes the first that lowers the
+   * total by two. A few hundred evaluations; what the anneal would wander
+   * towards for thousands of steps, if it got there at all.
+   */
+  const exactExit = (q: number, rng: Rng): number => {
+    candStamp++;
+    exW.length = 0;
+    exK.length = 0;
+    const loops = loopsOf[q]!;
+    for (let i = 0; i < loops.length; i += 3) cycleRepairs(q, loops[i]!, loops[i + 1]!, loops[i + 2]!, exW, exK);
+    candStamp++;
+    gpW.length = 0;
+    gpK.length = 0;
+    gapRepairs(q, gpW, gpK);
+    rng.shuffle(exW);
+    rng.shuffle(gpW);
+    const tryPair = (m1: number, m2: number): number => {
+      const which = unionOf(touchedBy(m1), touchedBy(m2));
+      apply(m1);
+      apply(m2);
+      const d = rescore(which);
+      if (d <= -2) return d;
+      apply(m2);
+      apply(m1);
+      rescore(which);
+      return 0;
+    };
+    for (const w1 of exW) {
+      const v = classOfPatch[wallPatch[w1]!]!;
+      for (const w2 of gpW) {
+        if (classOfPatch[wallPatch[w2]!] !== v) continue;
+        const d = tryPair(w1, w2);
+        if (d) return d;
+      }
+      for (const k2 of gpK) {
+        if (!indicatorSeamsOfClass[v]!.includes(k2)) continue;
+        const d = tryPair(w1, ~k2);
+        if (d) return d;
+      }
+    }
+    for (const k1 of exK) {
+      for (const k2 of gpK) {
+        if (pairGroupOf[k1] !== pairGroupOf[k2]) continue;
+        const d = tryPair(~k1, ~k2);
+        if (d) return d;
+      }
+      for (const w2 of gpW) {
+        if (!indicatorSeamsOfClass[classOfPatch[wallPatch[w2]!]!]!.includes(k1)) continue;
+        const d = tryPair(~k1, w2);
+        if (d) return d;
+      }
+    }
+    return 0;
+  };
+
+  const localParent = new Int32Array(widest);
+  const attemptNeutral = (rng: Rng, restarts: number): Attempt => {
+    classify();
+    let bestCost = Infinity;
+    let bestWalls: Uint8Array | null = null;
+    let bestSeams: Uint8Array | null = null;
+    for (let restart = 0; restart < restarts && bestCost > 0; restart++) {
+      // A seam set the counts can be solved on. A seam set that joins every
+      // state has block counts about a third of the time on the infinity cube,
+      // and never on the star cube with its hooks: there the equations are
+      // inconsistent for every seam set (see the test), and this is how the
+      // search finds out.
+      let solved = false;
+      for (let tries = 0; tries < SEAM_SETS && !solved; tries++) {
+        if (chooseSeams(rng)) solved = solveCounts(rng);
+      }
+      if (!solved) continue;
+      // Each class's blocks dealt out to its patches, within each patch's cap.
+      const want = new Int32Array(patchCount).fill(1);
+      for (let v = 0; v < classes.length; v++) {
+        const ps = classes[v]!;
+        let rest = classSum[v]! - ps.length;
+        for (let guard = 0; rest > 0 && guard < 100000; guard++) {
+          const p = ps[rng.nextInt(ps.length)]!;
+          if (want[p]! < cap[p]!) { want[p]!++; rest--; }
+        }
+      }
+      // A spanning tree in every patch, cut into that many blocks, each cut
+      // chosen so that both sides keep a landing in every state the patch is
+      // on show in — a block without one is an island there from the start.
+      wallOpen.fill(0);
+      blocks.fill(0);
+      nodes.fill(0);
+      for (let p = 0; p < patchCount; p++) {
+        const list = [...wallsOfPatch[p]!];
+        rng.shuffle(list);
+        const size = patches[p]!.length;
+        for (let i = 0; i < size; i++) localParent[i] = i;
+        const root = (x: number): number => {
+          let r = x;
+          while (localParent[r] !== r) r = localParent[r]!;
+          return r;
+        };
+        for (const w of list) {
+          const ra = root(localOf[wallA[w]!]!);
+          const rb = root(localOf[wallB[w]!]!);
+          if (ra === rb) continue;
+          localParent[ra] = rb;
+          wallOpen[w] = 1;
+        }
+        relabel(p);
+        if (unseen[p]) continue;
+        const mask = visMask[p]!;
+        for (let cuts = want[p]! - 1; cuts > 0; cuts--) {
+          const open: number[] = [];
+          openWallsOf(p, open);
+          rng.shuffle(open);
+          let done = false;
+          for (const w of open) {
+            wallOpen[w] = 0;
+            relabel(p);
+            let landedEverywhere = true;
+            for (const start of patches[p]!) {
+              if (blockRoot[start] !== start) continue;
+              let m = 0;
+              for (const cell of patches[p]!) if (blockRoot[cell] === start) m |= landing[cell]!;
+              if ((m & mask) !== mask) { landedEverywhere = false; break; }
+            }
+            if (landedEverywhere) { done = true; break; }
+            wallOpen[w] = 1;
+            relabel(p);
+          }
+          if (!done && open.length > 0) { wallOpen[open[0]!] = 0; relabel(p); }
+        }
+      }
+
+      let cost = scoreAll();
+      let lastImprove = 0;
+      let sinceExit = EXIT_EVERY;
+      let exitEvery = EXIT_EVERY;
+      for (let step = 0; step < iterations && cost > 0; step++) {
+        if (step - lastImprove > PLATEAU) break;
+        if (sinceExit >= exitEvery && cost <= EXIT_COST) {
+          sinceExit = 0;
+          let won = false;
+          for (let q = 0; q < states && cost > 0; q++) {
+            if (costOf[q]! > 0 && loopsOf[q]!.length > 0 && hasGaps(q)) {
+              const d = exactExit(q, rng);
+              if (d) { won = true; cost += d; lastImprove = step; }
+            }
+          }
+          if (cost === 0) break;
+          // A sweep that found nothing will mostly find nothing next time
+          // either, until the walk has moved things: back off.
+          exitEvery = won ? EXIT_EVERY : Math.min(exitEvery * 2, EXIT_EVERY * 16);
+        }
+        const temperature = startTemperature * (1 - step / iterations) + 0.02;
+        const got = proposeNeutral(rng);
+        if (!got) continue;
+        if (got.delta <= 0 || rng.next() < Math.exp(-got.delta / temperature)) {
+          cost += got.delta;
+          sinceExit++;
+          if (got.delta < 0) lastImprove = step;
+          continue;
+        }
+        apply(got.m2);
+        apply(got.m1);
+        rescore(got.which);
+      }
+      if (cost < bestCost) {
+        bestCost = cost;
+        bestWalls = Uint8Array.from(wallOpen);
+        bestSeams = Uint8Array.from(seamOpen);
+      }
+    }
+    if (!bestWalls || !bestSeams) return NOTHING;
+    const open = new Set<number>();
+    for (let i = 0; i < wallCount; i++) if (bestWalls[i]) open.add(walls[i]!.classId);
+    const openCutClasses: number[] = [];
+    for (let k = 0; k < seamCount; k++) {
+      if (!bestSeams[k]) continue;
+      open.add(seams[k]!);
+      openCutClasses.push(seams[k]!);
+    }
+    return { open, openCutClasses, cost: bestCost };
+  };
+
+  const attemptByRepair = (rng: Rng, restarts: number): Attempt => {
     let cuts: number[];
     if (fixedCuts) cuts = [...fixedCuts];
     else {
@@ -722,8 +1383,37 @@ function makeEngine(
     return { open, openCutClasses, cost: bestCost };
   };
 
-  return { attempt, setStates };
+  return { attempt: strategy === 'neutral' ? attemptNeutral : attemptByRepair, setStates };
 }
+
+/**
+ * Steps without a lower cost before an attempt is given up on.
+ *
+ * The folding strategy finds what it finds early: over 400 attempts on the
+ * two rings of ten states, every hit came inside 3200 steps and most inside
+ * 1000, and an attempt that has not moved in that long is on the plateau the
+ * exact exit could not get it off. Three thousand is a tenth of the cap, and
+ * what makes a failed attempt cost a tenth of what it did.
+ */
+const PLATEAU = 3000;
+
+/** Accepted moves between two sweeps of `exactExit`; doubled after a sweep that finds nothing. */
+const EXIT_EVERY = 20;
+
+/** The total cost at or under which the exact exit is tried at all. */
+const EXIT_COST = 4;
+
+/** How often the folding strategy answers a complaint with a seam swap rather than a wall exchange. */
+const SWAP_SEAMS = 0.25;
+
+/** How often the compensating atom is placed in the same patch as the first, rather than another of its class. */
+const SAME_PATCH = 0.7;
+
+/** Search nodes the count solver may visit before calling a seam set infeasible. */
+const SOLVE_LIMIT = 2e6;
+
+/** Seam sets tried for one that joins every state and has block counts, before an attempt is spent. */
+const SEAM_SETS = 20;
 
 /** How often a loop is answered by closing the seam that made it. */
 const CLOSE_THE_SEAM = 0.2;
@@ -799,18 +1489,24 @@ export function createContractedSearch(
   const { rng } = options;
   const maxRounds = options.maxRounds ?? 48;
   const restarts = options.restarts ?? 1;
-  const engine = makeEngine(surface, {
-    iterations: options.iterations ?? 20000,
-    temperature: options.temperature ?? 0.8,
-    fixedCuts: options.openCutClasses,
-  });
 
   // A mechanism that turns is a line of pieces, so every state can be scored
   // by walking the line once. Then the anneal need only answer a handful of
   // them and the walk says which to answer next. A mechanism that folds is not
   // a line, and there the anneal runs against all of its poses, as it always
-  // did — which is affordable because there are six of them.
+  // did — which is affordable because there are ten of them at most.
   const chain = chainOf(surface);
+  // The count-neutral strategy wants the seam set free and every state scored
+  // (it keeps a bit per state); anything else is the repair anneal.
+  const strategy = !chain && options.openCutClasses === undefined && surface.stateCount <= 31
+    ? 'neutral'
+    : 'repair';
+  const engine = makeEngine(surface, {
+    iterations: options.iterations ?? 20000,
+    temperature: options.temperature ?? 0.8,
+    fixedCuts: options.openCutClasses,
+    strategy,
+  });
   const working: number[] = [];
   if (chain) {
     while (working.length < Math.min(WORKING_STATES, surface.stateCount)) {
@@ -874,7 +1570,9 @@ export function createContractedSearch(
         throw new Error(
           round === 0
             ? 'the search has not run an attempt yet'
-            : 'no set of cut classes joins the pieces in every state',
+            : strategy === 'neutral'
+              ? 'no seam set has block counts that make every state a tree'
+              : 'no set of cut classes joins the pieces in every state',
         );
       }
       const rate = treeRate(surface, best.design);
@@ -903,6 +1601,107 @@ export function createContractedSearch(
 export function contractedSuits(surface: KineticSurface): boolean {
   if (!contractsCleanly(surface)) return false;
   return surface.hidesCells || chainOf(surface) !== null;
+}
+
+/**
+ * Whether any seam set at all can satisfy the count equations.
+ *
+ * In state q a design is a tree only if the blocks on show number one more
+ * than the open seam passages. Summed over the patches of one visibility
+ * class that is one equation per state over the class sums, and the equations
+ * can be dependent: on the infinity cube three planks and a cube show,
+ * between them, exactly the faces two hooks, the other cube and the fourth
+ * plank show. Such a
+ * dependency λ (λ·A = 0 over the state-by-class incidence A) is satisfiable
+ * only if the right-hand sides obey it too — Σ λ_q (E_q + 1) = 0 — and since
+ * every seam's pair counts turn out to obey the same dependencies (λ·pairs = 0
+ * for every seam, checked here rather than assumed), E_q drops out and what
+ * is left is Σ λ_q = 0: a dependency with as many states on each side.
+ *
+ * The star cube with its four hooks fails this: two of its hooks show what
+ * its cube, its star and one plank show together, and carry the same passages
+ * at every seam, so two trees would have to have three trees' worth of edges
+ * short. No design exists for it, at any ruling, and no search will find one.
+ * Exact over the rationals, with BigInt.
+ */
+export function countsAreConsistent(surface: KineticSurface): boolean {
+  const patches = findPatches(surface);
+  const states = surface.stateCount;
+  const posesOf = patches.map(patch => {
+    const poses: number[] = [];
+    for (let s = 0; s < states; s++) if (surface.visibleOfState(s)[patch[0]!]) poses.push(s);
+    return poses;
+  });
+  const classStates: number[][] = [];
+  const seen = new Set<string>();
+  for (const poses of posesOf) {
+    if (poses.length === 0) continue;
+    const key = poses.join(',');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    classStates.push(poses);
+  }
+  // Pair counts of each seam class in each state.
+  const seamIndex = new Map<number, number>();
+  surface.cutClasses.forEach((c, k) => seamIndex.set(c, k));
+  const pairs: number[][] = surface.cutClasses.map(() => new Array<number>(states).fill(0));
+  for (let s = 0; s < states; s++) {
+    for (const e of surface.adjOfState(s)) {
+      const k = seamIndex.get(e.classId);
+      if (k !== undefined) pairs[k]![s] = pairs[k]![s]! + 1;
+    }
+  }
+  // Left null space of A (states x classes): solve Aᵀ λ = 0 by exact
+  // Gauss-Jordan over fractions.
+  type Q = { n: bigint; d: bigint };
+  const gcd = (a: bigint, b: bigint): bigint => { let x = a < 0n ? -a : a; let y = b < 0n ? -b : b; while (y) { [x, y] = [y, x % y]; } return x || 1n; };
+  const frac = (n: bigint, d: bigint = 1n): Q => { if (d < 0n) { n = -n; d = -d; } const g = gcd(n, d); return { n: n / g, d: d / g }; };
+  const add = (a: Q, b: Q): Q => frac(a.n * b.d + b.n * a.d, a.d * b.d);
+  const sub = (a: Q, b: Q): Q => frac(a.n * b.d - b.n * a.d, a.d * b.d);
+  const mul = (a: Q, b: Q): Q => frac(a.n * b.n, a.d * b.d);
+  const div = (a: Q, b: Q): Q => frac(a.n * b.d, a.d * b.n);
+  const isZero = (a: Q): boolean => a.n === 0n;
+  const V = classStates.length;
+  const M: Q[][] = classStates.map(poses => {
+    const row: Q[] = [];
+    for (let s = 0; s < states; s++) row.push(frac(poses.includes(s) ? 1n : 0n));
+    return row;
+  });
+  const pivotCols: number[] = [];
+  let rank = 0;
+  for (let c = 0; c < states && rank < V; c++) {
+    let pivot = -1;
+    for (let r = rank; r < V; r++) if (!isZero(M[r]![c]!)) { pivot = r; break; }
+    if (pivot < 0) continue;
+    [M[rank], M[pivot]] = [M[pivot]!, M[rank]!];
+    const inv = div(frac(1n), M[rank]![c]!);
+    M[rank] = M[rank]!.map(x => mul(x, inv));
+    for (let r = 0; r < V; r++) {
+      if (r === rank || isZero(M[r]![c]!)) continue;
+      const f = M[r]![c]!;
+      M[r] = M[r]!.map((x, j) => sub(x, mul(f, M[rank]![j]!)));
+    }
+    pivotCols.push(c);
+    rank++;
+  }
+  for (let free = 0; free < states; free++) {
+    if (pivotCols.includes(free)) continue;
+    // λ with λ[free] = 1, λ[pivot] = -M[row][free], else 0.
+    const lambda: Q[] = Array.from({ length: states }, () => frac(0n));
+    lambda[free] = frac(1n);
+    pivotCols.forEach((pc, row) => { lambda[pc] = sub(frac(0n), M[row]![free]!); });
+    let sum = frac(0n);
+    for (const x of lambda) sum = add(sum, x);
+    for (const row of pairs) {
+      let dot = frac(0n);
+      for (let s = 0; s < states; s++) dot = add(dot, mul(lambda[s]!, frac(BigInt(row[s]!))));
+      // A seam whose pair counts do not obey the dependency would let E_q
+      // absorb it; none has been seen, and here it is the honest answer.
+      if (!isZero(dot)) return true;
+    }
+    if (!isZero(sum)) return false;
+  }
+  return true;
 }
 
 /** A design that is a perfect maze in every state, or the best one found. */

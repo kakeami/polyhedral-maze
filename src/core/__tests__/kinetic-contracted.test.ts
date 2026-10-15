@@ -7,10 +7,12 @@
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
 import { createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
+import { cubeRingShape } from '../kinetic/mechanisms/cube-ring.ts';
+import { STAR_CUBE, createHalfCubeRing } from '../kinetic/mechanisms/half-cube-ring.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
 import { stateStats, treeRate, type KineticDesign } from '../kinetic/maze.ts';
 import {
-  contractedSearch, createContractedSearch, contractsCleanly,
+  contractedSearch, createContractedSearch, contractsCleanly, countsAreConsistent,
 } from '../kinetic/maze-contracted.ts';
 import { createRng } from '../prng.ts';
 
@@ -24,8 +26,8 @@ const ringSurface = buildSurface(ring);
  */
 let shared: ReturnType<typeof contractedSearch> | null = null;
 const found = (): ReturnType<typeof contractedSearch> => {
-  // Seed 5: on the ten states the ring has once its hooks count, it is found
-  // in nine attempts, where seed 1 runs out of them.
+  // Any seed does now; 5 is kept from when the repair anneal needed a lucky
+  // one on the ten states the ring has once its hooks count.
   shared ??= contractedSearch(ringSurface, { rng: createRng(5) });
   return shared;
 };
@@ -209,6 +211,43 @@ describe('the contracted search', () => {
     // And it really is a different maze, not the same one back.
     expect([...fresh].sort((a, b) => a - b))
       .not.toEqual([...found().design.open].sort((a, b) => a - b));
+  });
+
+  it('solves the count equations before it anneals: one block more than passages, in every pose', () => {
+    // The equation the folding strategy keeps as an invariant, read off the
+    // finished design: blocks on show = open seam passages + 1, per pose.
+    const { of } = blocksOf(ringSurface, found().design.open);
+    for (let state = 0; state < ringSurface.stateCount; state++) {
+      const visible = ringSurface.visibleOfState(state);
+      const blocks = new Set<number>();
+      for (let cell = 0; cell < ringSurface.cellCount; cell++) if (visible[cell]) blocks.add(of[cell]!);
+      let passages = 0;
+      for (const e of ringSurface.adjOfState(state)) {
+        if (ringSurface.classKind[e.classId] === 'cut' && found().design.open.has(e.classId)) passages++;
+      }
+      expect(blocks.size).toBe(passages + 1);
+    }
+  });
+
+  it('knows the star cube with its hooks has no design at all', () => {
+    // The count equations are one per pose and they are dependent; a
+    // dependency with unequal numbers of poses on its two sides cannot be
+    // satisfied by any seam set. Every ring of cubes passes; the star cube
+    // passes with its six box-or-layer poses and fails with its four hooks
+    // added, which is why the page lists six and says so.
+    expect(countsAreConsistent(ringSurface)).toBe(true);
+    const six = createHalfCubeRing(STAR_CUBE, { cells: 2 });
+    expect(countsAreConsistent(buildSurface(six, { maxStates: six.states.length }))).toBe(true);
+    const shape = cubeRingShape(STAR_CUBE.halves);
+    const states = shape.poses.map(pose => shape.closures[pose.closure]!);
+    expect(states).toHaveLength(10);
+    const ten = { ...six, states, stateLabel: (i: number) => shape.poses[i]!.label };
+    const surface = buildSurface(ten, { maxStates: states.length });
+    expect(countsAreConsistent(surface)).toBe(false);
+    // And the search finds that out for itself: no seam set it tries has
+    // block counts, so no attempt ever starts.
+    expect(() => contractedSearch(surface, { rng: createRng(1), maxRounds: 3 }))
+      .toThrow(/no seam set has block counts/);
   });
 
   it('refuses a surface it cannot be used on', () => {

@@ -26,16 +26,21 @@
  * faces come to one line and are paired round it, and the hollow, which is a
  * surface of its own and is hidden as shut inside.
  *
- * And one thing it does not do that the ring of whole cubes does. Folded
+ * And one thing it cannot do that the ring of whole cubes does. Folded
  * halfway between a plank and a 2x2x2 — one end turned over onto the plank —
  * the infinity cube is a hook, a solid a hand stops at, and its maze holds up
- * there. This one's does not: with its four hooks counted as well, no maze was
- * found that is perfect in all of them (none in seven seeds at two, three and
- * four cells across, and none in eight times the search, where the best came
- * to nine shapes of ten). One hook alone is fine; two are already too many.
- * Not shown impossible, only not found. So the shapes here are the six that
- * are blocks or layers (`boxOrLayer`), and the object says, on the page and
- * on the pattern, that halfway it is not a perfect maze.
+ * there. This one's cannot: with its four hooks counted as well there is no
+ * maze perfect in all ten, and it is a theorem rather than a failed search
+ * (`countsAreConsistent` in `maze-contracted.ts`, 2026-10-15). Every shape
+ * needs one more block on show than it has open seam passages, which is one
+ * equation per shape; two of the hooks show, between them, exactly the faces
+ * the cube, the star and one plank show between them, and carry the same
+ * passages at every seam, so two trees would have to come up as short of
+ * edges as three. (The search had said as much — none in seven seeds at two,
+ * three and four cells across, none in eight times the search, one hook alone
+ * fine and two already too many — but could not say why.) So the shapes here
+ * are the six that are blocks or layers (`boxOrLayer`), and the object says,
+ * on the page and on the pattern, that halfway it is not a perfect maze.
  *
  * DOM-free, like everything in `core/`.
  */
