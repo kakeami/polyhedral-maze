@@ -39,8 +39,9 @@
  * edges as three. (The search had said as much — none in seven seeds at two,
  * three and four cells across, none in eight times the search, one hook alone
  * fine and two already too many — but could not say why.) So the shapes here
- * are the six that are blocks or layers (`boxOrLayer`), and the object says,
- * on the page and on the pattern, that halfway it is not a perfect maze.
+ * are the six that are blocks or layers (`boxOrLayer`). Neither the page nor
+ * the pattern says so any more (user's decision, 2026-10-15): both list the
+ * six shapes the maze is promised in, and stop there.
  *
  * DOM-free, like everything in `core/`.
  */
@@ -106,9 +107,7 @@ export interface HalfCubeRingMechanism extends Mechanism {
 export const STAR_CUBE: HalfCubeRingObject = {
   id: 'star-cube',
   label: 'Star cube',
-  blurb: 'Eight cubes, each cut in half, that fold from a cube into a twelve-pointed star by way of four '
-    + 'planks; the two show none of the same cells. Folded only halfway, one end turned over, it is '
-    + 'not a perfect maze.',
+  blurb: '8 half cubes · 6 poses',
   halves: INFINITY_CUBE,
   // Eight cells along an edge is 7.2 mm on the 58 mm a square prints at, and
   // a triangle's cells 5.1 mm from base to tip; nine would put those at 4.6,
