@@ -29,7 +29,7 @@
  * And one thing it does not do that the ring of whole cubes does. Folded
  * halfway between a plank and a 2x2x2 — one end turned over onto the plank —
  * the infinity cube is a hook, a solid a hand stops at, and its maze holds up
- * there. This one's does not: with its two hooks counted as well, no maze was
+ * there. This one's does not: with its four hooks counted as well, no maze was
  * found that is perfect in all of them (none in seven seeds at two, three and
  * four cells across, and none in eight times the search, where the best came
  * to nine shapes of ten). One hook alone is fine; two are already too many.

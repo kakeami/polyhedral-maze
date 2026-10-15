@@ -37,7 +37,7 @@ import { A4_SHEET } from './kinetic-sheet-constants.ts';
 import { FOLD_SHEET_STYLE as S, FOLD_SHEET_DEFAULTS as D } from './fold-sheet-constants.ts';
 import type { KineticSurface } from '../core/kinetic/surface.ts';
 import type { KineticDesign, PrintedEnds } from '../core/kinetic/maze.ts';
-import { pickPrintedEnds, rateByState, treeRate } from '../core/kinetic/maze.ts';
+import { pickPrintedEnds, treeRate } from '../core/kinetic/maze.ts';
 import type { CubeRingMechanism, TapeSeam } from '../core/kinetic/mechanisms/cube-ring.ts';
 import type { KineticState, Mat3 } from '../core/kinetic/types.ts';
 import { IDENTITY, applyPlacement } from '../core/kinetic/types.ts';
@@ -302,7 +302,7 @@ export function buildFoldSheets(
 
   sheets.push({
     piece: null,
-    items: assemblySheet(mech, surface, design, ends, seams, sheet, edge, perfectShapes(mech, surface, design)),
+    items: assemblySheet(mech, surface, design, ends, seams, sheet, edge, rate.perfect),
   });
 
   for (let piece = 0; piece < mech.pieceCount; piece++) {
@@ -1130,7 +1130,7 @@ const flush = (lines: readonly string[]): string[] => lines.map(line => line.tri
 /**
  * Where the S and the G are, which is one sentence when every pose shows one
  * of each and another when some pose shows both (`pickRepeatedEnds`): the
- * half-turn ring, once its hook counts, has no two squares that take turns.
+ * half-turn ring, once its hooks count, has no two squares that take turns.
  */
 function marksSentence(mech: CubeRingMechanism, surface: KineticSurface, ends: PrintedEnds): string {
   const twice = mech.states.some((_state, index) => {
@@ -1147,17 +1147,6 @@ function marksSentence(mech: CubeRingMechanism, surface: KineticSurface, ends: P
 
 /** Planks, hooks, zigzags — and arches. */
 const plural = (noun: string): string => (/(ch|sh|s|x)$/.test(noun) ? `${noun}es` : `${noun}s`);
-
-/**
- * How many of the shapes a design is a perfect maze in. A shape a hand can make
- * two ways round (`CubeRingMechanism.twins`) is one shape, and counts only if
- * it is perfect both ways.
- */
-function perfectShapes(mech: CubeRingMechanism, surface: KineticSurface, design: KineticDesign): number {
-  const perfect = rateByState(surface, design).perfect;
-  return mech.poses.filter((_pose, index) => perfect[index] === 1
-    && mech.twins.every((twin, t) => twin.twinOf !== index || perfect[mech.poses.length + t] === 1)).length;
-}
 
 const capitalise = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 

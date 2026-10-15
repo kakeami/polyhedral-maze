@@ -269,14 +269,9 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
           const byRounds = progress.rounds / progress.maxRounds;
           const byPoses = progress.perfectStates / Math.max(1, progress.stateCount);
           controls.setProgress(Math.max(byRounds, byPoses * 0.9));
-          // Counted in shapes, as the buttons are: a shape that can be made two
-          // ways round counts once, and only when both of them are perfect.
-          const best = progress.perfectStates > 0
-            ? perfectShapes(ruling.mech, ruling.surface, search.result().design)
-            : 0;
           controls.setStatus(
-            `Attempt ${progress.rounds}: perfect in ${best} of ` +
-            `${ruling.mech.poses.length} poses so far...`,
+            `Attempt ${progress.rounds}: perfect in ${progress.perfectStates} of ` +
+            `${progress.stateCount} poses so far...`,
           );
           requestAnimationFrame(pump);
           return;
@@ -480,9 +475,6 @@ function nearestRulingOf(next: FoldObject, cells: number): number {
  * solid block that is square, a hook is a plank with one end folded back over
  * it. Numbered in the order the mechanism found them, which is the order the
  * buttons stand in.
- *
- * A shape a hand can make two ways round (`CubeRingMechanism.twins`) is one
- * button, shown as the first way, and is a perfect maze only if both are.
  */
 function describePoses(
   mech: FoldMechanism,
@@ -496,19 +488,7 @@ function describePoses(
       cells: surface.visibleCount[index] ?? 0,
       passages: stats.edges,
       longestWalk: longestWalk(surface, design, index),
-      perfect: statesOfPose(mech, index).every(state => stateStats(surface, design, state).perfect),
+      perfect: stats.perfect,
     };
   });
-}
-
-/** The states a listed pose stands for: itself, then any other way round of it. */
-function statesOfPose(mech: FoldMechanism, pose: number): number[] {
-  const twins = 'twins' in mech ? mech.twins : [];
-  return [pose, ...twins.flatMap((twin, t) => (twin.twinOf === pose ? [mech.poses.length + t] : []))];
-}
-
-/** How many listed poses a design is a perfect maze in, both ways round where there are two. */
-function perfectShapes(mech: FoldMechanism, surface: KineticSurface, design: KineticDesign): number {
-  return mech.poses.filter((_pose, index) =>
-    statesOfPose(mech, index).every(state => stateStats(surface, design, state).perfect)).length;
 }

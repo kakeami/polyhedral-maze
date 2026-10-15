@@ -38,13 +38,12 @@
  *   but every pose in the same component of the fold graph is kept, because a
  *   hand can get to all of them and the maze must hold up in each.
  *
- * And one thing about how they are listed. Two folds that do not get in each
- * other's way can be made in either order — fold the left end of a plank over
- * and then the right, or the right and then the left — and the shape halfway
- * is the same solid either way, with different faces on show. It is listed
- * once (`poses`) and its other arrangement kept beside it (`twins`): a hand
- * can stop at both, so the maze has to hold up in both, but a visitor asking
- * for the hook should not be offered two of them.
+ * And one thing that follows. Two folds that do not get in each other's way
+ * can be made in either order — fold the left end of a plank over first, or
+ * the right — and the shape halfway is a hook either way, but not the same
+ * one: it is turned the other way round and has a third of its faces
+ * different. Both are listed. A hand finds both, and a page that offered one
+ * would leave a player holding the other wondering what it is.
  *
  * DOM-free, like everything in `core/`.
  */
@@ -137,29 +136,14 @@ export interface CubeRingPose {
   readonly tapeBuried: boolean;
 }
 
-/**
- * A pose listed under another one: the same solid, made by the same two folds
- * in the other order. Its own faces are on show, so it is a state of the maze;
- * it is the same shape to a hand, so it is not a button.
- */
-export interface CubeRingTwin extends CubeRingPose {
-  /** The listed pose it is the other arrangement of, as an index into `poses`. */
-  readonly twinOf: number;
-}
-
 export interface CubeRingMechanism extends Mechanism {
   readonly object: CubeRingObject;
   /** Cells across one face of one cube. */
   readonly cellsPerFace: number;
   readonly ring: readonly Lattice[];
   readonly hinges: readonly number[];
-  /**
-   * The shapes a hand can stop at, one each: the first `poses.length` states,
-   * in the same order. The states after them are the `twins`.
-   */
+  /** The states, described: same order, same length. */
   readonly poses: readonly CubeRingPose[];
-  /** The other arrangement of a listed shape: the states after the poses, in this order. */
-  readonly twins: readonly CubeRingTwin[];
   /** Poses of this object a hand cannot fold to from the states. */
   readonly strays: readonly CubeRingPose[];
   /** Index into `cells` for one cell of one cube. */
@@ -745,33 +729,13 @@ function bentBar(squares: readonly number[][]): string | null {
   return null;
 }
 
-/**
- * The occupancy as text that two congruent shapes share: the least of its
- * forty-eight images under the cube's turns and mirrors, moved to the origin.
- */
-function congruenceKey(placed: readonly Placement[]): string {
-  const cells = placed.map(p => p.offset.map(x => Math.round(x - 0.5)));
-  let least: string | null = null;
-  for (const order of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
-    for (let signs = 0; signs < 8; signs++) {
-      const moved = cells.map(c => order.map((from, to) => ((signs >> to) & 1 ? -1 : 1) * c[from]!));
-      const low = [0, 1, 2].map(a => Math.min(...moved.map(c => c[a]!)));
-      const text = moved.map(c => c.map((x, a) => x - low[a]!).join(',')).sort().join(' ');
-      if (least === null || text < least) least = text;
-    }
-  }
-  return least!;
-}
-
 // ─── the object's own shape, worked out once ─────────────────────────────
 
 export interface CubeRingShape {
   /** Every way it closes: what the motion is planned over. */
   readonly closures: readonly KineticState[];
-  /** The poses of one fold component: what a hand can get to, one of each shape. */
+  /** The poses of one fold component: what a hand can get to, all of it. */
   readonly poses: readonly CubeRingPose[];
-  /** The rest of that component: a listed shape, made the other way round. */
-  readonly twins: readonly CubeRingTwin[];
   /** Poses in no component of its own — there is no way to fold into them. */
   readonly strays: readonly CubeRingPose[];
   /** The folds between every closure, with `poseAt` on the states. */
@@ -885,7 +849,6 @@ export function cubeRingShape(
     : [...parts.values()].find(part => part.some(i => fromLayout.has(candidates[i]!.closure)));
   const reachable = layoutPart ?? [...parts.values()].sort((a, b) => b.length - a.length)[0]!;
   const inComponent = new Set(reachable);
-  const twinOf = twinsAmong(reachable, candidates.map(c => c.closure), closures, over);
 
   const counted = new Map<string, number>();
   const name = (closure: number, genus: number): string => {
@@ -894,14 +857,9 @@ export function cubeRingShape(
     counted.set(kind, nth);
     return `${kind} ${nth}`;
   };
-  const listed = reachable.filter(i => !twinOf.has(i));
-  const poses: CubeRingPose[] = listed.map(i => ({
+  const poses: CubeRingPose[] = reachable.map(i => ({
     ...candidates[i]!, label: name(candidates[i]!.closure, candidates[i]!.genus),
   }));
-  const twins: CubeRingTwin[] = reachable.filter(i => twinOf.has(i)).map(i => {
-    const at = listed.indexOf(twinOf.get(i)!);
-    return { ...candidates[i]!, label: poses[at]!.label, twinOf: at };
-  });
   const strays: CubeRingPose[] = candidates
     .filter((_unused, i) => !inComponent.has(i))
     .map(pose => ({ ...pose, label: labelFor(closures[pose.closure]!, pose.genus) }));
@@ -909,54 +867,11 @@ export function cubeRingShape(
   const made: CubeRingShape = {
     closures,
     poses,
-    twins,
     strays,
     foldGraph: { ...over, poseAt: poses.map(pose => pose.closure) },
   };
   shapes.set(key, made);
   return made;
-}
-
-/**
- * Which poses are another pose made the other way round, each mapped to the
- * one it is listed under (the first of them in closure order).
- *
- * Two poses are one shape when they are the same solid and stand at the two
- * corners of a square of folds: from one pose P, fold A reaches the first and
- * fold B the second, and from there the other fold reaches the same pose Q —
- * two folds that do not touch, made in either order. Being the same solid is
- * part of it, and not a nicety: the other two corners of such a square are a
- * square too, and on the diamond ring they are a cube and a plank.
- *
- * `poses` are candidate indices; `closureOf` maps a candidate to its closure.
- */
-function twinsAmong(
-  poses: readonly number[],
-  closureOf: readonly number[],
-  closures: readonly KineticState[],
-  graph: FoldGraph,
-): Map<number, number> {
-  const arc = (from: number, to: number): string | null => {
-    const fold = graph.folds[closureOf[from]!]!.find(f => f.to === closureOf[to]);
-    return fold ? [...fold.step.pieces].sort((a, b) => a - b).join(',') : null;
-  };
-  const shape = new Map(poses.map(i => [i, congruenceKey(closures[closureOf[i]!]!)]));
-  const twinOf = new Map<number, number>();
-  for (let a = 0; a < poses.length; a++) {
-    for (let b = a + 1; b < poses.length; b++) {
-      const x = poses[a]!;
-      const y = poses[b]!;
-      if (twinOf.has(y) || shape.get(x) !== shape.get(y)) continue;
-      const square = poses.some(p => p !== x && p !== y && poses.some(q => {
-        if (q === p || q === x || q === y) return false;
-        const px = arc(p, x);
-        const xq = arc(x, q);
-        return px !== null && xq !== null && px === arc(y, q) && xq === arc(p, y);
-      }));
-      if (square) twinOf.set(y, twinOf.get(x) ?? x);
-    }
-  }
-  return twinOf;
 }
 
 // ─── the mechanism ───────────────────────────────────────────────────────
@@ -1027,16 +942,15 @@ export function createCubeRing(
     id: `cube-ring-${object.id}-${cells}`,
     pieceCount: pieces,
     cells: all,
-    states: [...shape.poses, ...shape.twins].map(pose => shape.closures[pose.closure]!),
+    states: shape.poses.map(pose => shape.closures[pose.closure]!),
     object,
     cellsPerFace: cells,
     ring: object.ring.map(cell => [...cell] as unknown as Lattice),
     hinges: [...object.hinges],
     poses: shape.poses,
-    twins: shape.twins,
     strays: shape.strays,
     cellIndex: (piece, face, row, col) => piece * perPiece + face * perFace + row * cells + col,
-    stateLabel: index => ([...shape.poses, ...shape.twins][index]?.turns ?? []).join(''),
+    stateLabel: index => (shape.poses[index]?.turns ?? []).join(''),
     closures: () => shape.closures,
     foldGraph: () => shape.foldGraph,
     tapeSeams: () => tapeSeamsOf(object.ring, object.hinges),

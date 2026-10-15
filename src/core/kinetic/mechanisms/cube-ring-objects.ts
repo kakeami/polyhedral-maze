@@ -60,7 +60,7 @@ export const DEFAULT_HINGES: readonly number[] = [2, 3, 2, 3, 2, 1, 2, 3];
 export const INFINITY_CUBE: CubeRingObject = {
   id: 'infinity-cube',
   label: 'Infinity cube',
-  blurb: 'Eight cubes that fold round eight shapes — two cubes, four planks and two hooks — '
+  blurb: 'Eight cubes that fold round ten shapes — two cubes, four planks and four hooks — '
     + 'and the two cubes show none of the same faces.',
   ring: PLANK_RING,
   hinges: DEFAULT_HINGES,
@@ -93,7 +93,7 @@ export const INFINITY_CUBE: CubeRingObject = {
 export const HALF_TURN_RING: CubeRingObject = {
   id: 'half-turn-ring',
   label: 'Half-turn ring',
-  blurb: 'Eight cubes that fold by half turns into two cubes, two planks and a hook, '
+  blurb: 'Eight cubes that fold by half turns into two cubes, two planks and two hooks, '
     + 'and the two cubes swap a third of their faces.',
   ring: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0], [3, 1, 1], [2, 1, 1], [1, 1, 1], [0, 1, 1]],
   hinges: [2, 1, 2, 0, 3, 0, 3, 0],
@@ -118,7 +118,7 @@ export const QUARTER_TURN_RING: CubeRingObject = {
   id: 'quarter-turn-ring',
   label: 'Quarter-turn ring',
   blurb: 'Eight cubes taped on the plank like the infinity cube, going from cube to cube by quarter '
-    + 'turns past two planks and two hooks; the two cubes swap a third of their faces.',
+    + 'turns past two planks and four hooks; the two cubes swap a third of their faces.',
   ring: PLANK_RING,
   hinges: [2, 3, 2, 2, 2, 1, 2, 0],
   maxCells: 10,
@@ -142,7 +142,7 @@ export const QUARTER_TURN_RING: CubeRingObject = {
 export const DIAMOND_RING: CubeRingObject = {
   id: 'diamond-ring',
   label: 'Diamond ring',
-  blurb: 'Eight cubes taped flat as a diamond, folding into two cubes, two planks and two hooks; '
+  blurb: 'Eight cubes taped flat as a diamond, folding into two cubes, two planks and four hooks; '
     + 'the two cubes show the same faces, put together differently.',
   ring: [[1, 0, 0], [2, 0, 0], [3, 1, 0], [3, 2, 0], [2, 3, 0], [1, 3, 0], [0, 2, 0], [0, 1, 0]],
   hinges: [2, 0, 1, 0, 2, 0, 1, 0],
@@ -270,7 +270,8 @@ export const FRAME_LOOP: CubeRingObject = {
   id: 'frame-loop',
   label: 'Frame loop',
   blurb: 'Twelve cubes that fold round in a loop: frame, arch, zigzag, block, plank, plank, hook, '
-    + 'arch, and back to the frame.',
+    + 'arch, and back to the frame. The zigzag and the hook come two ways round, as one end or '
+    + 'the other folds first.',
   ring: rectRing(4, 4),
   hinges: [3, 0, 3, 1, 1, 1, 1, 0, 1, 2, 1, 0],
   maxCells: 10,
@@ -283,7 +284,7 @@ export const FRAME_LOOP: CubeRingObject = {
  * Every one of them goes round a loop, which is what the page is for: the
  * rings of eight between two cubes, their planks and the hooks halfway, and
  * the ring of twelve between a frame, a block, two planks and the arches,
- * zigzag and hook between them. The four rings of eight fold between the same
+ * zigzags and hooks between them. The four rings of eight fold between the same
  * silhouettes and differ in what the fold does to the surface: every face
  * swapped between the two cubes, a third of them by half turns, a third by
  * quarter turns, or none at all.

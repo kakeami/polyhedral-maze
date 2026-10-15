@@ -24,9 +24,9 @@ const ringSurface = buildSurface(ring);
  */
 let shared: ReturnType<typeof contractedSearch> | null = null;
 const found = (): ReturnType<typeof contractedSearch> => {
-  // Seed 7: on the ten states the ring has once its hooks count, it is found
-  // in a dozen attempts, where seed 1 runs out of them.
-  shared ??= contractedSearch(ringSurface, { rng: createRng(7) });
+  // Seed 5: on the ten states the ring has once its hooks count, it is found
+  // in nine attempts, where seed 1 runs out of them.
+  shared ??= contractedSearch(ringSurface, { rng: createRng(5) });
   return shared;
 };
 
@@ -119,7 +119,7 @@ describe('the contracted search', () => {
   it('gives the same design an attempt at a time as it does all at once', () => {
     // Both halves of one claim, and one search rather than two: a seed names a
     // design, and stepping the search is only a way of not blocking a page.
-    const stepped = createContractedSearch(ringSurface, { rng: createRng(7) });
+    const stepped = createContractedSearch(ringSurface, { rng: createRng(5) });
     let steps = 0;
     while (!stepped.step()) steps++;
     expect(stepped.progress.rounds).toBeGreaterThan(0);
