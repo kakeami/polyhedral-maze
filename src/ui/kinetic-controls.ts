@@ -29,7 +29,7 @@ import {
 import type { KineticParams, MechanismId } from './kinetic-param-codec.ts';
 import { JOINED_PAIRS, joinedPairById, DEFAULT_JOINED_PAIR } from '../core/kinetic/mechanisms/joined.ts';
 import { GYRATIONS, gyrationById, DEFAULT_GYRATION } from '../core/kinetic/mechanisms/gyration.ts';
-import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
+import { SCENE_PRESETS } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
 import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
 import { byId, esc, randomIndex, randomWithinSlider, showToast } from './panel.ts';
@@ -87,7 +87,6 @@ export function createKineticControls(
   const kSlider = el<HTMLInputElement>('kin-k');
   const seedInput = el<HTMLInputElement>('kin-seed');
   const styleSelect = el<HTMLSelectElement>('kin-style');
-  const styleNote = el<HTMLDivElement>('kin-style-note');
   const solutionCheck = el<HTMLInputElement>('kin-solution');
   const motionCheck = el<HTMLInputElement>('kin-motion');
   const autoRotateCheck = el<HTMLInputElement>('kin-autorotate');
@@ -219,14 +218,7 @@ export function createKineticControls(
   motionCheck.addEventListener('change', () => actions.get('motion')?.());
   autoRotateCheck.addEventListener('change', () => actions.get('auto-rotate')?.());
 
-  function updateStyleNote() {
-    styleNote.textContent = resolvePreset(styleSelect.value).note;
-  }
-  styleSelect.addEventListener('change', () => {
-    updateStyleNote();
-    actions.get('style')?.();
-  });
-  updateStyleNote();
+  styleSelect.addEventListener('change', () => actions.get('style')?.());
 
   el('kin-shuffle-seed').addEventListener('click', () => {
     seedInput.value = String(randomSeed());
@@ -288,18 +280,17 @@ export function createKineticControls(
       motionCheck.checked = params.motion;
       autoRotateCheck.checked = params.autoRotate;
       styleSelect.value = params.style;
-      updateStyleNote();
       syncBounds();
     },
     setMetrics(m) {
       const everyState = m.perfectStates === m.states;
       metricsDiv.innerHTML = `
         <div class="${everyState ? 'good' : 'warn'}">Perfect in
-          <b>${m.perfectStates}</b> of ${m.states} states${everyState ? ' — all of them' : ''}</div>
-        <div>Passages: <b>${m.passages}</b> <span class="hint">(the same in every state)</span></div>
+          <b>${m.perfectStates}</b> of ${m.states} states</div>
+        <div>Passages: <b>${m.passages}</b></div>
         <div>Seams opened: <b>${m.seamPassages}</b> <span class="hint">of ${m.seamClasses}</span></div>
         <div>Cells: <b>${m.cells}</b></div>
-        <div>Now: <b>${m.stateLabel}</b> <span class="hint">(state ${m.stateIndex})</span></div>
+        <div>Now: <b>${m.stateLabel}</b></div>
         <div>Solution: <b>${m.solutionLength}</b> steps</div>
       `;
     },
@@ -402,7 +393,7 @@ function buildHTML(p: KineticParams): string {
     </div>
 
     <div id="kin-pair-group"${p.mechanism === 'pair' ? '' : ' hidden'}>
-      <label>Solids <span class="hint">(two of them, glued)</span>
+      <label>Solids
         <select id="kin-pair">
           ${pairOptions}
         </select>
@@ -414,7 +405,7 @@ function buildHTML(p: KineticParams): string {
     </div>
 
     <div id="kin-cut-group"${p.mechanism === 'cut' ? '' : ' hidden'}>
-      <label>Solid <span class="hint">(cut along its own edges)</span>
+      <label>Solid
         <select id="kin-cut">
           ${cutOptions}
         </select>
@@ -434,25 +425,24 @@ function buildHTML(p: KineticParams): string {
     </label>
     <div class="shape-info" id="kin-shape-info"></div>
 
-    <label>Style <span class="hint">(3D view only)</span>
+    <label>Style
       <select id="kin-style">
         ${styleOptions}
       </select>
     </label>
-    <div class="shape-info" id="kin-style-note"></div>
 
     <div class="checkboxes">
       <label><input id="kin-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
-      <label title="The pieces click round on their own. Off, they stay put until you turn one by hand"><input id="kin-motion" type="checkbox" ${p.motion ? 'checked' : ''} /><span id="kin-motion-label">${p.mechanism === 'pair' ? ' Halves turn' : ' Rings turn'}</span></label>
-      <label title="The view drifts around the object. This turns the camera, not the mechanism"><input id="kin-autorotate" type="checkbox" ${p.autoRotate ? 'checked' : ''} /> Auto-rotate</label>
+      <label><input id="kin-motion" type="checkbox" ${p.motion ? 'checked' : ''} /><span id="kin-motion-label">${p.mechanism === 'pair' ? ' Halves turn' : ' Rings turn'}</span></label>
+      <label><input id="kin-autorotate" type="checkbox" ${p.autoRotate ? 'checked' : ''} /> Auto-rotate</label>
     </div>
 
     <div class="buttons">
-      <button id="kin-shuffle-seed" title="A different maze on the same mechanism">Shuffle seed</button>
-      <button id="kin-shuffle-all" title="A different mechanism as well: sides, rings, ruling, seams and seed">Shuffle all</button>
+      <button id="kin-shuffle-seed">Shuffle seed</button>
+      <button id="kin-shuffle-all">Shuffle all</button>
       <button id="kin-copy-url" class="wide">Copy URL</button>
-      <button id="kin-export-pdf" class="wide" title="The pieces and their bulkheads, to print, cut and thread on a 6 mm dowel">${p.mechanism === 'pair' ? 'Export pieces PDF' : 'Export rings PDF'}</button>
-      <button id="kin-harder" class="wide" hidden title="The search is a heuristic: more time is another attempt, not a better one, but it usually finds it">Search harder</button>
+      <button id="kin-export-pdf" class="wide">${p.mechanism === 'pair' ? 'Export pieces PDF' : 'Export rings PDF'}</button>
+      <button id="kin-harder" class="wide" hidden>Search harder</button>
     </div>
 
     <div id="kin-progress" class="progress" hidden>
@@ -463,16 +453,9 @@ function buildHTML(p: KineticParams): string {
 
     <div class="legend">
       <div class="key"><span class="dot" style="color:#22bb22;">&#9679;</span>
-        <span><b>Start</b> &mdash; where the walk begins</span></div>
+        <span><b>Start</b></span></div>
       <div class="key"><span class="dot" style="color:#dd2222;">&#9679;</span>
-        <span><b>Goal</b> &mdash; where it ends</span></div>
-      <div class="note">Both sit on a dead end, and they stay put: the object turns
-        underneath them, so the two marks are printed once and mean the same two squares
-        however it is turned. A stack has a free rim to put them on; a closed object &mdash;
-        a glued pair, a cut solid &mdash; has none, so they go on dead ends that stay dead
-        ends in every state. The route between them is redrawn every
-        time it settles, and dimmed while it moves &mdash; mid-turn it would mean
-        nothing.</div>
+        <span><b>Goal</b></span></div>
     </div>
 
     ${sourceLinkHTML()}

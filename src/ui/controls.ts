@@ -10,7 +10,7 @@ import {
   availableCategories,
 } from '../core/polyhedra/registry.ts';
 import type { ShapeCategory, ShapeDescriptor } from '../core/polyhedra/registry.ts';
-import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
+import { SCENE_PRESETS } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
 import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
 import { byId, esc, randomIndex, randomWithinSlider, showToast } from './panel.ts';
@@ -26,16 +26,6 @@ export interface ControlsContext {
   setExportBusy(busy: boolean): void;
   setFacePagesBusy(busy: boolean, progress?: string): void;
 }
-
-/**
- * All three produce a perfect maze — one route between any two cells, no loops
- * — so what the choice changes is the character of the maze, not its validity.
- */
-const ALGORITHM_NOTES: Record<Algorithm, string> = {
-  KRUSKAL: 'Grows from everywhere at once: short branches, dead ends spread evenly.',
-  DFS: 'Follows its nose until it is stuck: long winding corridors, fewer dead ends.',
-  WILSON: 'Unbiased — every possible maze on this solid is equally likely.',
-};
 
 const ALL_CATEGORIES = '__all__';
 type CategoryScope = ShapeCategory | typeof ALL_CATEGORIES;
@@ -56,10 +46,8 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
   const kSlider = el<HTMLInputElement>('ctrl-k');
   const kValue = el<HTMLSpanElement>('ctrl-k-val');
   const algoSelect = el<HTMLSelectElement>('ctrl-algo');
-  const algoNote = el<HTMLDivElement>('ctrl-algo-note');
   const seedInput = el<HTMLInputElement>('ctrl-seed');
   const styleSelect = el<HTMLSelectElement>('ctrl-style');
-  const styleNote = el<HTMLDivElement>('ctrl-style-note');
   const warpCheck = el<HTMLInputElement>('ctrl-warp');
   const solutionCheck = el<HTMLInputElement>('ctrl-solution');
   const metricsDiv = el<HTMLDivElement>('ctrl-metrics');
@@ -145,9 +133,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     renderShapeOptions(shape.id);
 
     algoSelect.selectedIndex = randomIndex(algoSelect.options.length);
-    updateAlgoNote();
     styleSelect.selectedIndex = randomIndex(styleSelect.options.length);
-    updateStyleNote();
 
     nSlider.value = String(randomWithinSlider(nSlider));
     nValue.textContent = nSlider.value;
@@ -169,20 +155,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
     actions.get('export-face-pages')?.();
   });
 
-  function updateAlgoNote() {
-    algoNote.textContent = ALGORITHM_NOTES[algoSelect.value as Algorithm] ?? '';
-  }
-  updateAlgoNote();
-  algoSelect.addEventListener('change', updateAlgoNote);
-
-  function updateStyleNote() {
-    styleNote.textContent = resolvePreset(styleSelect.value).note;
-  }
-  updateStyleNote();
-  styleSelect.addEventListener('change', () => {
-    updateStyleNote();
-    actions.get('style')?.();
-  });
+  styleSelect.addEventListener('change', () => actions.get('style')?.());
 
   const autoRotateCheck = el<HTMLInputElement>('ctrl-auto-rotate');
   autoRotateCheck.addEventListener('change', () => {
@@ -209,8 +182,7 @@ export function createControls(container: HTMLElement, initial: MazeParams): Con
         <span class="hint">${(m.solutionRatio * 100).toFixed(1)}% of the maze</span></div>
       <div>Dead ends: <b>${m.deadEndCount}</b>
         <span class="hint">${(m.deadEndDensity * 100).toFixed(1)}% of cells</span></div>
-      <div>Face crossings: <b>${m.faceCrossings}</b>
-        <span class="hint">edges the answer runs over</span></div>
+      <div>Face crossings: <b>${m.faceCrossings}</b></div>
       <div>Faces visited: <b>${m.faceCoverage}</b>
         <span class="hint">of ${m.totalFaces}</span></div>
       ${m.warpUsed ? '<div>Warp: <b>on the answer</b></div>' : ''}
@@ -305,7 +277,6 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
         <option value="WILSON"${p.algorithm === 'WILSON' ? ' selected' : ''}>Wilson</option>
       </select>
     </label>
-    <div class="shape-info" id="ctrl-algo-note"></div>
 
     <label>n <span class="hint">(cells along a face edge)</span>: <span id="ctrl-n-val">${p.n}</span>
       <input id="ctrl-n" type="range" min="2" max="12" value="${p.n}" />
@@ -319,38 +290,35 @@ function buildHTML(p: MazeParams, activeCategory: CategoryScope): string {
       <input id="ctrl-seed" type="number" min="0" max="999999" value="${p.seed}" />
     </label>
 
-    <label>Style <span class="hint">(3D view only)</span>
+    <label>Style
       <select id="ctrl-style">
         ${styleOptions}
       </select>
     </label>
-    <div class="shape-info" id="ctrl-style-note"></div>
 
     <div class="checkboxes">
-      <label title="A skewer straight through the solid, surfacing on the far side: the one passage that does not run along the surface"><input id="ctrl-warp" type="checkbox" ${p.warp ? 'checked' : ''} /> Warp</label>
+      <label><input id="ctrl-warp" type="checkbox" ${p.warp ? 'checked' : ''} /> Warp</label>
       <label><input id="ctrl-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
       <label><input id="ctrl-auto-rotate" type="checkbox" checked /> Auto-rotate</label>
     </div>
 
     <div class="buttons">
-      <button id="btn-shuffle-seed" title="A different maze on the same solid">Shuffle seed</button>
-      <button id="btn-shuffle-all" title="A new solid, algorithm, resolution, seed and material — everything except the Warp and Show solution switches">Shuffle all</button>
+      <button id="btn-shuffle-seed">Shuffle seed</button>
+      <button id="btn-shuffle-all">Shuffle all</button>
       <button id="btn-copy-url" class="wide">Copy URL</button>
-      <button id="btn-export-pdf" class="wide" title="Two pages: the whole net as a puzzle, plus the answer">Export net PDF</button>
-      <button id="btn-export-faces" class="wide" title="Every face as a cut-out piece, all at the same scale, packed several to a sheet — for large papercraft">Export face pages PDF</button>
+      <button id="btn-export-pdf" class="wide">Export net PDF</button>
+      <button id="btn-export-faces" class="wide">Export face pages PDF</button>
     </div>
 
     <div id="ctrl-metrics" class="metrics"></div>
 
     <div class="legend">
       <div class="key"><span class="dot" style="color:#22bb22;">&#9679;</span>
-        <span><b>Start</b> &mdash; where the walk begins, on a dead end of the solid</span></div>
+        <span><b>Start</b></span></div>
       <div class="key"><span class="dot" style="color:#dd2222;">&#9679;</span>
-        <span><b>Goal</b> &mdash; where it ends, as far from the start as the maze allows</span></div>
+        <span><b>Goal</b></span></div>
       <div class="key"><span class="dot" style="color:#eecc00;">&#9679;</span>
-        <span><b>Warp</b> &mdash; the two mouths of a passage straight through the solid</span></div>
-      <div class="note">The pins stand up out of the surface so they can be found from
-        any angle; the maze itself runs along the faces.</div>
+        <span><b>Warp</b></span></div>
     </div>
 
     ${sourceLinkHTML()}

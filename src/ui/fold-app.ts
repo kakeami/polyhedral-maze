@@ -159,7 +159,7 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     scene.setAutoRotate(controls.isAutoRotating());
     scene.setAutoFold(controls.isAutoFolding());
     controls.setPoses(next.poses, pose);
-    controls.setSeed(next.seed, next.cached);
+    controls.setSeed(next.seed);
     controls.setMarkerNote(next.mech.states.some((_unused, state) => {
       const visible = next.surface.visibleOfState(state);
       return next.ends.start.filter(cell => visible[cell]).length > 1

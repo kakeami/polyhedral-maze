@@ -42,7 +42,7 @@
  * pattern to print. All of them are named as the other pages name them.
  */
 
-import { SCENE_PRESETS, resolvePreset } from '../render/scene-presets.ts';
+import { SCENE_PRESETS } from '../render/scene-presets.ts';
 import type { PresetId } from '../render/scene-presets.ts';
 import type { FoldObjectSummary } from './fold-objects.ts';
 import { pageSwitchHTML, sourceLinkHTML } from './page-nav.ts';
@@ -100,8 +100,8 @@ export interface FoldControlsContext {
   setObject(id: string): void;
   /** The rulings there are mazes for, and which one is on show. */
   setRulings(rulings: readonly number[], current: number): void;
-  /** The seed of the maze on show, and whether it came off the cache. */
-  setSeed(seed: number, cached: boolean): void;
+  /** The seed of the maze on show. */
+  setSeed(seed: number): void;
   /** Used by Shuffle all, which picks a material as well as an object. */
   setStyle(style: PresetId): void;
   setPoses(poses: readonly FoldPose[], current: number): void;
@@ -136,7 +136,6 @@ export function createFoldControls(
   const cellsSlider = el<HTMLInputElement>('fold-cells');
   const cellsValue = el<HTMLSpanElement>('fold-cells-val');
   const seedInput = el<HTMLInputElement>('fold-seed');
-  const seedNote = el<HTMLSpanElement>('fold-seed-note');
   const poseSelect = el<HTMLSelectElement>('fold-pose');
   const metricsDiv = el<HTMLDivElement>('fold-metrics');
   const statusDiv = el<HTMLDivElement>('fold-status');
@@ -146,7 +145,6 @@ export function createFoldControls(
   const autoFold = el<HTMLInputElement>('fold-autofold');
   const solution = el<HTMLInputElement>('fold-solution');
   const styleSelect = el<HTMLSelectElement>('fold-style');
-  const styleNote = el<HTMLDivElement>('fold-style-note');
   const markerNote = el<HTMLDivElement>('fold-marker-note');
   const exportBtn = el<HTMLButtonElement>('fold-export-pdf');
   const copyBtn = el<HTMLButtonElement>('fold-copy-url');
@@ -193,11 +191,7 @@ export function createFoldControls(
   autoFold.addEventListener('change', () => actions.get('auto-fold')?.());
   exportBtn.addEventListener('click', () => actions.get('export-pdf')?.());
   copyBtn.addEventListener('click', () => actions.get('copy-url')?.());
-  styleSelect.addEventListener('change', () => {
-    styleNote.textContent = resolvePreset(styleSelect.value).note;
-    actions.get('style')?.();
-  });
-  styleNote.textContent = resolvePreset(styleSelect.value).note;
+  styleSelect.addEventListener('change', () => actions.get('style')?.());
 
   return {
     getParams() {
@@ -228,12 +222,10 @@ export function createFoldControls(
       exportState = { ...state };
       exportBtn.textContent = state.label;
       exportBtn.disabled = !state.enabled;
-      exportBtn.title = state.enabled
-        ? 'How the pieces go together, then one sheet for each piece, to print, cut and tape'
-        : 'This object has no printed pattern yet';
+      exportBtn.title = state.enabled ? '' : 'This object has no printed pattern yet';
     },
     setMarkerNote(marks) {
-      markerNote.innerHTML = marks === 'pairs' ? PAIRED_MARKS : REPEATED_MARKS;
+      markerNote.textContent = marks === 'pairs' ? PAIRED_MARKS : REPEATED_MARKS;
     },
     setRulings(next, current) {
       rulings = next;
@@ -244,15 +236,11 @@ export function createFoldControls(
       cellsSlider.disabled = next.length < 2;
       cellsValue.textContent = String(rulingAt(at));
     },
-    setSeed(seed, cached) {
+    setSeed(seed) {
       seedInput.value = String(seed);
-      // Said quietly, because it is about the page rather than about the maze:
-      // the same seed is the same maze either way.
-      seedNote.textContent = cached ? '' : 'searched';
     },
     setStyle(style) {
       styleSelect.value = style;
-      styleNote.textContent = resolvePreset(style).note;
     },
     setPoses(poses, current) {
       poseSelect.innerHTML = poses.map((pose, index) =>
@@ -328,17 +316,10 @@ export function createFoldControls(
   };
 }
 
-const PAIRED_MARKS = `Each mark is printed on <b>two</b> squares, and exactly one of
-        the two is on the outside in any pose &mdash; a ring of cubes buries part of
-        itself, and what it buries changes as it folds. Fold the object and the mark you
-        were looking at goes inside while its twin comes out. Here only the one on the
-        outside has a pin; the paper carries both.`;
+const PAIRED_MARKS = 'Each mark is printed twice; the pin is on the one outside.';
 
-const REPEATED_MARKS = `Each mark is printed on <b>two</b> cells. This object has no two
-        cells that take turns on the outside, so in some poses both of a mark are out:
-        start from any S and finish at any G. Every pose is a perfect maze, so each of
-        those walks has exactly one way, and <b>Show solution draws the shortest of
-        them</b> &mdash; which is the one Solution here counts.`;
+const REPEATED_MARKS = 'Each mark is printed twice. Where both are outside, '
+  + 'the solution shown is the shortest.';
 
 const BLURB =
   'Cubes taped into a ring, folded into every shape the tape allows. ' +
@@ -364,32 +345,31 @@ function buildHTML(p: FoldParams): string {
       <input id="fold-cells" type="range" min="0" max="0" value="0" />
     </label>
 
-    <label>Pose <span class="hint">(it folds its way there)</span>
+    <label>Pose
       <select id="fold-pose"></select>
     </label>
 
-    <label>Seed <span class="hint" id="fold-seed-note"></span>
+    <label>Seed
       <input id="fold-seed" type="number" min="0" max="${FOLD_LIMITS.maxSeed}" value="${p.seed}" />
     </label>
 
-    <label>Style <span class="hint">(3D view only)</span>
+    <label>Style
       <select id="fold-style">
         ${styleOptions}
       </select>
     </label>
-    <div class="shape-info" id="fold-style-note"></div>
 
     <div class="checkboxes">
-      <label title="The way from the entrance to the exit in the pose on show. It is a different way in every pose. Where two of a mark are on show, it is the shortest way between them"><input id="fold-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
-      <label title="It goes from pose to pose on its own, a fold at a time, and keeps out of your way for a few seconds after you have asked for something. Off, it stays where it is put"><input id="fold-autofold" type="checkbox" ${p.fold ? 'checked' : ''} /> Cubes fold</label>
-      <label title="The view drifts around the object. This turns the camera, not the object"><input id="fold-autorotate" type="checkbox" ${p.autoRotate ? 'checked' : ''} /> Auto-rotate</label>
+      <label><input id="fold-solution" type="checkbox" ${p.showSolution ? 'checked' : ''} /> Show solution</label>
+      <label><input id="fold-autofold" type="checkbox" ${p.fold ? 'checked' : ''} /> Cubes fold</label>
+      <label><input id="fold-autorotate" type="checkbox" ${p.autoRotate ? 'checked' : ''} /> Auto-rotate</label>
     </div>
 
     <div class="buttons">
-      <button id="fold-shuffle-seed" title="A different maze on the same object. Every seed is a maze that is perfect in every pose; the first few at each ruling come with the page, the rest are found here and now">Shuffle seed</button>
-      <button id="fold-shuffle-all" title="A new object, ruling, seed, pose and material — everything except the Show solution, Cubes fold and Auto-rotate switches">Shuffle all</button>
+      <button id="fold-shuffle-seed">Shuffle seed</button>
+      <button id="fold-shuffle-all">Shuffle all</button>
       <button id="fold-copy-url" class="wide">Copy URL</button>
-      <button id="fold-export-pdf" class="wide" title="How the cubes go together, then one sheet for each cube, to print, cut and tape">Export cubes PDF</button>
+      <button id="fold-export-pdf" class="wide">Export cubes PDF</button>
     </div>
 
     <div class="progress" id="fold-progress" hidden>
@@ -400,10 +380,10 @@ function buildHTML(p: FoldParams): string {
 
     <div class="legend">
       <div class="key"><span class="dot" style="color:#22bb22;">&#9679;</span>
-        <span><b>Start</b> &mdash; where the walk begins</span></div>
+        <span><b>Start</b></span></div>
       <div class="key"><span class="dot" style="color:#dd2222;">&#9679;</span>
-        <span><b>Goal</b> &mdash; where it ends</span></div>
-      <div class="note" id="fold-marker-note">${PAIRED_MARKS}</div>
+        <span><b>Goal</b></span></div>
+      <div class="note" id="fold-marker-note">${esc(PAIRED_MARKS)}</div>
     </div>
 
     ${sourceLinkHTML()}

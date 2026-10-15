@@ -98,8 +98,6 @@ export interface GroundSpec {
 export interface ScenePreset {
   id: PresetId;
   label: string;
-  /** One line for the UI, explaining what it costs or buys in readability. */
-  note: string;
   palette: PaletteSpec;
   material: FaceMaterialSpec;
   lighting: LightingSpec;
@@ -123,7 +121,6 @@ export const SCENE_PRESETS: readonly ScenePreset[] = [
   {
     id: 'plain',
     label: 'Matte plaster',
-    note: 'The original flat look. No environment reflection at all.',
     palette: { hueStart: 0, hueSpan: 1, saturation: 0.10, lightness: 0.95 },
     material: { metalness: 0, roughness: 1, envMapIntensity: 0 },
     lighting: { exposure: 0.40, ambientIntensity: 0.80, directionalIntensity: 1.20 },
@@ -135,7 +132,6 @@ export const SCENE_PRESETS: readonly ScenePreset[] = [
   {
     id: 'alloy',
     label: 'Brushed alloy',
-    note: 'Metal, but still a bright surface — black walls read exactly as before.',
     palette: { hueStart: 0.55, hueSpan: 0.12, saturation: 0.14, lightness: 0.80 },
     material: { metalness: 0.60, roughness: 0.40, envMapIntensity: 0.85 },
     lighting: { exposure: 0.45, ambientIntensity: 0.45, directionalIntensity: 0.90 },
@@ -149,7 +145,6 @@ export const SCENE_PRESETS: readonly ScenePreset[] = [
   {
     id: 'obsidian',
     label: 'Obsidian monolith',
-    note: 'Dark metal with the lines inverted to light. Highest line contrast.',
     palette: { hueStart: 0.52, hueSpan: 0.30, saturation: 0.28, lightness: 0.17 },
     material: { metalness: 0.72, roughness: 0.48, envMapIntensity: 1.0 },
     lighting: { exposure: 0.55, ambientIntensity: 0.35, directionalIntensity: 1.0 },
