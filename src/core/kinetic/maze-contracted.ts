@@ -143,6 +143,11 @@ export interface ContractedResult {
 export interface ContractedProgress {
   readonly rounds: number;
   readonly maxRounds: number;
+  /**
+   * Annealing steps taken so far, over every attempt. The exact exit's sweeps
+   * are not steps; neither is choosing seams or solving the counts.
+   */
+  readonly steps: number;
   /** States that are perfect mazes under the best design found so far. */
   readonly perfectStates: number;
   readonly stateCount: number;
@@ -237,6 +242,8 @@ interface Engine {
   attempt(rng: Rng, restarts: number): Attempt;
   /** Score against these states only; all of them are the verifier's business. */
   setStates(list: readonly number[]): void;
+  /** Annealing steps taken, over every attempt so far. */
+  readonly steps: number;
 }
 
 function makeEngine(
@@ -249,6 +256,7 @@ function makeEngine(
   },
 ): Engine {
   const { iterations, temperature: startTemperature, fixedCuts, strategy } = options;
+  let stepsTaken = 0;
   /** With the seams held, every move is a wall and the moves that open a seam are not offered. */
   const seamsFixed = fixedCuts !== undefined;
   const patches = findPatches(surface);
@@ -1263,6 +1271,7 @@ function makeEngine(
         // can connect) and it only trades attempts for longer ones — level at
         // seven cells, 70% slower at ten.
         if (step - lastImprove > PLATEAU) break;
+        stepsTaken++;
         if (sinceExit >= exitEvery && cost <= EXIT_COST) {
           sinceExit = 0;
           let won = false;
@@ -1375,6 +1384,7 @@ function makeEngine(
       const next = strategy === 'random' ? proposeAny : propose;
       let cost = scoreAll();
       for (let step = 0; step < iterations && cost > 0; step++) {
+        stepsTaken++;
         const temperature = startTemperature * (1 - step / iterations) + 0.02;
         let move = next(rng);
         for (let retry = 0; retry < LEGAL_TRIES && !legal(move); retry++) move = next(rng);
@@ -1412,7 +1422,13 @@ function makeEngine(
     return { open, openCutClasses, cost: bestCost };
   };
 
-  return { attempt: strategy === 'neutral' ? attemptNeutral : attemptByRepair, setStates };
+  return {
+    attempt: strategy === 'neutral' ? attemptNeutral : attemptByRepair,
+    setStates,
+    get steps() {
+      return stepsTaken;
+    },
+  };
 }
 
 /**
@@ -1603,6 +1619,7 @@ export function createContractedSearch(
       return {
         rounds: Math.min(round, maxRounds),
         maxRounds,
+        steps: engine.steps,
         perfectStates: best?.perfect ?? 0,
         stateCount: surface.stateCount,
       };

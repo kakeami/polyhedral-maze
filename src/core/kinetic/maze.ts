@@ -1479,6 +1479,8 @@ export interface SearchProgress {
   readonly maxRounds: number;
   readonly spent: number;
   readonly effort: number;
+  /** Annealing steps taken so far, summed over rounds and restarts. */
+  readonly steps: number;
   /** States that are perfect mazes under the best design found so far. */
   readonly perfectStates: number;
   readonly stateCount: number;
@@ -1521,6 +1523,7 @@ export function createAllStatesSearch(
 
   let best: AllStatesResult | null = null;
   let spent = 0;
+  let steps = 0;
   let round = 0;
   let finished = false;
 
@@ -1551,6 +1554,7 @@ export function createAllStatesSearch(
     // costs almost nothing, and there is no reason to stop after one of those:
     // it is the growing working set, not the annealing, that gets there.
     spent += attempt.steps * working.size * surface.cellCount;
+    steps += attempt.steps;
 
     const { rate, perfect: perfectStates } = rateByState(surface, attempt.design);
     if (!best || rate.perfect > best.rate.perfect) {
@@ -1584,6 +1588,7 @@ export function createAllStatesSearch(
         maxRounds,
         spent,
         effort,
+        steps,
         perfectStates: best?.rate.perfect ?? 0,
         stateCount: surface.stateCount,
       };
