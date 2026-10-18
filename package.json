@@ -9,7 +9,11 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench": "node bench/run.ts",
+    "bench:summary": "node bench/summarize.ts",
+    "bench:scale": "node bench/scale.ts",
+    "bench:check": "tsc -p bench"
   },
   "dependencies": {
     "@playwright/test": "^1.58.2",
