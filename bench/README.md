@@ -54,3 +54,41 @@ tagged commit and archived with that release.
   can only be compared with runs made at the same moment.
 - The default seeds start at 1000. The page ships designs for seeds 42 and 1 to
   6, which were chosen so that no search is needed.
+- Attempts and steps are determined by the seed, so they come out the same on
+  any machine (unless the time cap cuts a run short). Only the seconds depend
+  on the machine.
+- A shard is a set of object-and-ruling pairs. Every method and seed for one
+  pair runs in one process, so the methods are compared on the same machine
+  however the work is split.
+
+## On a cloud VM
+
+`cloud/vm.sh` installs Node on a Debian or Ubuntu VM and runs shards there in
+the background, so they keep going after the ssh session ends. Give each
+physical core one shard: a 4-vCPU VM usually has two cores, so it takes two
+shards. While the shards run, the VM should do nothing else. Use one machine
+type for a whole run; the summary lists the CPU of every results file it reads.
+
+On the VM, from a clone of the repository at the commit to measure:
+
+```sh
+git clone https://github.com/kakeami/polyhedral-maze ~/polyhedral-maze
+cd ~/polyhedral-maze && git checkout --detach <commit>
+bash bench/cloud/vm.sh setup                  # Node, and a check that the tree is clean
+bash bench/cloud/vm.sh start main 0 2 2 --methods all --seeds 1000-1099
+bash bench/cloud/vm.sh status main            # as often as you like
+bash bench/cloud/vm.sh pack main              # then copy ~/main.tgz back
+```
+
+A commit that has not been pushed can be sent as a git bundle instead. A copy
+of `vm.sh` outside any checkout keeps its own checkout in `~/maze-bench`:
+
+```sh
+git bundle create /tmp/maze.bundle HEAD                       # on your machine
+gcloud compute scp /tmp/maze.bundle bench/cloud/vm.sh <vm>:~ --zone=<zone>
+bash vm.sh setup maze.bundle <commit>                         # on the VM
+bash vm.sh start main 0 2 2 --methods all --seeds 1000-1099
+```
+
+To split one run across two VMs of the same type, start shards `0 2 4` on the
+first and `2 2 4` on the second, with the same options on both.

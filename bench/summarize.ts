@@ -28,6 +28,7 @@ interface RunRecord {
   readonly states: number;
   readonly seconds: number;
   readonly attempts: number;
+  readonly steps: number;
   readonly worstWalk: number | null;
   readonly cap: number;
 }
@@ -35,6 +36,8 @@ interface HeaderRecord {
   readonly kind: 'header';
   readonly commit: string;
   readonly dirty: boolean;
+  readonly cpu: string;
+  readonly node: string;
 }
 
 const files = process.argv.slice(2).filter(a => !a.startsWith('--'));
@@ -44,6 +47,7 @@ if (files.length === 0) throw new Error('usage: node bench/summarize.ts <results
 
 const runs: RunRecord[] = [];
 const commits = new Set<string>();
+const machines = new Set<string>();
 let dirty = false;
 for (const file of files) {
   for (const line of readFileSync(file, 'utf8').split('\n')) {
@@ -51,6 +55,7 @@ for (const file of files) {
     const record = JSON.parse(line) as RunRecord | HeaderRecord;
     if (record.kind === 'header') {
       commits.add(record.commit);
+      machines.add(`${record.cpu}, Node ${record.node}`);
       dirty ||= record.dirty;
     } else runs.push(record);
   }
@@ -66,7 +71,7 @@ for (const r of runs) {
   groups.set(key, list);
 }
 
-const header = ['method', 'object', 'n', 'states', 'found', 'median s', 'p90 s', 'max s', 'mean s (found)', 'attempts (median)', 'worst-pose walk (median)'];
+const header = ['method', 'object', 'n', 'states', 'found', 'median s', 'p90 s', 'max s', 'mean s (found)', 'attempts (median)', 'steps (median)', 'worst-pose walk (median)'];
 const rows: string[][] = [];
 for (const [key, list] of groups) {
   const [method, object, cells] = key.split('|');
@@ -74,6 +79,7 @@ for (const [key, list] of groups) {
   const found = list.filter(r => r.ok);
   const meanFound = found.length ? found.reduce((s, r) => s + r.seconds, 0) / found.length : NaN;
   const attempts = list.map(r => r.attempts).sort((a, b) => a - b);
+  const steps = list.map(r => r.steps ?? NaN).sort((a, b) => a - b);
   const walks = found.map(r => r.worstWalk!).sort((a, b) => a - b);
   const fixed = (x: number): string => (Number.isNaN(x) ? '' : x.toFixed(2));
   rows.push([
@@ -82,11 +88,14 @@ for (const [key, list] of groups) {
     fixed(quantile(seconds, 0.5)), fixed(quantile(seconds, 0.9)), fixed(seconds[seconds.length - 1]!),
     fixed(meanFound),
     String(quantile(attempts, 0.5)),
+    Number.isNaN(quantile(steps, 0.5)) ? '' : String(quantile(steps, 0.5)),
     walks.length ? String(quantile(walks, 0.5)) : '',
   ]);
 }
 
-console.log(`commit ${[...commits][0] ?? 'unknown'}${dirty ? ' (dirty)' : ''}, ${runs.length} runs\n`);
+console.log(`commit ${[...commits][0] ?? 'unknown'}${dirty ? ' (dirty)' : ''}, ${runs.length} runs`);
+// Times from two kinds of machine do not belong in one column; say so.
+console.log(`machine${machines.size > 1 ? 's (times are not comparable across them)' : ''}: ${[...machines].join('; ')}\n`);
 if (csv) {
   console.log(header.join(','));
   for (const row of rows) console.log(row.join(','));

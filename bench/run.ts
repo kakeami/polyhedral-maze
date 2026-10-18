@@ -13,10 +13,16 @@
  *   --seeds    e.g. 1000-1099                                [1000-1009]
  *   --cap      seconds a run may search                      [60]
  *   --out      results file; appended to, never overwritten  [bench/results/<time>.jsonl]
- *   --shard    i/n: this process takes every n-th run from i [0/1]
+ *   --shard    i/n: this process takes every n-th object and
+ *              ruling, counting from i                       [0/1]
  *
  * Seeds start at 1000 by default so as not to measure the seeds the page ships
  * (42 and 1 to 6), which were picked to need no search at all.
+ *
+ * A shard is a set of objects-and-rulings, never part of one: every method
+ * and seed on one object at one ruling runs in the same process, one after
+ * another, so the methods are compared on the same machine in the same state
+ * whichever way the work is split, across processes or across machines.
  *
  * The file is appended to, and a run already in it is skipped, so a long run
  * that is stopped picks up where it was. Its first line, and the first line
@@ -72,17 +78,17 @@ const where = provenance();
 appendFileSync(out, JSON.stringify({ kind: 'header', ...where, config }) + '\n');
 if (where.dirty) console.error('note: the working tree has uncommitted changes; this run is marked dirty');
 
-let index = -1;
+let group = -1;
 let ran = 0;
 let skipped = 0;
 for (const object of objects) {
   for (const cells of rulingsOf(object, rulingSpec)) {
-    // Built only when this shard has something to run on it.
+    group++;
+    if (group % shards !== shard) continue;
+    // Built only when there is something left to run on it.
     let built: ReturnType<typeof build> | null = null;
     for (const method of methods) {
       for (const seed of seeds) {
-        index++;
-        if (index % shards !== shard) continue;
         if (done.has(keyOf(method, object.id, cells, seed))) {
           skipped++;
           continue;
@@ -107,7 +113,7 @@ for (const object of objects) {
         console.error(
           `${method.padEnd(7)} ${object.id} n=${cells} seed ${seed}: `
           + `${got.ok ? 'ok  ' : `${got.perfect}/${surface.stateCount}`} `
-          + `${got.seconds.toFixed(2)} s, ${got.attempts} attempts`,
+          + `${got.seconds.toFixed(2)} s, ${got.attempts} attempts, ${got.steps} steps`,
         );
       }
     }

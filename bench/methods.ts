@@ -50,6 +50,13 @@ export interface Outcome {
   /** Attempts made, or rounds for `cell`: each is an anneal from scratch or close to it. */
   readonly attempts: number;
   /**
+   * Annealing steps over all of them. Like the attempts, and unlike the
+   * seconds, the same on any machine: a seed decides the whole search. A step
+   * is not the same amount of work in two methods, so this compares rulings
+   * and objects within a method, not methods.
+   */
+  readonly steps: number;
+  /**
    * The longest walk in the pose where it is shortest — how much maze the
    * easiest pose still has. Only for a design that is perfect.
    */
@@ -76,6 +83,7 @@ export function run(
     perfect: got.perfect,
     seconds,
     attempts: got.attempts,
+    steps: got.steps,
     worstWalk: ok ? worstWalkOf(surface, got.design!) : null,
   };
 }
@@ -84,6 +92,7 @@ interface Raw {
   readonly design: KineticDesign | null;
   readonly perfect: number;
   readonly attempts: number;
+  readonly steps: number;
 }
 
 function runContracted(
@@ -100,16 +109,16 @@ function runContracted(
   });
   let done = false;
   while (!done && elapsed() < capSeconds) done = search.step();
-  const attempts = search.progress.rounds;
+  const { rounds: attempts, steps } = search.progress;
   // An attempt that never got going (no seam set joined every pose) leaves
   // nothing to report, and a run made only of those has no best design.
   let result;
   try {
     result = search.result();
   } catch {
-    return { design: null, perfect: 0, attempts };
+    return { design: null, perfect: 0, attempts, steps };
   }
-  return { design: result.design, perfect: result.rate.perfect, attempts };
+  return { design: result.design, perfect: result.rate.perfect, attempts, steps };
 }
 
 /**
@@ -131,6 +140,7 @@ function runCell(
   let design: KineticDesign | null = null;
   let perfect = 0;
   let rounds = 0;
+  let steps = 0;
   while (elapsed() < capSeconds && perfect < surface.stateCount) {
     let search;
     try {
@@ -141,6 +151,7 @@ function runCell(
     let done = false;
     while (!done && elapsed() < capSeconds) done = search.step();
     rounds += search.progress.rounds;
+    steps += search.progress.steps;
     let result;
     try {
       result = search.result();
@@ -152,7 +163,7 @@ function runCell(
       perfect = result.rate.perfect;
     }
   }
-  return { design, perfect, attempts: rounds };
+  return { design, perfect, attempts: rounds, steps };
 }
 
 /** Every pose a tree on the cells it shows, counted from the geometry again. */
