@@ -250,6 +250,29 @@ describe('the contracted search', () => {
       .toThrow(/no seam set has block counts/);
   });
 
+  it('can be told which anneal to run, and each still finds the ring a maze', () => {
+    // The repair anneal was this ring's search until the count-neutral one
+    // replaced it, and the random one is the repair anneal with its aim taken
+    // away. Both still find a design here, which is what makes them baselines
+    // to measure against rather than strawmen.
+    for (const [strategy, seed] of [['repair', 5], ['random', 4]] as const) {
+      const got = contractedSearch(ringSurface, { rng: createRng(seed), strategy });
+      expect(got.rate.rate).toBe(1);
+      for (let state = 0; state < ringSurface.stateCount; state++) {
+        expect(stateStats(ringSurface, got.design, state).edges).toBe(ringSurface.visibleCount[state]! - 1);
+      }
+      // Random moves or not, a wall inside one block is never opened.
+      let open = 0;
+      for (const e of ringSurface.internalEdges) if (got.design.open.has(e.classId)) open++;
+      expect(open).toBe(ringSurface.cellCount - blocksOf(ringSurface, got.design.open).count);
+    }
+    // The count-neutral one keeps a bit per state and needs the seams free, so
+    // something that turns cannot be given it.
+    const stack = buildSurface(createStack({ sides: 4, layers: 3, cols: 2, rows: 2 }));
+    expect(() => createContractedSearch(stack, { rng: createRng(1), strategy: 'neutral' }))
+      .toThrow(/count-neutral search needs/);
+  });
+
   it('refuses a surface it cannot be used on', () => {
     const half = {
       ...ringSurface,

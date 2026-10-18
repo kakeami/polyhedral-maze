@@ -115,7 +115,21 @@ export interface ContractedSearchOptions {
    * blocks carry the whole of the arrangement.
    */
   readonly openCutClasses?: readonly number[];
+  /**
+   * Which anneal to run. Left out, the surface decides: the count-neutral one
+   * on anything that folds, the repair anneal on anything that turns or has
+   * its seams held. Named only by a caller that compares them.
+   *
+   * `'random'` is the repair anneal with its aim taken away: every move a wall
+   * or a seam drawn uniformly, under the same rule that opening a wall inside
+   * one block is not a move. Nothing uses it to find a maze. It is the
+   * baseline that says what the aim is worth.
+   */
+  readonly strategy?: Strategy;
 }
+
+/** The anneals one engine can run; see `ContractedSearchOptions.strategy`. */
+export type Strategy = 'neutral' | 'repair' | 'random';
 
 export interface ContractedResult {
   readonly design: KineticDesign;
@@ -231,7 +245,7 @@ function makeEngine(
     iterations: number;
     temperature: number;
     fixedCuts?: readonly number[];
-    strategy: 'repair' | 'neutral';
+    strategy: Strategy;
   },
 ): Engine {
   const { iterations, temperature: startTemperature, fixedCuts, strategy } = options;
@@ -556,10 +570,18 @@ function makeEngine(
     return out;
   };
 
-  const failing: number[] = [];
   /**
    * A move, as the thing it touches: a wall when it is `>= 0`, the seam `~move`
-   * when it is negative.
+   * when it is negative. Drawn uniformly, which is what `propose` falls back on
+   * and the whole of the `'random'` strategy.
+   */
+  const proposeAny = (rng: Rng): number => (seamsFixed
+    ? rng.nextInt(wallCount)
+    : rng.nextInt(wallCount + seamCount) - seamCount);
+
+  const failing: number[] = [];
+  /**
+   * A move, aimed.
    *
    * Aimed at a state that fails, and at the way it fails. A loop is only ever
    * undone by cutting one of the blocks it runs through, so cut that block
@@ -573,9 +595,7 @@ function makeEngine(
   const propose = (rng: Rng): number => {
     failing.length = 0;
     for (let s = 0; s < states; s++) if (costOf[s]! > 0) failing.push(s);
-    if (failing.length === 0) return seamsFixed
-      ? rng.nextInt(wallCount)
-      : rng.nextInt(wallCount + seamCount) - seamCount;
+    if (failing.length === 0) return proposeAny(rng);
     const s = failing[rng.nextInt(failing.length)]!;
     const loops = loopsOf[s]!;
     const mostlyGaps = costOf[s]! > (loops.length / 3) * 2;
@@ -623,9 +643,7 @@ function makeEngine(
       const rb = componentOf.get(blockRoot[wallB[w]!]!);
       if (ra === undefined || rb === undefined || ra !== rb) return w;
     }
-    return seamsFixed
-      ? rng.nextInt(wallCount)
-      : rng.nextInt(wallCount + seamCount) - seamCount;
+    return proposeAny(rng);
   };
 
   const touchedBy = (move: number): number[] =>
@@ -1354,11 +1372,12 @@ function makeEngine(
         relabel(p);
       }
 
+      const next = strategy === 'random' ? proposeAny : propose;
       let cost = scoreAll();
       for (let step = 0; step < iterations && cost > 0; step++) {
         const temperature = startTemperature * (1 - step / iterations) + 0.02;
-        let move = propose(rng);
-        for (let retry = 0; retry < LEGAL_TRIES && !legal(move); retry++) move = propose(rng);
+        let move = next(rng);
+        for (let retry = 0; retry < LEGAL_TRIES && !legal(move); retry++) move = next(rng);
         if (!legal(move)) continue;
         const which = touchedBy(move);
         apply(move);
@@ -1517,9 +1536,13 @@ export function createContractedSearch(
   const chain = chainOf(surface);
   // The count-neutral strategy wants the seam set free and every state scored
   // (it keeps a bit per state); anything else is the repair anneal.
-  const strategy = !chain && options.openCutClasses === undefined && surface.stateCount <= 31
-    ? 'neutral'
-    : 'repair';
+  const neutralFits = !chain && options.openCutClasses === undefined && surface.stateCount <= 31;
+  const strategy = options.strategy ?? (neutralFits ? 'neutral' : 'repair');
+  if (strategy === 'neutral' && !neutralFits) {
+    throw new Error(
+      'the count-neutral search needs an object that folds, its seams free, and at most 31 states',
+    );
+  }
   const engine = makeEngine(surface, {
     iterations: options.iterations ?? 20000,
     temperature: options.temperature ?? 0.8,
