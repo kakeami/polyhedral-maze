@@ -42,10 +42,52 @@ stopped can be resumed with the same command. `--shard i/n` splits the runs
 between processes.
 
 `bench/summarize.ts` will not combine files made at different commits, or made
-on a dirty working tree unless `--allow-dirty` is given.
+on a dirty working tree unless `--allow-dirty` is given. It also refuses a run
+that appears twice, which is what reading two results sets made at one commit
+would give.
+
+Besides one row per method, object and ruling, the summary prints:
+
+- each method over every object and ruling;
+- when `neutral` is among the methods, the others against it seed by seed: the
+  other method's seconds over neutral's for one object, ruling and seed, and
+  their median over the seeds both ran. A ratio marked `≥` had the other
+  method run out of time on some seed, so it is a lower bound; `?` means
+  neutral ran out of time. These medians are then gathered by the number of
+  poses (minimum, median, maximum, and how many fall below 1);
+- the worst pose's longest walk, neutral's over the other method's, on the
+  seeds where both found a design.
+
+The methods of one object and ruling run one after another in one process, so
+both runs of a pair were made under the same load.
 
 `bench/results/` is not tracked. A run worth keeping should be made on a clean,
 tagged commit and archived with that release.
+
+## The size of the problem
+
+`bench/scale.ts` reports each object at each ruling it offers, pose by pose:
+the cells the cell-level search works on, and the blocks and seam passages the
+contracted search works on, read off the shipped seed-42 design.
+
+It also checks what the contracted search needs of the surface, and stops if
+any of it fails:
+
+- a patch is on show whole or buried whole;
+- an internal class is one wall between the same two cells, and is a side of
+  the surface in exactly the poses its patch is on show;
+- every passage joins two cells on show.
+
+The contracted graph is a multigraph, and the report says by how much:
+
+- the most passages one seam class opens in one pose;
+- how many (seam class, pose) pairs open more than one;
+- how many seam passages join two cells of one patch.
+
+It also measures what merging parallel passages would hide. Each seam class the
+shipped design leaves shut is opened on its own. In every pose where that adds
+a passage, the maze now has a cycle. The report counts the cases where the
+graph with parallel passages merged and loops dropped would still be a tree.
 
 ## Measuring time
 
