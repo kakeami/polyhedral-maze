@@ -341,6 +341,29 @@ describe('the pattern for the ring of half cubes', () => {
     expect(plan.grooveFolds).toBe(0);
   });
 
+  it('draws the whole ring laid out on the notes sheet, every piece and every hinge', () => {
+    const labels = plan.views.map(view => view.label);
+    expect(labels.slice(0, 2)).toEqual(['From above', 'From below (turned over towards you)']);
+    // laid flat, from above and from below every piece is in sight
+    expect(plan.views[0]!.pieces).toBe(mech.pieceCount);
+    expect(plan.views[1]!.pieces).toBe(mech.pieceCount);
+    // a face a nearer one covers is left out, and none is missing: a view
+    // covers one square's area per piece in it, no more and no less
+    for (const view of plan.views) expect(view.area, view.label).toBeCloseTo(view.pieces, 9);
+    expect(plan.hingesDrawn).toBe(mech.tapeSeams().length);
+    const numbers = plan.sheets[0]!.items
+      .filter((item): item is { kind: 'text'; text: string } => (item as { kind: string }).kind === 'text')
+      .map(item => item.text);
+    for (let piece = 1; piece <= mech.pieceCount; piece++) expect(numbers).toContain(String(piece));
+  });
+
+  it('draws the ring from the side its squares are on', () => {
+    // laid flat, every kept corner is on one side of the layer: from there
+    // each piece is a square, from the other a cross of four triangles
+    expect(plan.views[0]!.squares).toBe(mech.pieceCount);
+    expect(plan.views[1]!.squares).toBe(0);
+  });
+
   it('says that the page draws the shortest walk where marks are shown twice', () => {
     const notes = plan.sheets[0]!.items
       .filter((item): item is { kind: 'text'; text: string } => (item as { kind: string }).kind === 'text')

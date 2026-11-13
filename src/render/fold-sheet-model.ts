@@ -927,7 +927,7 @@ function drawnArrangement(
  * of tape on its faces. Turning it over first costs nothing, since which way
  * up a hand lays the cubes out is no part of the object.
  */
-function lyingFlat(state: KineticState): KineticState {
+export function lyingFlat(state: KineticState): KineticState {
   const span = [0, 1, 2].map(axis => {
     const xs = state.map(at => at.offset[axis]!);
     return Math.max(...xs) - Math.min(...xs);
@@ -1053,11 +1053,11 @@ function inBodyFrame(rot: Mat3, frame: Frame): Frame {
  * off the bottom of it — at four views of four cells each, a stack is longer
  * than the page whatever is written above it.
  */
-function packDiagrams(
+export function packDiagrams(
   sizes: readonly { wide: number; tall: number }[],
   width: number,
   height: number,
-): { edge: number; at: Vec2[] } {
+): { edge: number; at: Vec2[]; fits: boolean } {
   const header = S.diagramLabelSize + 2.5;
   const shelve = (edge: number): { at: Vec2[]; wide: number; tall: number } => {
     const at: Vec2[] = [];
@@ -1084,10 +1084,10 @@ function packDiagrams(
   // column that is the first one tried.
   for (let edge = D.diagramEdgeMm; edge > D.minDiagramEdgeMm; edge -= 0.25) {
     const tried = shelve(edge);
-    if (tried.wide <= width && tried.tall <= height) return { edge, at: tried.at };
+    if (tried.wide <= width && tried.tall <= height) return { edge, at: tried.at, fits: true };
   }
   const floor = shelve(D.minDiagramEdgeMm);
-  return { edge: D.minDiagramEdgeMm, at: floor.at };
+  return { edge: D.minDiagramEdgeMm, at: floor.at, fits: floor.wide <= width && floor.tall <= height };
 }
 
 /**
