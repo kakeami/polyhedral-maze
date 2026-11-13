@@ -1666,101 +1666,88 @@ export function contractedSuits(surface: KineticSurface): boolean {
  * Whether any seam set at all can satisfy the count equations.
  *
  * In state q a design is a tree only if the blocks on show number one more
- * than the open seam passages. Summed over the patches of one visibility
- * class that is one equation per state over the class sums, and the equations
- * can be dependent: on the infinity cube three planks and a cube show,
- * between them, exactly the faces two hooks, the other cube and the fourth
- * plank show. Such a
- * dependency λ (λ·A = 0 over the state-by-class incidence A) is satisfiable
- * only if the right-hand sides obey it too — Σ λ_q (E_q + 1) = 0 — and since
- * every seam's pair counts turn out to obey the same dependencies (λ·pairs = 0
- * for every seam, checked here rather than assumed), E_q drops out and what
- * is left is Σ λ_q = 0: a dependency with as many states on each side.
+ * than the open seam passages:
  *
- * The star cube with its four hooks fails this: two of its hooks show what
- * its cube, its star and one plank show together, and carry the same passages
- * at every seam, so two trees would have to have three trees' worth of edges
- * short. No design exists for it, at any ruling, and no search will find one.
- * Exact over the rationals, with BigInt.
+ *   Σ_f A[q][f]·c_f − Σ_k P[q][k]·x_k = 1   for every state q,
+ *
+ * with c_f the blocks patch f is cut into, A[q][f] whether f is on show in q,
+ * x_k whether seam class k is open and P[q][k] the passages it opens in q.
+ * Let the c and the x be any real numbers and this has a solution exactly
+ * when the all-ones vector lies in the span of the columns of A and P: one
+ * comparison of ranks, exact over the rationals, in BigInt. When it does not,
+ * no design exists — no seam set, no way of cutting the patches into blocks.
+ *
+ * So the answer is necessary and not sufficient. A block count is a whole
+ * number between one and the patch's cell count, a seam is open or shut, and
+ * the blocks still have to join up; none of that is asked here.
+ *
+ * The equations can be dependent: on the infinity cube three planks and a
+ * cube show, between them, exactly the faces two hooks, the other cube and
+ * the fourth plank show. The star cube with its four hooks is where that
+ * bites: two of its hooks show what its cube, its star and one plank show
+ * together, and carry the same passages at every seam, so two trees would
+ * have to have three trees' worth of edges short. No design exists for it, at
+ * any ruling, and no search will find one.
  */
 export function countsAreConsistent(surface: KineticSurface): boolean {
-  const patches = findPatches(surface);
   const states = surface.stateCount;
-  const posesOf = patches.map(patch => {
-    const poses: number[] = [];
-    for (let s = 0; s < states; s++) if (surface.visibleOfState(s)[patch[0]!]) poses.push(s);
-    return poses;
-  });
-  const classStates: number[][] = [];
-  const seen = new Set<string>();
-  for (const poses of posesOf) {
-    if (poses.length === 0) continue;
-    const key = poses.join(',');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    classStates.push(poses);
+  // The columns of A and P, one entry per state. A span does not care how
+  // often a column comes, or about a column of zeros (a patch never on show,
+  // a seam that opens nothing), so those are dropped.
+  const columns = new Map<string, number[]>();
+  const keep = (column: number[]): void => {
+    if (column.some(x => x !== 0)) columns.set(column.join(','), column);
+  };
+  for (const patch of findPatches(surface)) {
+    const column: number[] = [];
+    for (let s = 0; s < states; s++) column.push(surface.visibleOfState(s)[patch[0]!] ? 1 : 0);
+    keep(column);
   }
-  // Pair counts of each seam class in each state.
   const seamIndex = new Map<number, number>();
   surface.cutClasses.forEach((c, k) => seamIndex.set(c, k));
-  const pairs: number[][] = surface.cutClasses.map(() => new Array<number>(states).fill(0));
+  const passages: number[][] = surface.cutClasses.map(() => new Array<number>(states).fill(0));
   for (let s = 0; s < states; s++) {
     for (const e of surface.adjOfState(s)) {
       const k = seamIndex.get(e.classId);
-      if (k !== undefined) pairs[k]![s] = pairs[k]![s]! + 1;
+      if (k !== undefined) passages[k]![s] = passages[k]![s]! + 1;
     }
   }
-  // Left null space of A (states x classes): solve Aᵀ λ = 0 by exact
-  // Gauss-Jordan over fractions.
-  type Q = { n: bigint; d: bigint };
-  const gcd = (a: bigint, b: bigint): bigint => { let x = a < 0n ? -a : a; let y = b < 0n ? -b : b; while (y) { [x, y] = [y, x % y]; } return x || 1n; };
-  const frac = (n: bigint, d: bigint = 1n): Q => { if (d < 0n) { n = -n; d = -d; } const g = gcd(n, d); return { n: n / g, d: d / g }; };
-  const add = (a: Q, b: Q): Q => frac(a.n * b.d + b.n * a.d, a.d * b.d);
-  const sub = (a: Q, b: Q): Q => frac(a.n * b.d - b.n * a.d, a.d * b.d);
-  const mul = (a: Q, b: Q): Q => frac(a.n * b.n, a.d * b.d);
-  const div = (a: Q, b: Q): Q => frac(a.n * b.d, a.d * b.n);
-  const isZero = (a: Q): boolean => a.n === 0n;
-  const V = classStates.length;
-  const M: Q[][] = classStates.map(poses => {
-    const row: Q[] = [];
-    for (let s = 0; s < states; s++) row.push(frac(poses.includes(s) ? 1n : 0n));
-    return row;
-  });
-  const pivotCols: number[] = [];
-  let rank = 0;
-  for (let c = 0; c < states && rank < V; c++) {
-    let pivot = -1;
-    for (let r = rank; r < V; r++) if (!isZero(M[r]![c]!)) { pivot = r; break; }
-    if (pivot < 0) continue;
-    [M[rank], M[pivot]] = [M[pivot]!, M[rank]!];
-    const inv = div(frac(1n), M[rank]![c]!);
-    M[rank] = M[rank]!.map(x => mul(x, inv));
-    for (let r = 0; r < V; r++) {
-      if (r === rank || isZero(M[r]![c]!)) continue;
-      const f = M[r]![c]!;
-      M[r] = M[r]!.map((x, j) => sub(x, mul(f, M[rank]![j]!)));
+  for (const column of passages) keep(column);
+  const span = [...columns.values()];
+  return exactRank(span) === exactRank([...span, new Array<number>(states).fill(1)]);
+}
+
+/**
+ * The rank of some integer vectors over the rationals, exactly: each vector is
+ * reduced against the ones kept so far by integer cross-multiplication in
+ * BigInt, and kept if anything is left of it.
+ */
+function exactRank(vectors: readonly (readonly number[])[]): number {
+  const gcd = (a: bigint, b: bigint): bigint => {
+    let x = a < 0n ? -a : a;
+    let y = b < 0n ? -b : b;
+    while (y) {
+      [x, y] = [y, x % y];
     }
-    pivotCols.push(c);
-    rank++;
-  }
-  for (let free = 0; free < states; free++) {
-    if (pivotCols.includes(free)) continue;
-    // λ with λ[free] = 1, λ[pivot] = -M[row][free], else 0.
-    const lambda: Q[] = Array.from({ length: states }, () => frac(0n));
-    lambda[free] = frac(1n);
-    pivotCols.forEach((pc, row) => { lambda[pc] = sub(frac(0n), M[row]![free]!); });
-    let sum = frac(0n);
-    for (const x of lambda) sum = add(sum, x);
-    for (const row of pairs) {
-      let dot = frac(0n);
-      for (let s = 0; s < states; s++) dot = add(dot, mul(lambda[s]!, frac(BigInt(row[s]!))));
-      // A seam whose pair counts do not obey the dependency would let E_q
-      // absorb it; none has been seen, and here it is the honest answer.
-      if (!isZero(dot)) return true;
+    return x;
+  };
+  const kept: { pivot: number; row: bigint[] }[] = [];
+  for (const vector of vectors) {
+    let row = vector.map(x => BigInt(x));
+    // Every kept row is zero at the pivots kept before it, so once a pivot is
+    // cleared here, the later rows leave it cleared.
+    for (const { pivot, row: other } of kept) {
+      const x = row[pivot]!;
+      if (x === 0n) continue;
+      const y = other[pivot]!;
+      row = row.map((v, j) => v * y - other[j]! * x);
+      const g = row.reduce((acc, v) => gcd(acc, v), 0n);
+      if (g > 1n) row = row.map(v => v / g);
     }
-    if (!isZero(sum)) return false;
+    const pivot = row.findIndex(v => v !== 0n);
+    if (pivot >= 0) kept.push({ pivot, row });
   }
-  return true;
+  return kept.length;
 }
 
 /** A design that is a perfect maze in every state, or the best one found. */

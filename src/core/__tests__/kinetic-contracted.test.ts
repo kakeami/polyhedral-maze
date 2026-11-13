@@ -6,9 +6,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createStack } from '../kinetic/mechanisms/stack.ts';
-import { createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
-import { cubeRingShape } from '../kinetic/mechanisms/cube-ring.ts';
-import { STAR_CUBE, createHalfCubeRing } from '../kinetic/mechanisms/half-cube-ring.ts';
+import { CUBE_RING_OBJECTS, createInfinityCube } from '../kinetic/mechanisms/cube-ring-objects.ts';
+import { createCubeRing, cubeRingShape } from '../kinetic/mechanisms/cube-ring.ts';
+import {
+  HALF_CUBE_RING_OBJECTS, STAR_CUBE, createHalfCubeRing,
+} from '../kinetic/mechanisms/half-cube-ring.ts';
+import type { Mechanism } from '../kinetic/types.ts';
 import { buildSurface, type KineticSurface } from '../kinetic/surface.ts';
 import { stateStats, treeRate, type KineticDesign } from '../kinetic/maze.ts';
 import {
@@ -85,6 +88,25 @@ function blocksOf(
     }
   }
   return { of, count };
+}
+
+/** Every object the folding page offers, ruled `cells` across a face. */
+function offered(cells: number): { id: string; surface: KineticSurface }[] {
+  const mechanisms: [string, Mechanism][] = [
+    ...CUBE_RING_OBJECTS.map(o => [o.id, createCubeRing(o, { cells })] as [string, Mechanism]),
+    ...HALF_CUBE_RING_OBJECTS.map(o => [o.id, createHalfCubeRing(o, { cells })] as [string, Mechanism]),
+  ];
+  return mechanisms.map(([id, mech]) => ({ id, surface: buildSurface(mech, { maxStates: mech.states.length }) }));
+}
+
+/** The star cube with its four hooks counted: ten shapes, which it does not offer. */
+function starCubeWithHooks(cells: number): KineticSurface {
+  const six = createHalfCubeRing(STAR_CUBE, { cells });
+  const shape = cubeRingShape(STAR_CUBE.halves);
+  const states = shape.poses.map(pose => shape.closures[pose.closure]!);
+  expect(states).toHaveLength(10);
+  const ten = { ...six, states, stateLabel: (i: number) => shape.poses[i]!.label };
+  return buildSurface(ten, { maxStates: states.length });
 }
 
 describe('the contracted search', () => {
@@ -229,24 +251,54 @@ describe('the contracted search', () => {
     }
   });
 
+  it('rests on three things the surface of every offered object does', () => {
+    // What the reduction needs of a surface: a patch is on show whole or
+    // buried whole; an internal class is one wall between the same two cells,
+    // a side of the surface in exactly the states its patch is on show; and a
+    // passage joins two cells on show. The first is checked whenever the
+    // search starts; all three are held here, object by object.
+    for (const cells of [2, 3]) {
+      for (const { id, surface } of offered(cells)) {
+        expect(contractsCleanly(surface), `${id} at ${cells}`).toBe(true);
+        const key = (a: number, b: number): string => (a < b ? `${a},${b}` : `${b},${a}`);
+        const wallOf = new Map<number, string>();
+        for (const e of surface.internalEdges) wallOf.set(e.classId, key(e.a, e.b));
+        const broken = { offShow: 0, otherCells: 0, wrongCount: 0 };
+        for (let state = 0; state < surface.stateCount; state++) {
+          const visible = surface.visibleOfState(state);
+          const sides = new Map<number, number>();
+          for (const e of surface.adjOfState(state)) {
+            if (!visible[e.a] || !visible[e.b]) broken.offShow++;
+            const wall = wallOf.get(e.classId);
+            if (wall === undefined) continue; // a seam
+            if (key(e.a, e.b) !== wall) broken.otherCells++;
+            sides.set(e.classId, (sides.get(e.classId) ?? 0) + 1);
+          }
+          for (const e of surface.internalEdges) {
+            const shown = visible[e.a] && visible[e.b] ? 1 : 0;
+            if ((sides.get(e.classId) ?? 0) !== shown) broken.wrongCount++;
+          }
+        }
+        expect(broken, `${id} at ${cells}`).toEqual({ offShow: 0, otherCells: 0, wrongCount: 0 });
+      }
+    }
+  });
+
   it('knows the star cube with its hooks has no design at all', () => {
     // The count equations are one per pose and they are dependent; a
     // dependency with unequal numbers of poses on its two sides cannot be
-    // satisfied by any seam set. Every ring of cubes passes; the star cube
-    // passes with its six box-or-layer poses and fails with its four hooks
-    // added, which is why the page lists six and says so.
-    expect(countsAreConsistent(ringSurface)).toBe(true);
-    const six = createHalfCubeRing(STAR_CUBE, { cells: 2 });
-    expect(countsAreConsistent(buildSurface(six, { maxStates: six.states.length }))).toBe(true);
-    const shape = cubeRingShape(STAR_CUBE.halves);
-    const states = shape.poses.map(pose => shape.closures[pose.closure]!);
-    expect(states).toHaveLength(10);
-    const ten = { ...six, states, stateLabel: (i: number) => shape.poses[i]!.label };
-    const surface = buildSurface(ten, { maxStates: states.length });
-    expect(countsAreConsistent(surface)).toBe(false);
+    // satisfied by any seam set. Every object the page offers passes; the
+    // star cube passes with its six box-or-layer poses and fails with its four
+    // hooks added, which is why the page lists six and says so.
+    for (const cells of [1, 2]) {
+      for (const { id, surface } of offered(cells)) {
+        expect(countsAreConsistent(surface), `${id} at ${cells}`).toBe(true);
+      }
+      expect(countsAreConsistent(starCubeWithHooks(cells)), `star cube with hooks at ${cells}`).toBe(false);
+    }
     // And the search finds that out for itself: no seam set it tries has
     // block counts, so no attempt ever starts.
-    expect(() => contractedSearch(surface, { rng: createRng(1), maxRounds: 3 }))
+    expect(() => contractedSearch(starCubeWithHooks(2), { rng: createRng(1), maxRounds: 3 }))
       .toThrow(/no seam set has block counts/);
   });
 
