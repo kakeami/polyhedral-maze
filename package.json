@@ -13,7 +13,11 @@
     "bench": "node bench/run.ts",
     "bench:summary": "node bench/summarize.ts",
     "bench:scale": "node bench/scale.ts",
-    "bench:check": "tsc -p bench"
+    "bench:check": "tsc -p bench",
+    "figures:gallery": "node figures/gallery.ts",
+    "figures:timing": "node figures/timing.ts",
+    "figures:verify": "node figures/check.ts",
+    "figures:check": "tsc -p figures"
   },
   "dependencies": {
     "@playwright/test": "^1.58.2",
