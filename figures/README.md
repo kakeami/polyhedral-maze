@@ -13,6 +13,7 @@ npm run figures:gallery                       # every pose of every object, with
 npm run figures:timing -- bench/results/s-contracted/shard-0.jsonl bench/results/s-cell/shard-0.jsonl
 node figures/contraction.ts                   # one pose as a tree on cells and on blocks
 node figures/dependency.ts                    # the count equations' dependencies, two objects
+node figures/nets.ts                          # the infinity cube's two cubes, unfolded
 npm run figures:verify -- --camera all        # the drawing order, against a ray cast
 npm run figures:check                         # type-check figures/
 ```
@@ -44,6 +45,12 @@ npm run figures:check                         # type-check figures/
   weights cancel every face and every seam class's passage count, that they
   sum to zero on the infinity cube and not on the star cube, and that
   `countsAreConsistent` says the same.
+
+- **`nets.ts`** — poses that are boxes (`--poses "Cube 1,Cube 2"`) unfolded
+  into a cross, side by side at one scale: the maze on show, the marks on show
+  and the walk between them, broken where the net is cut. Each piece keeps one
+  pale colour in every net, so two cubes made of the same eight pieces show
+  which faces each piece turns out. A pose that is not a box is refused.
 
 Line widths are millimetres on the page and do not grow with a drawing;
 everything else is in cube edges until a figure scales it.
