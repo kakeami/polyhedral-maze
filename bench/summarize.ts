@@ -25,62 +25,15 @@
  * gathered by the number of poses. Last, the worst pose's longest walk,
  * neutral's over the other's, on the seeds where both found a design.
  */
-import { readFileSync } from 'node:fs';
-import { quantile } from './lib.ts';
-
-interface RunRecord {
-  readonly kind: 'run';
-  readonly method: string;
-  readonly object: string;
-  readonly cells: number;
-  readonly seed: number;
-  readonly ok: boolean;
-  readonly perfect: number;
-  readonly states: number;
-  readonly seconds: number;
-  readonly attempts: number;
-  readonly steps: number;
-  readonly worstWalk: number | null;
-  readonly cap: number;
-}
-interface HeaderRecord {
-  readonly kind: 'header';
-  readonly commit: string;
-  readonly dirty: boolean;
-  readonly cpu: string;
-  readonly node: string;
-}
+import { quantile, readRuns } from './lib.ts';
+import type { RunRecord } from './lib.ts';
 
 const files = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const csv = process.argv.includes('--csv');
 const allowDirty = process.argv.includes('--allow-dirty');
 if (files.length === 0) throw new Error('usage: node bench/summarize.ts <results.jsonl> ... [--csv] [--allow-dirty]');
 
-const runs: RunRecord[] = [];
-const commits = new Set<string>();
-const machines = new Set<string>();
-let dirty = false;
-for (const file of files) {
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
-    if (!line) continue;
-    const record = JSON.parse(line) as RunRecord | HeaderRecord;
-    if (record.kind === 'header') {
-      commits.add(record.commit);
-      machines.add(`${record.cpu}, Node ${record.node}`);
-      dirty ||= record.dirty;
-    } else runs.push(record);
-  }
-}
-if (commits.size > 1) throw new Error(`results from ${commits.size} commits: ${[...commits].join(', ')}`);
-if (dirty && !allowDirty) throw new Error('results from a dirty working tree; pass --allow-dirty to look anyway');
-// The same run twice is two measurements of one thing (two runs of a results
-// set at one commit, say), and they would be counted as two seeds.
-const seen = new Set<string>();
-for (const r of runs) {
-  const key = `${r.method} ${r.object} ${r.cells} ${r.seed}`;
-  if (seen.has(key)) throw new Error(`the same run twice: ${key}; summarise the files separately`);
-  seen.add(key);
-}
+const { runs, commits, machines, dirty } = readRuns(files, { allowDirty });
 
 const groups = new Map<string, RunRecord[]>();
 for (const r of runs) {

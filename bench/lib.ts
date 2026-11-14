@@ -10,6 +10,7 @@
  * flag is what keeps such a run out of anything that gets frozen.
  */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { cpus } from 'node:os';
 import {
   FOLD_OBJECTS, createFoldMechanism, foldObject, foldRulings,
@@ -128,4 +129,72 @@ export function quantile(sorted: readonly number[], q: number): number {
   if (sorted.length === 0) return NaN;
   const rank = Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1));
   return sorted[rank]!;
+}
+
+/** One line of a results file from `bench/run.ts`. */
+export interface RunRecord {
+  readonly kind: 'run';
+  readonly method: string;
+  readonly object: string;
+  readonly cells: number;
+  readonly seed: number;
+  readonly ok: boolean;
+  readonly perfect: number;
+  readonly states: number;
+  readonly seconds: number;
+  readonly attempts: number;
+  readonly steps: number;
+  readonly worstWalk: number | null;
+  readonly cap: number;
+}
+
+interface HeaderRecord {
+  readonly kind: 'header';
+  readonly commit: string;
+  readonly dirty: boolean;
+  readonly cpu: string;
+  readonly node: string;
+}
+
+export interface Runs {
+  readonly runs: RunRecord[];
+  readonly commits: Set<string>;
+  /** `cpu, Node version`, one entry per kind of machine the files were made on. */
+  readonly machines: Set<string>;
+  readonly dirty: boolean;
+}
+
+/**
+ * The runs in some results files, refused when they cannot be read as one set.
+ *
+ * Files made at different commits are refused, and so is a file made on a
+ * dirty tree unless `allowDirty`: a table is one version of the code or it is
+ * nothing. So is the same run twice — two runs of a results set at one commit,
+ * say — which would otherwise be counted as two seeds.
+ */
+export function readRuns(files: readonly string[], options: { allowDirty?: boolean } = {}): Runs {
+  const runs: RunRecord[] = [];
+  const commits = new Set<string>();
+  const machines = new Set<string>();
+  let dirty = false;
+  for (const file of files) {
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      if (!line) continue;
+      const record = JSON.parse(line) as RunRecord | HeaderRecord;
+      if (record.kind === 'header') {
+        commits.add(record.commit);
+        machines.add(`${record.cpu}, Node ${record.node}`);
+        dirty ||= record.dirty;
+      } else runs.push(record);
+    }
+  }
+  if (commits.size > 1) throw new Error(`results from ${commits.size} commits: ${[...commits].join(', ')}`);
+  if (dirty && !options.allowDirty) throw new Error('results from a dirty working tree; pass --allow-dirty to look anyway');
+  const seen = new Set<string>();
+  for (const r of runs) {
+    const key = `${r.method} ${r.object} ${r.cells} ${r.seed}`;
+    if (seen.has(key)) throw new Error(`the same run twice: ${key}; summarise the files separately`);
+    seen.add(key);
+  }
+  return { runs, commits, machines, dirty };
 }
