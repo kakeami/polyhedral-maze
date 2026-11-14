@@ -22,7 +22,7 @@ import { foldObject } from '../src/ui/fold-objects.ts';
 import { pickPrintedEnds } from '../src/core/kinetic/maze.ts';
 import { solutionCells } from '../src/render/kinetic-geometry.ts';
 import { build, parseArgs, poseName } from '../bench/lib.ts';
-import { OUT_DIR, shippedDesign, writePdf } from './lib.ts';
+import { OUT_DIR, PIECE_TINTS, shippedDesign, writePdf } from './lib.ts';
 import { cellInWorld, normalOf } from './scene.ts';
 import type { RGB } from './scene.ts';
 
@@ -38,10 +38,6 @@ const { mechanism, surface } = build(object, cells);
 const open = shippedDesign(object, cells, surface, seed);
 const ends = pickPrintedEnds(surface, { open, targetState: 0 });
 
-const PIECE_TINTS: RGB[] = [
-  [214, 230, 250], [250, 222, 208], [208, 238, 224], [250, 234, 196],
-  [246, 220, 232], [224, 220, 247], [232, 236, 214], [222, 226, 230],
-];
 const WALL: RGB = [20, 20, 20];
 const SEAM: RGB = [160, 155, 145];
 const START: RGB = [0x2a, 0x78, 0xd6];

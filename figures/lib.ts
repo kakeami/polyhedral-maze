@@ -19,9 +19,19 @@ import { isHalfCubeRing } from '../src/ui/fold-objects.ts';
 import type { FoldObject } from '../src/ui/fold-objects.ts';
 import type { KineticSurface } from '../src/core/kinetic/surface.ts';
 import { provenance } from '../bench/lib.ts';
+import type { RGB } from './scene.ts';
 
 /** Where figures go unless told otherwise; untracked. */
 export const OUT_DIR = 'figures/out';
+
+/**
+ * A pale colour a piece, by piece number, the same in every figure that tells
+ * the pieces apart: the same eight pieces make every pose.
+ */
+export const PIECE_TINTS: readonly RGB[] = [
+  [214, 230, 250], [250, 222, 208], [208, 238, 224], [250, 234, 196],
+  [246, 220, 232], [224, 220, 247], [232, 236, 214], [222, 226, 230],
+];
 
 /**
  * The maze the page shows for this object, ruling and seed: the one it ships,

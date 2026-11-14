@@ -14,6 +14,8 @@ npm run figures:timing -- bench/results/s-contracted/shard-0.jsonl bench/results
 node figures/contraction.ts                   # one pose as a tree on cells and on blocks
 node figures/dependency.ts                    # the count equations' dependencies, two objects
 node figures/nets.ts                          # the infinity cube's two cubes, unfolded
+node figures/fold-graph.ts                    # the infinity cube's poses round a ring of single folds
+node figures/fold-distances.ts                # folds between every two poses, a LaTeX table an object
 npm run figures:verify -- --camera all        # the drawing order, against a ray cast
 npm run figures:check                         # type-check figures/
 ```
@@ -51,6 +53,16 @@ npm run figures:check                         # type-check figures/
   and the walk between them, broken where the net is cut. Each piece keeps one
   pale colour in every net, so two cubes made of the same eight pieces show
   which faces each piece turns out. A pose that is not a box is refused.
+- **`fold-graph.ts`** — an object's poses (`--object infinity-cube`) round a
+  ring, a line wherever one fold takes one pose to another, each piece in the
+  colour it has in the nets. Two poses with the same neighbours share a place,
+  one inside the ring and one outside. It refuses an object whose places do
+  not make one ring, or where the folds between two poses are not the steps
+  between them on the drawing: the infinity cube and the frame loop pass.
+- **`fold-distances.ts`** — for every object, the fewest folds between each
+  two poses, through any shapes on the way (`poseDistances`), as a LaTeX
+  `tabular` in `figures/out/fold-distances.tex`, headed by the commit, and
+  printed.
 
 Line widths are millimetres on the page and do not grow with a drawing;
 everything else is in cube edges until a figure scales it.
