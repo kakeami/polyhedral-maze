@@ -43,21 +43,24 @@ export interface Look {
   /** Paper colour, before shading. */
   readonly paper: RGB;
   readonly wall: RGB;
-  /** Wall width, in the drawing's units (a cube's edge is 1). */
+  /** Wall width in mm on the page: widths do not grow with the drawing. */
   readonly wallWidth: number;
   readonly edge: RGB;
   readonly edgeWidth: number;
   /** Where the light comes from, as `eye` does. */
   readonly light: Vec3;
+  /** How much darker a face turned from the light is: 0 is flat colour. */
+  readonly shading: number;
 }
 
 export const PAPER_LOOK: Look = {
   paper: [252, 250, 245],
   wall: [20, 20, 20],
-  wallWidth: 0.045,
+  wallWidth: 0.15,
   edge: [150, 145, 135],
-  edgeWidth: 0.012,
+  edgeWidth: 0.05,
   light: [-0.8, -0.35, 1.6],
+  shading: 0.4,
 };
 
 export interface PoseOptions {
@@ -70,7 +73,10 @@ export interface PoseOptions {
 }
 
 export interface Drawing {
-  /** Back to front; coordinates are the drawing's units with y down. */
+  /**
+   * Back to front; coordinates are the drawing's units (a cube's edge is 1)
+   * with y down, and line widths are mm on the page.
+   */
   readonly items: PageItem[];
   /** Bounding box of `items`, before any line width. */
   readonly min: Vec2;
@@ -92,7 +98,7 @@ export function cellInWorld(mech: Mechanism, state: KineticState, cell: number):
   return c.corners.map(corner => applyPlacement(state[c.piece]!, corner));
 }
 
-function normalOf(pts: readonly Vec3[]): Vec3 {
+export function normalOf(pts: readonly Vec3[]): Vec3 {
   // Newell's method: right for any planar polygon, whichever corners are collinear.
   let nx = 0, ny = 0, nz = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -346,9 +352,9 @@ export function clipSegment(a: Vec2, b: Vec2, clip: readonly Vec2[]): [Vec2, Vec
 
 // --- the picture ----------------------------------------------------------------
 
-function shade(colour: RGB, normal: Vec3, light: Vec3): RGB {
-  const lit = Math.max(0, dot(normal, normalize(light)));
-  const k = 0.6 + 0.4 * lit;
+function shade(colour: RGB, normal: Vec3, look: Look): RGB {
+  const lit = Math.max(0, dot(normal, normalize(look.light)));
+  const k = 1 - look.shading * (1 - lit);
   return colour.map(c => Math.round(c * k)) as RGB;
 }
 
@@ -489,17 +495,17 @@ export function drawPose(
       min[0] = Math.min(min[0], p[0]); min[1] = Math.min(min[1], p[1]);
       max[0] = Math.max(max[0], p[0]); max[1] = Math.max(max[1], p[1]);
     }
-    const paper = shade(look.paper, facet.normal, look.light);
+    const paper = shade(look.paper, facet.normal, look);
     // Stroked in its own colour, so two pieces of one split facet leave no hairline.
-    items.push({ kind: 'poly', pts: poly, fill: paper, stroke: paper, width: 0.004 });
+    items.push({ kind: 'poly', pts: poly, fill: paper, stroke: paper, width: 0.02 });
     if (options.tint) {
       for (const c of facet.cells) {
         const colour = options.tint.get(c);
         if (!colour) continue;
         const cell = clipPolygon(cellInWorld(mech, state, c).map(project), poly);
         if (cell.length < 3) continue;
-        const fill = shade(colour, facet.normal, look.light);
-        items.push({ kind: 'poly', pts: cell, fill, stroke: fill, width: 0.004 });
+        const fill = shade(colour, facet.normal, look);
+        items.push({ kind: 'poly', pts: cell, fill, stroke: fill, width: 0.02 });
       }
     }
     const outline = facet.outline.map(project);
@@ -515,15 +521,15 @@ export function drawPose(
   return { items, min, max };
 }
 
-/** `drawing` scaled by `mmPerUnit` and moved so its box starts at `at`. */
+/** `drawing` scaled by `mmPerUnit` and moved so its box starts at `at`; line widths stay as they are. */
 export function placeDrawing(drawing: Drawing, at: Vec2, mmPerUnit: number): PageItem[] {
   const map = (p: Vec2): Vec2 => [
     at[0] + (p[0] - drawing.min[0]) * mmPerUnit,
     at[1] + (p[1] - drawing.min[1]) * mmPerUnit,
   ];
   return drawing.items.map((item): PageItem => {
-    if (item.kind === 'poly') return { ...item, pts: item.pts.map(map), width: (item.width ?? 0) * mmPerUnit };
-    if (item.kind === 'line') return { ...item, a: map(item.a), b: map(item.b), width: item.width * mmPerUnit };
+    if (item.kind === 'poly') return { ...item, pts: item.pts.map(map) };
+    if (item.kind === 'line') return { ...item, a: map(item.a), b: map(item.b) };
     return { ...item, at: map(item.at) };
   });
 }

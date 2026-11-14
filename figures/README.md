@@ -11,6 +11,8 @@ in `figures/out/`, which is not tracked.
 ```bash
 npm run figures:gallery                       # every pose of every object, with its maze
 npm run figures:timing -- bench/results/s-contracted/shard-0.jsonl bench/results/s-cell/shard-0.jsonl
+node figures/contraction.ts                   # one pose as a tree on cells and on blocks
+node figures/dependency.ts                    # the count equations' dependencies, two objects
 npm run figures:verify -- --camera all        # the drawing order, against a ray cast
 npm run figures:check                         # type-check figures/
 ```
@@ -28,6 +30,23 @@ npm run figures:check                         # type-check figures/
   90th percentile, and a hollow mark where some seed ran out of time (its
   median is then a lower bound). Results are read as `bench/summarize.ts`
   reads them (`readRuns`): one commit, a clean tree, no run twice.
+
+- **`contraction.ts`** — one pose (`--object infinity-cube --cells 4 --pose "Cube 1"`)
+  twice: the maze with the tree its passages make on the cells, and the blocks
+  (cells a face's open walls join, coloured so that no two touching share a
+  colour) with the tree the seam passages make on them. Only the side facing
+  the viewer is drawn; the counts it prints are for the whole pose, and it
+  stops if either is not a tree.
+- **`dependency.ts`** — for the infinity cube and for the star cube with its
+  four hooks, the dependency between the poses' count equations with the
+  fewest poses (weights of one, searched exhaustively): the poses it weights,
+  and a row for each set of faces those poses show alike. It checks that the
+  weights cancel every face and every seam class's passage count, that they
+  sum to zero on the infinity cube and not on the star cube, and that
+  `countsAreConsistent` says the same.
+
+Line widths are millimetres on the page and do not grow with a drawing;
+everything else is in cube edges until a figure scales it.
 
 ## How a pose is drawn
 
