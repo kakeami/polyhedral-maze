@@ -36,35 +36,13 @@ import { contractsCleanly } from '../src/core/kinetic/maze-contracted.ts';
 import { cubeRingDesign } from '../src/core/kinetic/mechanisms/cube-ring-designs.ts';
 import { halfCubeRingDesign } from '../src/core/kinetic/mechanisms/half-cube-ring-designs.ts';
 import { createFoldMechanism, isHalfCubeRing } from '../src/ui/fold-objects.ts';
-import { parseArgs, parseObjects, poseName, rulingsOf } from './lib.ts';
+import { blocksOf, parseArgs, parseObjects, patchesOf, poseName, rulingsOf } from './lib.ts';
 
 const args = parseArgs(process.argv.slice(2));
 const objects = parseObjects(args.get('objects') ?? 'all');
 const rulingSpec = args.get('rulings') ?? 'all';
 const seed = Number(args.get('seed') ?? 42);
 const json = args.has('json');
-
-/** Cells joined by internal classes, taken as far as they go: the faces. */
-function patchesOf(surface: KineticSurface): Int32Array {
-  const parent = new Int32Array(surface.cellCount).map((_unused, i) => i);
-  const find = (x: number): number => {
-    while (parent[x] !== x) x = parent[x] = parent[parent[x]!]!;
-    return x;
-  };
-  for (const e of surface.internalEdges) parent[find(e.a)] = find(e.b);
-  return parent.map((_unused, i) => find(i));
-}
-
-/** The cells each cell is joined to by the open walls of a design: its block. */
-function blocksOf(surface: KineticSurface, open: ReadonlySet<number>): Int32Array {
-  const parent = new Int32Array(surface.cellCount).map((_unused, i) => i);
-  const find = (x: number): number => {
-    while (parent[x] !== x) x = parent[x] = parent[parent[x]!]!;
-    return x;
-  };
-  for (const e of surface.internalEdges) if (open.has(e.classId)) parent[find(e.a)] = find(e.b);
-  return parent.map((_unused, i) => find(i));
-}
 
 /** Rank of a 0/1 matrix by elimination; small enough that floating point is exact. */
 function rank(rows: number[][]): number {

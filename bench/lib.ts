@@ -131,6 +131,28 @@ export function quantile(sorted: readonly number[], q: number): number {
   return sorted[rank]!;
 }
 
+/** Cells joined by internal classes, taken as far as they go: the faces. Each cell's patch is named by a cell in it. */
+export function patchesOf(surface: KineticSurface): Int32Array {
+  const parent = new Int32Array(surface.cellCount).map((_unused, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) x = parent[x] = parent[parent[x]!]!;
+    return x;
+  };
+  for (const e of surface.internalEdges) parent[find(e.a)] = find(e.b);
+  return parent.map((_unused, i) => find(i));
+}
+
+/** The cells each cell is joined to by the open walls of a design: its block, named by a cell in it. */
+export function blocksOf(surface: KineticSurface, open: ReadonlySet<number>): Int32Array {
+  const parent = new Int32Array(surface.cellCount).map((_unused, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) x = parent[x] = parent[parent[x]!]!;
+    return x;
+  };
+  for (const e of surface.internalEdges) if (open.has(e.classId)) parent[find(e.a)] = find(e.b);
+  return parent.map((_unused, i) => find(i));
+}
+
 /** One line of a results file from `bench/run.ts`. */
 export interface RunRecord {
   readonly kind: 'run';
