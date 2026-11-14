@@ -108,7 +108,7 @@ const scale = (width - GAP) / (2 * w);
 /** A length in mm on the page, in the drawing's units. */
 const mm = (x: number): number => x / scale;
 
-const EDGE: RGB = [25, 25, 25];
+/** Both trees, in one colour: the walls are black. */
 const TREE: RGB = [0x2a, 0x78, 0xd6];
 const P = (p: Vec3): Vec2 => project(p);
 
@@ -153,9 +153,9 @@ for (const e of seamOpen) {
   if (!facing.has(e.a) && !facing.has(e.b)) continue;
   const from = facing.has(e.a) ? node.get(block[e.a]!)! : null;
   const to = facing.has(e.b) ? node.get(block[e.b]!)! : null;
-  right.items.push(...bend(from, sharedMid(e.a, e.b), to, EDGE, 0.35));
+  right.items.push(...bend(from, sharedMid(e.a, e.b), to, TREE, 0.35));
 }
-for (const at of node.values()) right.items.push(disc(at, mm(1.3), EDGE));
+for (const at of node.values()) right.items.push(disc(at, mm(1.3), TREE));
 
 // --- side by side ------------------------------------------------------------------
 
