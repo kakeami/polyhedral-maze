@@ -51,11 +51,14 @@ export const DEFAULT_HINGES: readonly number[] = [2, 3, 2, 3, 2, 1, 2, 3];
 /**
  * Eight cubes taped into a ring — the fidget toy that folds forever.
  *
- * The one this page shipped with, and the one the literature has: it is figure
- * 8 of Demaine, Demaine, Lindy and Souvaine, *Hinged Dissection of
- * Polypolyhedra* (WADS 2005), down to "every face has at least one exposed
- * hinge". What is not in the literature is a maze on it that is perfect in
- * every shape it takes.
+ * The one this page shipped with, and an old toy: Komatsu and Shizukawa (2021)
+ * trace it to Masahiko Eguchi, before 1958. What is not in the literature is a
+ * maze on it that is perfect in every shape it takes.
+ *
+ * It is not figure 8 of Demaine, Demaine, Lindy and Souvaine, *Hinged
+ * Dissection of Polypolyhedra* (WADS 2005), though that is also eight cubes
+ * hinged round a 2x2x2 with every hinge on the outside: taped as the figure
+ * has it, `cubeRingShape` finds that it opens into one plank and nothing else.
  */
 export const INFINITY_CUBE: CubeRingObject = {
   id: 'infinity-cube',

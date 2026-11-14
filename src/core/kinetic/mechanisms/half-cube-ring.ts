@@ -18,7 +18,7 @@
  * turns every face inside out on the way to its second 2x2x2, so there every
  * kept corner is an *outer* corner and the halves make a cube again, with a
  * star-shaped hollow in it — 24 squares on show, the 48 triangles lining a
- * cavity nobody can see. This is one half of Naoki Yoshimoto's cube (1971):
+ * cavity nobody can see. This is one half of Naoki Yoshimoto's cube (1970):
  * nest a star in a hollow cube and the two make a solid one.
  *
  * Two things here the rings of whole cubes never asked of the surface, both in
