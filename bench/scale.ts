@@ -5,9 +5,10 @@
  *
  *   node bench/scale.ts [--objects all] [--rulings all] [--seed 42] [--json]
  *
- * Per object and ruling: cells, side classes by kind, patches (the faces),
- * patches no pose shows, visibility classes (patches grouped by the poses
- * they are on show in — the unknowns of the count equations) and the rank of
+ * Per object and ruling: cells, side classes by kind, patches (cells joined
+ * by internal classes: one face on most objects, two faces on some), patches
+ * no pose shows, visibility groups (patches grouped by the poses they are on
+ * show in — the unknowns of the count equations) and the rank of
  * those equations. Per pose: cells on show, which is the cell-level search's
  * node count with one edge fewer in a tree, and the patches, blocks and open
  * seam passages on show, which is the contracted graph's — again a tree, so
@@ -180,9 +181,9 @@ for (const object of objects) {
       showsIn.set(p, poses.join(','));
     }
     const unseen = [...showsIn.values()].filter(k => k === '').length;
-    const visibilityClasses = [...new Set([...showsIn.values()].filter(k => k !== ''))];
+    const visibilityGroups = [...new Set([...showsIn.values()].filter(k => k !== ''))];
     const matrix = Array.from({ length: surface.stateCount }, (_unused, s) =>
-      visibilityClasses.map(k => (k.split(',').map(Number).includes(s) ? 1 : 0)));
+      visibilityGroups.map(k => (k.split(',').map(Number).includes(s) ? 1 : 0)));
 
     const poses = [];
     for (let s = 0; s < surface.stateCount; s++) {
@@ -219,7 +220,7 @@ for (const object of objects) {
       ...kinds,
       patches: patchIds.length,
       unseenPatches: unseen,
-      visibilityClasses: visibilityClasses.length,
+      visibilityGroups: visibilityGroups.length,
       countRank: rank(matrix),
       states: surface.stateCount,
       ...bundlesOf(surface, patch),
@@ -233,8 +234,8 @@ for (const object of objects) {
     console.log(`\n### ${object.id}, n=${cells}`);
     console.log(
       `${summary.cells} cells; ${summary.classes} side classes (${kinds.internal} internal, ${kinds.cut} cut, ${kinds.rim} rim); `
-      + `${summary.patches} patches, ${unseen} never on show; ${summary.visibilityClasses} visibility classes; `
-      + `count equations: ${summary.states} in ${summary.visibilityClasses} unknowns, rank ${summary.countRank}`,
+      + `${summary.patches} patches, ${unseen} never on show; ${summary.visibilityGroups} visibility groups; `
+      + `count equations: ${summary.states} in ${summary.visibilityGroups} unknowns, rank ${summary.countRank}`,
     );
     console.log(
       `contracted graph: up to ${summary.largestBundle} passages from one seam class in one pose; `

@@ -44,7 +44,7 @@
  * repairs that fix one state's count break another's for ever. The folding
  * strategy (`attemptNeutral`) therefore solves the count equations exactly
  * before it anneals, and then moves only in pairs whose effect on every
- * count cancels — a split and a merge in patches of one visibility class, two
+ * count cancels — a split and a merge in patches of one visibility group, two
  * seams of equal pair counts swapped — so the counts never go wrong again, and
  * the cost is pure connectivity. A state left with one cycle and one gap is
  * the one shape no pair of aimed atoms reaches by chance, so that case is
@@ -833,11 +833,11 @@ function makeEngine(
    * The count equations: in state q, blocks on show = seam passages + 1.
    *
    * One equation per state over the block count of every patch; summed over
-   * a visibility class, a system of `states` equations in as many unknowns
-   * as there are classes (14 on the infinity cube, 8 on the star cube). A
-   * block must hold a landing live in every state its patch is on show in,
-   * or it is an island there, which caps each patch; a patch has at least one
-   * block, which floors it. Solved by depth-first search over the classes
+   * a visibility group (`classes` below), a system of `states` equations in
+   * as many unknowns as there are groups (14 on the infinity cube, 8 on the
+   * star cube). A block must hold a landing live in every state its patch is
+   * on show in, or it is an island there, which caps each patch; a patch has
+   * at least one block, which floors it. Solved by depth-first search over the groups
    * with interval pruning, most-states-first — a couple of milliseconds at
    * seven cells across a face, twenty at ten.
    */
@@ -1052,7 +1052,7 @@ function makeEngine(
    * on one of its cycles or a merge across one of its gaps, a seam closed on
    * the cycle or opened across the gap. The second undoes what that did to
    * the counts: a merge for a split (or the reverse) in a patch of the same
-   * visibility class, at random; a seam of the same pair counts, the other
+   * visibility group, at random; a seam of the same pair counts, the other
    * way, for a seam.
    *
    * At random, and that was measured rather than assumed: aiming the second
