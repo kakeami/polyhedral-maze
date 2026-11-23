@@ -8,6 +8,13 @@
  * star, a diamond, a triangle — drawn in the cell it stands on, and no two
  * stations of one maze share one.
  *
+ * Nor is any one of them another turned round. A cube has no way up, and a
+ * symbol on it is seen from whichever side the hand has it: a triangle
+ * pointing down is a triangle. (There was one, and a ring inside a ring has
+ * its place.) A diamond and a square are a quarter of a quarter turn apart,
+ * as are the two crosses, and the lines of the cell they stand in say which
+ * is which.
+ *
  * DOM-free and three-free, like `kinetic-geometry.ts`, which this leans on.
  */
 
@@ -70,7 +77,7 @@ export const STATION_SYMBOLS: readonly StationSymbol[] = [
   { name: 'circle', char: '○', strokes: [ring(20, 0.9)] },
   { name: 'square', char: '□', strokes: [ring(4, 1.1, Math.PI / 4)] },
   { name: 'cross', char: '✕', strokes: [[[-0.8, -0.8], [0.8, 0.8]], [[-0.8, 0.8], [0.8, -0.8]]] },
-  { name: 'nabla', char: '▽', strokes: [ring(3, 1, -Math.PI / 2)] },
+  { name: 'rings', char: '◎', strokes: [ring(20, 0.95), ring(14, 0.45)] },
   { name: 'heart', char: '♡', strokes: [heart()] },
   { name: 'hexagon', char: '⬡', strokes: [ring(6, 1, Math.PI / 6)] },
   { name: 'plus', char: '＋', strokes: [[[-1, 0], [1, 0]], [[0, -1], [0, 1]]] },

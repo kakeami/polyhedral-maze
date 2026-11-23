@@ -26,6 +26,42 @@ describe('the symbols stations are told apart by', () => {
     expect(new Set(STATION_SYMBOLS.map(symbol => symbol.name)).size).toBe(STATION_SYMBOLS.length);
   });
 
+  it('has none that is another turned round, since a cube has no way up', () => {
+    // A symbol is seen from whichever side the cube is held, so two that
+    // differ by a quarter turn or a half are one symbol. (An eighth of a turn
+    // is told by the lines of the cell: a diamond stands on a corner there.)
+    const sample = (symbol: number, quarters: number): [number, number][] => {
+      const cos = Math.round(Math.cos(quarters * Math.PI / 2));
+      const sin = Math.round(Math.sin(quarters * Math.PI / 2));
+      const points: [number, number][] = [];
+      for (const stroke of STATION_SYMBOLS[symbol]!.strokes) {
+        for (let i = 1; i < stroke.length; i++) {
+          const [ax, ay] = stroke[i - 1]!;
+          const [bx, by] = stroke[i]!;
+          for (let k = 0; k <= 12; k++) {
+            const x = ax + (bx - ax) * (k / 12);
+            const y = ay + (by - ay) * (k / 12);
+            points.push([x * cos - y * sin, x * sin + y * cos]);
+          }
+        }
+      }
+      return points;
+    };
+    const farthest = (from: [number, number][], to: [number, number][]): number =>
+      Math.max(...from.map(p => Math.min(...to.map(q => Math.hypot(p[0] - q[0], p[1] - q[1])))));
+    for (let a = 0; a < STATION_SYMBOLS.length; a++) {
+      for (let b = a + 1; b < STATION_SYMBOLS.length; b++) {
+        for (let quarters = 0; quarters < 4; quarters++) {
+          const one = sample(a, quarters);
+          const other = sample(b, 0);
+          const apart = Math.max(farthest(one, other), farthest(other, one));
+          // In units of the symbol's own radius.
+          expect(apart, `${STATION_SYMBOLS[a]!.name} / ${STATION_SYMBOLS[b]!.name}`).toBeGreaterThan(0.09);
+        }
+      }
+    }
+  });
+
   it('draws each inside its cell, flat on it', () => {
     const cell = mech.cells[maze.stations[0]!]!;
     const centre = cellCentre(cell);
