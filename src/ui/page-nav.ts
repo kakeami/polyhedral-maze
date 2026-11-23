@@ -1,10 +1,10 @@
 /**
- * The switch between the three mazes, and the link to the source.
+ * The switch between the four mazes, and the link to the source.
  *
  * One control rather than a row of arrows. The arrows were a menu that made
  * you read it: "Kinetic maze →" says where you would go but not where you are,
- * and with three pages there is always one you cannot see from where you are
- * standing. A segmented control says both at once — all three, with the
+ * and with more than two pages there is always one you cannot see from where
+ * you are standing. A segmented control says both at once — all of them, with the
  * current one lit — and it is the same control on every page, in the same
  * place, so it stops being navigation and becomes part of the furniture.
  *
@@ -13,9 +13,11 @@
  * it is a setting of that object, and a switch you only meet after scrolling
  * past all of them reads as an afterthought.
  *
- * The three are siblings rather than a trunk and two branches, which is what
- * the arrows implied by pointing away from the polyhedral page. They are three
- * objects that happen to share a maze layer.
+ * They are siblings rather than a trunk and its branches, which is what the
+ * arrows implied by pointing away from the polyhedral page: objects that
+ * happen to share a maze layer. The fourth is the third's object again with a
+ * different maze on it, and gets a tab of its own because it is a different
+ * thing to do with it.
  *
  * The source link does not go with them: it leaves the site altogether, so it
  * stays at the foot of the panel where a footer belongs.
@@ -27,7 +29,7 @@
 
 import { esc } from './panel.ts';
 
-export type PageId = 'polyhedral' | 'turning' | 'folding';
+export type PageId = 'polyhedral' | 'turning' | 'folding' | 'interchange';
 
 interface Page {
   readonly id: PageId;
@@ -57,6 +59,13 @@ const PAGES: readonly Page[] = [
     path: 'fold/',
     title: 'A maze on cubes taped into a ring — fold it and part of the maze '
       + 'goes inside, and what is left is still a perfect maze',
+  },
+  {
+    id: 'interchange',
+    label: 'Interchange',
+    path: 'interchange/',
+    title: 'The ring of cubes with a maze no one shape can solve — walk, fold '
+      + 'on a mark, walk on',
   },
 ];
 

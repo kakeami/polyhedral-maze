@@ -54,6 +54,12 @@ export const MAZE_STYLE = {
     startColor: 0x22bb22,
     goalColor: 0xdd2222,
     warpColor: 0xeecc00,
+    /**
+     * A station of the interchange maze: where the object may be folded. Blue,
+     * the one hue the other three leave free, and it holds against both the
+     * pale surfaces and the dark one.
+     */
+    stationColor: 0x2f7fff,
     /** Height of the head above the surface. */
     pinLength: 0.15,
     /** Warp pins are the smaller pair, as before. */

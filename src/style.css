@@ -204,12 +204,14 @@ html, body {
   border-radius: 9px;
 }
 
+/* Sized by its own word rather than a quarter of the row each: four tabs in a
+   panel this wide leave the longest name no room at equal widths. */
 .page-switch-tab {
-  flex: 1 1 0;
-  padding: 7px 8px;
+  flex: 1 1 auto;
+  padding: 7px 5px;
   border-radius: 7px;
   color: #6a6a66;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.2;
   text-align: center;
   text-decoration: none;

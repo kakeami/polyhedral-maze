@@ -148,6 +148,7 @@ const MARKER_COLORS: Record<MazeMarker['kind'], number> = {
   start: MAZE_STYLE.markers.startColor,
   goal: MAZE_STYLE.markers.goalColor,
   warp: MAZE_STYLE.markers.warpColor,
+  station: MAZE_STYLE.markers.stationColor,
 };
 
 /**
@@ -163,7 +164,7 @@ export function makePin(
 ): THREE.Group {
   const { pinLength, headRadius, warpHeadRadius, stemWidth, footRadius } = MAZE_STYLE.markers;
   const color = MARKER_COLORS[marker.kind];
-  const radius = marker.kind === 'warp' ? warpHeadRadius : headRadius;
+  const radius = marker.kind === 'warp' || marker.kind === 'station' ? warpHeadRadius : headRadius;
 
   const foot = marker.at;
   const head: Vec3 = [

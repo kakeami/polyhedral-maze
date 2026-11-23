@@ -33,7 +33,11 @@ function sharedEdge(v1: Vec3[], v2: Vec3[]): [Vec3, Vec3] | null {
   return shared.length === 2 ? [shared[0]!, shared[1]!] : null;
 }
 
-export type MarkerKind = 'start' | 'goal' | 'warp';
+/**
+ * `station` is the interchange maze's: a cell where the object may be folded
+ * (`core/kinetic/interchange.ts`). The solids never make one.
+ */
+export type MarkerKind = 'start' | 'goal' | 'warp' | 'station';
 
 /**
  * A marked cell, given as a point on the surface plus the direction that

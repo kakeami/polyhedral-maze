@@ -54,6 +54,11 @@ export interface KineticGeometryOptions {
    * Axis-aligned like `axialGap`, and for the same reason.
    */
   readonly caps?: boolean;
+  /**
+   * Cells that carry a station's pin, beside the start and the goal: where an
+   * interchange maze may be folded (`core/kinetic/interchange.ts`).
+   */
+  readonly stations?: readonly number[];
 }
 
 export interface KineticPieceGeometry {
@@ -144,6 +149,7 @@ export function buildKineticPieces(
   options: KineticGeometryOptions = {},
 ): KineticPieceGeometry[] {
   const marked = markedCells(ends);
+  for (const cell of options.stations ?? []) if (!marked.has(cell)) marked.set(cell, 'station');
   const shrink = axialShrink(mech, options.axialGap ?? 0);
   const walls = kineticWalls(mech, surface, design, null, options);
   const pieces: {
@@ -429,7 +435,28 @@ export function kineticSolutionPath(
   options: KineticGeometryOptions = {},
 ): Vec3[] {
   const { cells, doorway } = solutionCells(surface, design, stateIndex, ends);
-  if (cells.length === 0) return [];
+  return kineticPathThrough(mech, surface, stateIndex, cells, doorway, options).points;
+}
+
+/**
+ * The line through cells that are already known, in world coordinates, and
+ * which of them each point of it lies on.
+ *
+ * `doorway` says which side class each cell was entered through. What
+ * `kineticSolutionPath` draws, split off for a caller that has the cells and
+ * wants more than the line: the interchange maze traces a walk a step at a
+ * time and has to know what the surface is doing under the point it has got
+ * to.
+ */
+export function kineticPathThrough(
+  mech: Mechanism,
+  surface: KineticSurface,
+  stateIndex: number,
+  cells: readonly number[],
+  doorway: ReadonlyMap<number, number>,
+  options: KineticGeometryOptions = {},
+): { points: Vec3[]; cells: number[] } {
+  if (cells.length === 0) return { points: [], cells: [] };
   const shrink = axialShrink(mech, options.axialGap ?? 0);
   const state = mech.states[stateIndex]!;
   const centreOf = (index: number): Vec3 => {
@@ -479,10 +506,12 @@ export function kineticSolutionPath(
    * the same place, and the line has to cross from one to the other.
    */
   const path: Vec3[] = [];
-  const push = (point: Vec3) => {
+  const on: number[] = [];
+  const push = (point: Vec3, cell: number) => {
     const last = path[path.length - 1];
     if (last && near(last, point)) return;
     path.push(point);
+    on.push(cell);
   };
 
   cells.forEach((index, i) => {
@@ -493,13 +522,13 @@ export function kineticSolutionPath(
       if (classId !== undefined) {
         const leaving = doorMidpoint(previousCell, classId, centre);
         const arriving = doorMidpoint(index, classId, centreOf(previousCell));
-        if (leaving) push(leaving);
-        if (arriving) push(arriving);
+        if (leaving) push(leaving, previousCell);
+        if (arriving) push(arriving, index);
       }
     }
-    push(centre);
+    push(centre, index);
   });
-  return path;
+  return { points: path, cells: on };
 }
 
 function near(a: Vec3, b: Vec3, epsilon = 1e-9): boolean {

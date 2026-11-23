@@ -23,6 +23,14 @@
  * that are not in the arc left exactly as they were. Most pairs of poses are
  * more than one fold apart, so what is played is usually a short sequence, and
  * the object passes through shapes it cannot be put down in.
+ *
+ * It can also be handed a route that crosses poses (`playRoute`): a line a
+ * pose, traced where it lies, a fold to the next pose, and the next line. The
+ * view is brought round to where each line starts *before* it is traced, and
+ * kept on the point as it goes (`follow-view.ts`) — through the fold as well,
+ * which the point rides on the cube it is standing on, so that there is one
+ * point from start to goal and not one a line. That is the interchange maze's
+ * answer, and the scene knows nothing about that maze beyond the lines.
  */
 
 import * as THREE from 'three';
@@ -37,6 +45,7 @@ import {
   chooseNextPose, foldPath, poseDistances, stateDuringFold,
 } from '../core/kinetic/fold-path.ts';
 import type { KineticPieceGeometry } from './kinetic-geometry.ts';
+import type { RouteLeg } from './interchange-geometry.ts';
 import { BLOOM_LAYER } from './scene-bloom.ts';
 import {
   disposeObject,
@@ -48,6 +57,7 @@ import {
 } from './scene-objects.ts';
 import { createSceneStage } from './scene-stage.ts';
 import { FOLD_SCENE } from './fold-scene-constants.ts';
+import { followStep } from './follow-view.ts';
 import { DEFAULT_PRESET_ID, faceColorHex, resolvePreset } from './scene-presets.ts';
 import type { PresetId, ScenePreset } from './scene-presets.ts';
 
@@ -79,6 +89,19 @@ export interface FoldModel {
    * on show, and mid-fold where it is on show at both ends of the fold.
    */
   readonly visibleByPose: readonly Uint8Array[];
+  /**
+   * Lines drawn on cells, beside the walls: the symbols an interchange maze
+   * tells its stations apart by. Shown where the cell is, as a pin is.
+   */
+  readonly decals?: readonly FoldDecal[];
+}
+
+export interface FoldDecal {
+  readonly piece: number;
+  readonly cell: number;
+  /** Pairs of points in the piece's body frame. */
+  readonly pairs: readonly Vec3[];
+  readonly color: number;
 }
 
 export interface FoldSceneContext {
@@ -106,6 +129,12 @@ export interface FoldSceneContext {
   readonly folding: boolean;
   /** The route through the pose on show, in the mechanism's coordinates. */
   setSolution(path: readonly Vec3[] | null): void;
+  /**
+   * Plays a route that crosses poses, round and round: each line traced in
+   * its own pose, the view turning to keep the point in front, then a fold to
+   * the next. `null` stops it and leaves the object where it stands.
+   */
+  playRoute(legs: readonly RouteLeg[] | null): void;
   setPreset(id: PresetId): void;
   setAutoRotate(on: boolean): void;
   resize(): void;
@@ -147,6 +176,44 @@ export function createFoldScene(
   let solutionLine: Line2 | null = null;
   let solutionMaterial: LineMaterial | null = null;
   let solutionPath: readonly Vec3[] | null = null;
+  /** A route being played: which line it is on, and how far along it. */
+  let tour: {
+    legs: readonly RouteLeg[];
+    leg: number;
+    /**
+     * Folding to the pose of the next line; the view coming round to where
+     * that line starts; the line being traced; the point standing at its end.
+     */
+    phase: 'fold' | 'turn' | 'walk' | 'rest';
+    /** The line being traced, about the object's middle, and the length up to each point. */
+    points: THREE.Vector3[];
+    lengths: number[];
+    travelled: number;
+    /** The last point passed. */
+    at: number;
+    wait: number;
+    /** How fast the view is turning, radians a second. */
+    pace: number;
+    /** Coming round: how long it has been at it, and how long it has been there. */
+    turning: number;
+    ready: number;
+    /**
+     * While folding: what the point is riding — the cell the last line ended
+     * on, on the piece that carries it. Null on the way back to the start,
+     * where there is no point to carry.
+     */
+    rider: RouteLeg['endsOn'] | null;
+  } | null = null;
+  /** What has been traced: whole segments, the part of one in progress, and the point itself. */
+  let trail: Line2 | null = null;
+  let trailTip: Line2 | null = null;
+  let trailMaterial: LineMaterial | null = null;
+  let walker: THREE.Mesh | null = null;
+  /** Auto-rotate as the page asked for it; a route in play overrides it. */
+  let autoRotateWanted = rig.controls.autoRotate;
+  /** A hand on the view, and how long since it let go: the view is theirs meanwhile. */
+  let grabbed = false;
+  let sinceGrab = Infinity;
 
   const resolution = () => new THREE.Vector2(container.clientWidth, container.clientHeight);
 
@@ -160,6 +227,8 @@ export function createFoldScene(
 
   function clearModel() {
     clearSolution();
+    clearTrail();
+    clearWalker();
     for (let i = object.children.length - 1; i >= 0; i--) {
       const child = object.children[i]!;
       object.remove(child);
@@ -221,6 +290,15 @@ export function createFoldScene(
         group.add(pin);
         pins.push({ pin, cell: piece.markerCells[index]! });
       });
+      for (const decal of model.decals ?? []) {
+        if (decal.piece !== piece.piece || decal.pairs.length === 0) continue;
+        // A little heavier than a wall: it has to read as a mark among them.
+        const drawn = makeSegments(
+          decal.pairs, decal.color, lines.wallWidth * FOLD_SCENE.decalWidth, res, lineMaterials,
+        );
+        group.add(drawn);
+        pins.push({ pin: drawn, cell: decal.cell });
+      }
 
       pieceGroups.push(group);
       object.add(group);
@@ -361,6 +439,256 @@ export function createFoldScene(
     object.add(solutionLine);
   }
 
+  /** The line traced so far. The point is not part of it: it outlives the line. */
+  function clearTrail() {
+    for (const line of [trail, trailTip]) {
+      if (!line) continue;
+      object.remove(line);
+      disposeObject(line);
+    }
+    trail = null;
+    trailTip = null;
+    trailMaterial = null;
+  }
+
+  function clearWalker() {
+    if (!walker) return;
+    walker.parent?.remove(walker);
+    disposeObject(walker);
+    walker = null;
+  }
+
+  /** The point that walks, made if it is not there. */
+  function theWalker(): THREE.Mesh {
+    if (walker) return walker;
+    walker = new THREE.Mesh(
+      new THREE.SphereGeometry(FOLD_SCENE.walkerRadius, 16, 12),
+      new THREE.MeshBasicMaterial({ color: preset.lines.solutionColor }),
+    );
+    walker.layers.enable(BLOOM_LAYER);
+    return walker;
+  }
+
+  /**
+   * Stands the point on the piece that carries the cell it has stopped on, so
+   * that it goes where that piece goes while the object folds.
+   *
+   * A line belongs to one pose and is gone the moment the object starts to
+   * move. The point is the same point before and after, on the same cell; if
+   * it went with the line, the eye would have nothing to carry across the
+   * fold, and what makes the fold part of the route is exactly that it is
+   * made with a finger held in place.
+   */
+  function rideOut() {
+    if (!tour?.rider) return;
+    const carrier = pieceGroups[tour.rider.piece];
+    if (!carrier) return;
+    const point = theWalker();
+    carrier.add(point);
+    point.position.set(tour.rider.at[0], tour.rider.at[1], tour.rider.at[2]);
+    point.visible = true;
+  }
+
+  /**
+   * Lays out the line of the walk the route has come to, with none of it
+   * drawn yet.
+   *
+   * The whole line goes into one geometry and is revealed a segment at a time
+   * (`instanceCount`), so that tracing it allocates nothing; the part of a
+   * segment the point is halfway along is a second line of one segment, moved
+   * each frame.
+   */
+  function beginWalk() {
+    if (!tour || !model) return;
+    clearTrail();
+    const leg = tour.legs[tour.leg]!;
+    const state = model.states[pose];
+    const centre: Vec3 = state ? boundsOf(state).centre : [0, 0, 0];
+    tour.points = leg.points.map(v => new THREE.Vector3(v[0] - centre[0], v[1] - centre[1], v[2] - centre[2]));
+    tour.lengths = [0];
+    for (let i = 1; i < tour.points.length; i++) {
+      tour.lengths.push(tour.lengths[i - 1]! + tour.points[i]!.distanceTo(tour.points[i - 1]!));
+    }
+    tour.travelled = 0;
+    tour.at = 0;
+    // Not walked yet: the view comes round to where it starts first.
+    tour.phase = 'turn';
+    tour.turning = 0;
+    tour.ready = 0;
+    if (tour.points.length === 0) return;
+
+    trailMaterial = new LineMaterial({
+      color: preset.lines.solutionColor,
+      linewidth: preset.lines.solutionWidth,
+    });
+    trailMaterial.resolution.copy(resolution());
+    const first = tour.points[0]!;
+    if (tour.points.length > 1) {
+      const whole = new LineGeometry();
+      whole.setPositions(tour.points.flatMap(v => [v.x, v.y, v.z]));
+      whole.instanceCount = 0;
+      trail = new Line2(whole, trailMaterial);
+      // Its bounds are the whole line's, and most of it is not drawn yet.
+      trail.frustumCulled = false;
+      object.add(trail);
+    }
+    const tip = new LineGeometry();
+    tip.setPositions([first.x, first.y, first.z, first.x, first.y, first.z]);
+    trailTip = new Line2(tip, trailMaterial);
+    trailTip.frustumCulled = false;
+    object.add(trailTip);
+
+    // Off the piece it rode in on, if it rode, and onto the line: the same
+    // place, since the line starts on the cell the last one ended on.
+    const point = theWalker();
+    object.add(point);
+    point.position.copy(first);
+    point.visible = true;
+  }
+
+  /** Draws the line as far as it has been walked, and puts the point at the end of it. */
+  function drawTrail() {
+    if (!tour || !walker || !trailTip) return;
+    const { points, lengths } = tour;
+    while (tour.at + 1 < points.length && lengths[tour.at + 1]! <= tour.travelled) tour.at++;
+    const from = points[tour.at]!;
+    const next = points[tour.at + 1];
+    const head = from.clone();
+    if (next) {
+      const span = lengths[tour.at + 1]! - lengths[tour.at]!;
+      head.lerp(next, span > 0 ? (tour.travelled - lengths[tour.at]!) / span : 0);
+    }
+    if (trail) (trail.geometry as LineGeometry).instanceCount = tour.at;
+    const start = trailTip.geometry.getAttribute('instanceStart') as THREE.InterleavedBufferAttribute;
+    start.data.set([from.x, from.y, from.z, head.x, head.y, head.z], 0);
+    start.data.needsUpdate = true;
+    walker.position.copy(head);
+  }
+
+  /**
+   * Brings the view round to where the point is, a little each frame, and
+   * says how far it still has to turn.
+   *
+   * Towards the face the point is on rather than towards the point: on a
+   * plank the two are a right angle apart, and a view along the plank shows
+   * the maze edge-on. Round the object and never over it (`follow-view.ts`).
+   * A hand on the view takes it over, and keeps it for a moment after letting
+   * go; there is then nothing left to turn.
+   */
+  function follow(dt: number): number {
+    if (!tour || !walker || !walker.visible) return 0;
+    if (grabbed || sinceGrab < FOLD_SCENE.handsOffSeconds) {
+      tour.pace = 0;
+      return 0;
+    }
+    // Where the point is, which also brings the frames above it up to date.
+    const target = rig.controls.target;
+    const radial = walker.getWorldPosition(new THREE.Vector3()).sub(target);
+    // Which way is out from under it: mid-fold, as the piece it rides has
+    // been turned; otherwise as the line says.
+    let aim: THREE.Vector3;
+    if (tour.phase === 'fold') {
+      if (!tour.rider || !walker.parent) return 0;
+      const out = tour.rider.normal;
+      aim = new THREE.Vector3(out[0], out[1], out[2]).transformDirection(walker.parent.matrixWorld);
+    } else {
+      const leg = tour.legs[tour.leg]!;
+      const normal = leg.normals[Math.min(tour.at, leg.normals.length - 1)];
+      if (!normal) return 0;
+      aim = new THREE.Vector3(normal[0], normal[1], normal[2]).transformDirection(object.matrixWorld);
+    }
+    if (radial.lengthSq() > 0) aim.addScaledVector(radial.normalize(), FOLD_SCENE.followRadial);
+    aim.normalize();
+
+    const eye = rig.camera.position.clone().sub(target);
+    const distance = eye.length();
+    if (distance === 0) return 0;
+    eye.divideScalar(distance);
+    const step = followStep([eye.x, eye.y, eye.z], [aim.x, aim.y, aim.z], tour.pace, dt, {
+      rate: FOLD_SCENE.followRate,
+      maxSpeed: FOLD_SCENE.followMaxSpeed,
+      accel: FOLD_SCENE.followAccel,
+      maxTilt: FOLD_SCENE.followMaxTilt,
+      levelFull: FOLD_SCENE.followLevelFull,
+    });
+    tour.pace = step.pace;
+    rig.camera.position.set(
+      target.x + step.eye[0] * distance,
+      target.y + step.eye[1] * distance,
+      target.z + step.eye[2] * distance,
+    );
+    return step.remaining;
+  }
+
+  function advanceTour(dt: number) {
+    if (!tour || !model) return;
+    sinceGrab += dt;
+    const leg = tour.legs[tour.leg]!;
+    if (tour.phase === 'fold') {
+      if (!playing && pose !== leg.pose) {
+        // Folds there, or — if this object has no way — is simply put there.
+        goTo(leg.pose, true);
+      }
+      if (playing) {
+        // The point rides the fold, and the view goes with it. (Put back on
+        // its piece if the pieces were rebuilt under it.)
+        if (tour.rider && !walker) rideOut();
+        follow(dt);
+        return;
+      }
+      beginWalk();
+      return;
+    }
+    if (tour.phase === 'turn') {
+      // The point stands where the line starts until the view has come round
+      // to it and held there a moment: a line that sets off while the view is
+      // still turning is half over before it can be read. Not for ever — a
+      // view that cannot settle is no reason never to start.
+      tour.turning += dt;
+      const left = follow(dt);
+      tour.ready = left < FOLD_SCENE.routeAimedWithin ? tour.ready + dt : 0;
+      if (tour.ready >= FOLD_SCENE.routeReadySeconds || tour.turning >= FOLD_SCENE.routeTurnSecondsMax) {
+        tour.phase = 'walk';
+      }
+      return;
+    }
+    if (tour.phase === 'walk') {
+      const total = tour.lengths[tour.lengths.length - 1] ?? 0;
+      // One speed for a short walk and a long one, within reason: a walk of
+      // three cells is not over in a blink, and one of two hundred is not a
+      // minute.
+      const seconds = Math.max(
+        FOLD_SCENE.walkSecondsMin,
+        Math.min(FOLD_SCENE.walkSecondsMax, total / FOLD_SCENE.walkSpeed),
+      );
+      tour.travelled = Math.min(total, tour.travelled + (total / seconds) * dt);
+      drawTrail();
+      follow(dt);
+      if (tour.travelled >= total) {
+        tour.phase = 'rest';
+        tour.wait = tour.leg === tour.legs.length - 1
+          ? FOLD_SCENE.routeEndSeconds
+          : FOLD_SCENE.routeRestSeconds;
+      }
+      return;
+    }
+    follow(dt);
+    tour.wait -= dt;
+    if (tour.wait > 0) return;
+    const next = (tour.leg + 1) % tour.legs.length;
+    clearTrail();
+    if (next === 0) {
+      // Round again: the point has arrived, and the next one starts at the start.
+      tour.rider = null;
+      if (walker) walker.visible = false;
+    } else {
+      tour.rider = leg.endsOn;
+      rideOut();
+    }
+    tour.leg = next;
+    tour.phase = 'fold';
+  }
+
   /**
    * Sets a sequence of folds going, or cuts straight to the pose.
    *
@@ -409,7 +737,7 @@ export function createFoldScene(
   const ease = (at: number): number => at * at * (3 - 2 * at);
 
   function advanceAutoFold(dt: number) {
-    if (!autoFold || playing || !model) return;
+    if (!autoFold || playing || !model || tour) return;
     if (holding > 0) {
       holding -= dt;
       resting = 0;
@@ -450,6 +778,9 @@ export function createFoldScene(
 
   rig.applyPreset(preset);
 
+  rig.controls.addEventListener('start', () => { grabbed = true; });
+  rig.controls.addEventListener('end', () => { grabbed = false; sinceGrab = 0; });
+
   const clock = new THREE.Clock();
   let running = true;
   function animate() {
@@ -460,6 +791,7 @@ export function createFoldScene(
     const dt = Math.min(clock.getDelta(), 0.1);
     advanceFold(dt);
     advanceAutoFold(dt);
+    advanceTour(dt);
     rig.controls.update();
     rig.render(object);
   }
@@ -471,12 +803,15 @@ export function createFoldScene(
     const h = container.clientHeight;
     for (const mat of lineMaterials) mat.resolution.set(w, h);
     solutionMaterial?.resolution.set(w, h);
+    trailMaterial?.resolution.set(w, h);
   }
 
   return {
     setModel(next) {
       model = next;
       solutionPath = null; // it belonged to the object being replaced
+      tour = null;
+      rig.controls.autoRotate = autoRotateWanted;
       playing = null;
       queued = null;
       resting = 0;
@@ -507,6 +842,22 @@ export function createFoldScene(
       solutionPath = path;
       rebuildSolution();
     },
+    playRoute(legs) {
+      clearTrail();
+      clearWalker();
+      if (!legs || legs.length === 0) {
+        tour = null;
+        rig.controls.autoRotate = autoRotateWanted;
+        return;
+      }
+      tour = {
+        legs, leg: 0, phase: 'fold', points: [], lengths: [], travelled: 0, at: 0, wait: 0,
+        pace: 0, turning: 0, ready: 0, rider: null,
+      };
+      // The view is being steered to the point; turning it as well would fight that.
+      rig.controls.autoRotate = false;
+      resting = 0;
+    },
     setPreset(id) {
       preset = resolvePreset(id);
       rig.applyPreset(preset);
@@ -515,9 +866,12 @@ export function createFoldScene(
       playing = null;
       clearModel();
       buildModel();
+      // A route in play starts its walk again, in the new colours.
+      if (tour) tour.phase = 'fold';
     },
     setAutoRotate(on) {
-      rig.controls.autoRotate = on;
+      autoRotateWanted = on;
+      rig.controls.autoRotate = on && !tour;
     },
     resize,
     dispose() {
