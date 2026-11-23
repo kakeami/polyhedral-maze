@@ -50,6 +50,7 @@ export interface InterchangeControlsContext {
   setStatus(text: string): void;
   setProgress(fraction: number | null): void;
   setBusy(busy: boolean): void;
+  setExportBusy(busy: boolean): void;
   onRuling(cb: (cells: number) => void): void;
   onStations(cb: (stations: number) => void): void;
   onFolds(cb: (folds: number) => void): void;
@@ -87,6 +88,7 @@ export function createInterchangeControls(
   const shuffleSeedBtn = el<HTMLButtonElement>('ix-shuffle-seed');
   const shuffleAllBtn = el<HTMLButtonElement>('ix-shuffle-all');
   const copyBtn = el<HTMLButtonElement>('ix-copy-url');
+  const exportBtn = el<HTMLButtonElement>('ix-export-pdf');
 
   const actions = new Map<string, () => void>();
   let rulings: readonly number[] = [];
@@ -95,6 +97,13 @@ export function createInterchangeControls(
   let foldsCallback: ((folds: number) => void) | null = null;
   let poseCallback: ((index: number) => void) | null = null;
   let seedCallback: ((seed: number) => void) | null = null;
+  /** Looking for a maze, and drawing the pattern of one: either keeps the button shut. */
+  let searching = false;
+  let exporting = false;
+  const showExport = () => {
+    exportBtn.textContent = exporting ? 'Exporting...' : EXPORT_LABEL;
+    exportBtn.disabled = searching || exporting;
+  };
 
   const rulingAt = (index: number) => rulings[index] ?? rulings[0] ?? 0;
 
@@ -120,6 +129,7 @@ export function createInterchangeControls(
   shuffleSeedBtn.addEventListener('click', () => actions.get('shuffle-seed')?.());
   shuffleAllBtn.addEventListener('click', () => actions.get('shuffle-all')?.());
   copyBtn.addEventListener('click', () => actions.get('copy-url')?.());
+  exportBtn.addEventListener('click', () => actions.get('export-pdf')?.());
 
   return {
     getParams() {
@@ -194,6 +204,13 @@ export function createInterchangeControls(
       seedInput.disabled = busy;
       shuffleSeedBtn.disabled = busy;
       shuffleAllBtn.disabled = busy;
+      // The maze on show is the one before: its pattern is not what is asked for.
+      searching = busy;
+      showExport();
+    },
+    setExportBusy(busy) {
+      exporting = busy;
+      showExport();
     },
     onRuling(cb) {
       rulingCallback = cb;
@@ -225,6 +242,9 @@ export function createInterchangeControls(
     showToast,
   };
 }
+
+/** The folding page's words for the same eight sheets of cubes. */
+const EXPORT_LABEL = 'Export cubes PDF';
 
 const BLURB =
   'The ring of cubes again, with a maze no one shape can solve. ' +
@@ -277,6 +297,7 @@ function buildHTML(p: InterchangeParams): string {
       <button id="ix-shuffle-seed">Shuffle seed</button>
       <button id="ix-shuffle-all">Shuffle all</button>
       <button id="ix-copy-url" class="wide">Copy URL</button>
+      <button id="ix-export-pdf" class="wide">${EXPORT_LABEL}</button>
     </div>
 
     <div class="progress" id="ix-progress" hidden>

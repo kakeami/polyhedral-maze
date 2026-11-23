@@ -23,6 +23,13 @@
  * by the time the cubes are built they are identical white cubes with mazes on
  * them, and the only thing that says which is which, and which way up, is the
  * drawing itself.
+ *
+ * **Two mazes are printed from here**, and they differ in what is printed
+ * beside the walls and in what the first sheet says the ring is for, and in
+ * nothing else: the folding maze (`buildFoldSheets`, below) and the
+ * interchange maze (`interchange-sheet-model.ts`). What they share is
+ * `buildCubeRingSheets` — a ring of cubes, a set of open classes, the marks
+ * on it and the sentences about it.
  */
 
 import type { Vec2 } from '../core/vec2.ts';
@@ -42,11 +49,14 @@ import type { CubeRingMechanism, TapeSeam } from '../core/kinetic/mechanisms/cub
 import type { KineticState, Mat3 } from '../core/kinetic/types.ts';
 import { IDENTITY, applyPlacement } from '../core/kinetic/types.ts';
 
-export interface FoldSheetOptions {
+export interface CubeRingSheetOptions {
   /** Edge of one cube, in mm. Defaults to the largest the sheet allows. */
   edgeMm?: number;
   tabMm?: number;
   sheet?: SheetBox;
+}
+
+export interface FoldSheetOptions extends CubeRingSheetOptions {
   title?: string;
   /** Where the markers are printed; found from the design if not given. */
   ends?: PrintedEnds;
@@ -58,14 +68,51 @@ export interface FoldSheet {
   readonly piece: number | null;
 }
 
-export interface FoldSheetPlan {
+export interface CubeRingSheetPlan {
   readonly sheets: FoldSheet[];
   readonly edgeMm: number;
   readonly cellMm: number;
-  readonly perfectStates: number;
-  readonly stateCount: number;
   /** Hinges whose edge did not come out on the boundary of its net. */
   readonly hingesOffBoundary: number;
+}
+
+export interface FoldSheetPlan extends CubeRingSheetPlan {
+  readonly perfectStates: number;
+  readonly stateCount: number;
+}
+
+/** A symbol drawn on one cell: strokes, as pairs of points in the body frame of the cell's piece. */
+export interface CellGlyph {
+  readonly cell: number;
+  readonly pairs: readonly Vec3[];
+}
+
+/**
+ * What is printed on the cubes beside the walls.
+ *
+ * The one exception to *nothing is written on the model*, and it is the maze's
+ * and not the builder's: a start, a goal, and — on a maze that has them —
+ * the symbols it is folded on. All of it is read by whoever solves the maze,
+ * none of it by whoever builds it.
+ */
+export interface CubeMarks {
+  /** The cells that carry an S, and those that carry a G. */
+  readonly start: readonly number[];
+  readonly goal: readonly number[];
+  readonly glyphs?: readonly CellGlyph[];
+}
+
+/** A symbol as strokes in a unit circle, x right and y up: each a run of points. */
+export type SymbolStrokes = readonly (readonly (readonly [number, number])[])[];
+
+/** What the first sheet says that the maze decides and the object does not. */
+export interface CubeRingNotes {
+  /** What the thing is called, before "— eight cubes taped into a ring". */
+  readonly title: string;
+  /** What the ring does and how its marks are read, a sentence each; broken to the sheet here. */
+  readonly sentences: readonly string[];
+  /** A row under them: a few words, and then symbols drawn as they are on the cubes. */
+  readonly key?: { readonly label: string; readonly symbols: readonly SymbolStrokes[] };
 }
 
 /** Which way a face is drawn: the body directions that map to page right and up. */
@@ -278,12 +325,49 @@ function hingeKeysOf(mech: CubeRingMechanism, piece: number): string[] {
     });
 }
 
+/**
+ * The folding maze's pattern: a perfect maze in every shape, and each marker
+ * printed on two squares.
+ */
 export function buildFoldSheets(
   mech: CubeRingMechanism,
   surface: KineticSurface,
   design: KineticDesign,
   options: FoldSheetOptions = {},
 ): FoldSheetPlan {
+  const ends = options.ends ?? pickPrintedEnds(surface, design);
+  const rate = treeRate(surface, design);
+  const plan = buildCubeRingSheets(mech, surface, design, ends, {
+    title: 'Folding maze',
+    // Measured to the sheet rather than written to fit it: how many shapes, and
+    // which marks a pose shows, depend on the object.
+    sentences: [shapesSentence(mech, rate.perfect), marksSentence(mech, surface, ends)],
+  }, options);
+  return {
+    sheets: plan.sheets,
+    edgeMm: plan.edgeMm,
+    cellMm: plan.cellMm,
+    perfectStates: rate.perfect,
+    stateCount: surface.stateCount,
+    hingesOffBoundary: plan.hingesOffBoundary,
+  };
+}
+
+/**
+ * A ring of cubes with a maze on it, as sheets: the notes, then a cube each.
+ *
+ * Which sides are open is `printing.open` and nothing else is asked of it —
+ * not that any shape be a perfect maze, which is the caller's to have checked
+ * and to say in `notes` if it is so.
+ */
+export function buildCubeRingSheets(
+  mech: CubeRingMechanism,
+  surface: KineticSurface,
+  printing: Pick<KineticDesign, 'open'>,
+  marks: CubeMarks,
+  notes: CubeRingNotes,
+  options: CubeRingSheetOptions = {},
+): CubeRingSheetPlan {
   const sheet = options.sheet ?? A4_SHEET;
   const tab = options.tabMm ?? D.tabMm;
   const edge = options.edgeMm ?? largestEdge(sheet, tab);
@@ -293,16 +377,20 @@ export function buildFoldSheets(
     );
   }
   const cells = mech.cellsPerFace;
-  const ends = options.ends ?? pickPrintedEnds(surface, design);
-  const rate = treeRate(surface, design);
   const seams = mech.tapeSeams();
+  const printed: Printed = {
+    open: printing.open,
+    start: new Set(marks.start),
+    goal: new Set(marks.goal),
+    glyphs: new Map((marks.glyphs ?? []).map(glyph => [glyph.cell, glyph.pairs])),
+  };
 
   const sheets: FoldSheet[] = [];
   let offBoundary = 0;
 
   sheets.push({
     piece: null,
-    items: assemblySheet(mech, surface, design, ends, seams, sheet, edge, rate.perfect),
+    items: assemblySheet(mech, surface, printed, seams, sheet, edge, notes),
   });
 
   for (let piece = 0; piece < mech.pieceCount; piece++) {
@@ -310,7 +398,7 @@ export function buildFoldSheets(
     const hinges = hingeKeysOf(mech, piece);
     const faces = bestLayout(hinges);
     const { items, unlabelled } = cubeSheet(
-      mech, surface, design, ends, { piece, faces, seams: mine, hinges }, sheet, edge, tab,
+      mech, surface, printed, { piece, faces, seams: mine, hinges }, sheet, edge, tab,
     );
     offBoundary += unlabelled;
     sheets.push({ piece, items });
@@ -320,10 +408,16 @@ export function buildFoldSheets(
     sheets,
     edgeMm: edge,
     cellMm: edge / cells,
-    perfectStates: rate.perfect,
-    stateCount: surface.stateCount,
     hingesOffBoundary: offBoundary,
   };
+}
+
+/** The printing, as the painter asks about it: by cell. */
+interface Printed {
+  readonly open: ReadonlySet<number>;
+  readonly start: ReadonlySet<number>;
+  readonly goal: ReadonlySet<number>;
+  readonly glyphs: ReadonlyMap<number, readonly Vec3[]>;
 }
 
 /** The biggest cube whose cross, tabs and header all fit the sheet. */
@@ -352,8 +446,7 @@ interface CubeLayout {
 function cubeSheet(
   mech: CubeRingMechanism,
   surface: KineticSurface,
-  design: KineticDesign,
-  ends: PrintedEnds,
+  printed: Printed,
   layout: CubeLayout,
   sheet: SheetBox,
   edge: number,
@@ -421,7 +514,7 @@ function cubeSheet(
   const drawn = new Set<string>();
   for (const face of faces) {
     paintFace(items, {
-      mech, surface, design, ends, piece,
+      mech, surface, printed, piece,
       frame: face.frame, centre: centreOf(face), edge, drawn,
       cutSides: new Set(STEPS.filter(step => !face.folds.has(step))),
     });
@@ -550,8 +643,7 @@ function creaseTicks(
 interface FacePaint {
   mech: CubeRingMechanism;
   surface: KineticSurface;
-  design: Pick<KineticDesign, 'open'>;
-  ends: PrintedEnds | null;
+  printed: Printed;
   piece: number;
   frame: Frame;
   centre: Vec2;
@@ -572,7 +664,7 @@ interface FacePaint {
  * corners and the layout comes out right for all six.
  */
 function paintFace(items: PageItem[], p: FacePaint): void {
-  const { mech, surface, design, frame, centre, edge, drawn } = p;
+  const { mech, surface, printed, frame, centre, edge, drawn } = p;
   const cells = mech.cellsPerFace;
   const face = faceNumberOf(frame.n);
   const project = (v: Vec3): Vec2 => [
@@ -594,7 +686,7 @@ function paintFace(items: PageItem[], p: FacePaint): void {
         // A side of the cube, or a side inside the face: told apart by where
         // it lies in the face's own frame, not by which index it has.
         const onEdge = edgeOfFace(frame, from, to);
-        if (design.open.has(classId)) continue;
+        if (printed.open.has(classId)) continue;
 
         let a = corners[side]!;
         let b = corners[(side + 1) % corners.length]!;
@@ -614,8 +706,8 @@ function paintFace(items: PageItem[], p: FacePaint): void {
         });
       }
 
-      const marker = p.ends?.start.includes(index) ? 'start'
-        : p.ends?.goal.includes(index) ? 'goal'
+      const marker = printed.start.has(index) ? 'start'
+        : printed.goal.has(index) ? 'goal'
         : null;
       if (marker) {
         const middle = project(cellCentreOf(cell.corners));
@@ -633,8 +725,27 @@ function paintFace(items: PageItem[], p: FacePaint): void {
           size: S.markerTextSize, color: S.markerTextColor, bold: true,
         });
       }
+
+      // A symbol, where the maze has one on this cell: drawn as it is on
+      // screen, from the same strokes, so the paper and the picture agree
+      // about which way up it stands on its square.
+      const glyph = printed.glyphs.get(index);
+      if (glyph) {
+        const width = glyphWidth(edge / cells);
+        for (let i = 1; i < glyph.length; i += 2) {
+          items.push({
+            kind: 'line', a: project(glyph[i - 1]!), b: project(glyph[i]!),
+            stroke: S.glyphColor, width, cap: 'round',
+          });
+        }
+      }
     }
   }
+}
+
+/** How heavy a symbol is drawn on a cell that size: in proportion, within what prints. */
+function glyphWidth(cellMm: number): number {
+  return Math.min(S.glyphMaxWidth, Math.max(S.glyphMinWidth, cellMm * S.glyphWidthPerCell));
 }
 
 function cellCentreOf(corners: readonly Vec3[]): Vec3 {
@@ -684,12 +795,11 @@ function segmentKey(a: Vec2, b: Vec2): string {
 function assemblySheet(
   mech: CubeRingMechanism,
   surface: KineticSurface,
-  design: KineticDesign,
-  ends: PrintedEnds,
+  printed: Printed,
   seams: readonly TapeSeam[],
   sheet: SheetBox,
   edge: number,
-  perfect: number,
+  said: CubeRingNotes,
 ): PageItem[] {
   const items: PageItem[] = [];
   let y = sheet.margin;
@@ -698,7 +808,7 @@ function assemblySheet(
   const shape = drawnArrangement(mech, seams);
   items.push({
     kind: 'text', at: [sheet.margin, y + S.titleSize],
-    text: `Folding maze — ${countWord(pieces)} cubes taped into a ring`,
+    text: `${said.title} — ${countWord(pieces)} cubes taped into a ring`,
     size: S.titleSize, color: S.titleColor, align: 'left', bold: true,
   });
   y += S.titleSize + 3;
@@ -759,16 +869,17 @@ function assemblySheet(
     'Glue each sheet to thin card, cut the outline, score the creases and glue the cube up.',
     'Four creases run between two notches in the outline; the fifth is marked by a tick at each end.',
     ...tapingNotes(mech, shape, dotted.length > 0),
-    // Measured to the sheet rather than written to fit it: how many shapes, and
-    // which marks a pose shows, depend on the object.
-    ...flush(wrapped([shapesSentence(mech, perfect)])),
-    ...flush(wrapped([marksSentence(mech, surface, ends)])),
+    ...said.sentences.flatMap(sentence => flush(wrapped([sentence]))),
   ];
   for (const note of notes) {
     items.push({
       kind: 'text', at: [sheet.margin, y + S.noteSize], text: note,
       size: S.noteSize, color: S.noteColor, align: 'left',
     });
+    y += S.noteLeading;
+  }
+  if (said.key) {
+    items.push(...symbolKey(said.key, [sheet.margin, y + S.noteSize]));
     y += S.noteLeading;
   }
   y += 3;
@@ -811,7 +922,7 @@ function assemblySheet(
     for (const spot of spots) {
       const centre = place(spot.at);
       paintFace(items, {
-        mech, surface, design, ends, piece: spot.piece,
+        mech, surface, printed, piece: spot.piece,
         // The cubes are turned in this shape, so which face of a cube looks
         // this way is a question for that cube's own frame.
         frame: inBodyFrame(shape.state[spot.piece]!.rot, view.frame),
@@ -847,6 +958,46 @@ function assemblySheet(
     }
   });
 
+  return items;
+}
+
+/**
+ * A line of the notes that ends in symbols: the words, then each symbol drawn
+ * from its strokes at the height of the writing.
+ *
+ * Drawn and not typed, because the face the notes are set in has no star and
+ * no diamond — and because the row is then the cubes' own marks, stroke for
+ * stroke, which is what it is there to show.
+ */
+function symbolKey(
+  key: NonNullable<CubeRingNotes['key']>,
+  at: Vec2,
+): PageItem[] {
+  const items: PageItem[] = [{
+    kind: 'text', at, text: key.label,
+    size: S.noteSize, color: S.noteColor, align: 'left',
+  }];
+  const radius = S.noteSize * 0.5;
+  // The note face averages a little under half its size a character: enough
+  // to clear the words without measuring them, which needs a document.
+  let x = at[0] + key.label.length * S.noteSize * 0.47 + radius + 1.5;
+  // Writing is placed by the middle of its line, so a symbol is too.
+  const middle = at[1];
+  for (const strokes of key.symbols) {
+    for (const stroke of strokes) {
+      for (let i = 1; i < stroke.length; i++) {
+        const from = stroke[i - 1]!;
+        const to = stroke[i]!;
+        items.push({
+          kind: 'line',
+          a: [x + from[0] * radius, middle - from[1] * radius],
+          b: [x + to[0] * radius, middle - to[1] * radius],
+          stroke: S.glyphColor, width: S.glyphMinWidth, cap: 'round',
+        });
+      }
+    }
+    x += radius * 2 + 2.2;
+  }
   return items;
 }
 
@@ -1100,20 +1251,38 @@ export function packDiagrams(
  * block, and one plank or three.
  */
 function shapesSentence(mech: CubeRingMechanism, perfect: number): string {
-  const kinds = new Map<string, number>();
-  for (const pose of mech.poses) {
-    const kind = pose.label.split(' ')[0]!.toLowerCase();
-    kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
-  }
-  const parts = [...kinds].map(([kind, count]) =>
-    (count === 1 ? `${/^[aeiou]/.test(kind) ? 'an' : 'a'} ${kind}` : `${countWord(count)} ${plural(kind)}`));
-  const list = parts.length > 1
-    ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
-    : parts[0] ?? '';
   const total = mech.poses.length;
-  return `The ring shuts into ${countWord(total)} shapes: ${list}. ` + (perfect === total
+  return `${shapesClause(mech)} ` + (perfect === total
     ? 'Every one is a perfect maze.'
     : `Of them ${perfect} are perfect mazes.`);
+}
+
+/** "The ring shuts into ten shapes: four planks, two cubes and four hooks." */
+export function shapesClause(mech: CubeRingMechanism): string {
+  return `The ring shuts into ${countWord(mech.poses.length)} shapes: `
+    + `${shapeKinds(mech.poses.map(pose => pose.label))}.`;
+}
+
+/**
+ * Shapes by kind, counted, in words: "four planks, two cubes and a frame".
+ *
+ * A label is a kind and, where there are several of the kind, a number; the
+ * kind is the first word of it.
+ */
+export function shapeKinds(labels: readonly string[], article: 'a' | 'the' = 'a'): string {
+  const kinds = new Map<string, number>();
+  for (const label of labels) {
+    const kind = label.split(' ')[0]!.toLowerCase();
+    kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+  }
+  const one = (kind: string): string =>
+    (article === 'the' ? `the ${kind}` : `${/^[aeiou]/.test(kind) ? 'an' : 'a'} ${kind}`);
+  const parts = [...kinds].map(([kind, count]) => (count === 1
+    ? one(kind)
+    : `${article === 'the' ? 'the ' : ''}${countWord(count)} ${plural(kind)}`));
+  return parts.length > 1
+    ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+    : parts[0] ?? '';
 }
 
 const NUMBERS = [
@@ -1122,7 +1291,7 @@ const NUMBERS = [
   'seventeen', 'eighteen', 'nineteen', 'twenty',
 ];
 
-const countWord = (n: number): string => NUMBERS[n] ?? String(n);
+export const countWord = (n: number): string => NUMBERS[n] ?? String(n);
 
 /** Wrapped lines carried on flush left, as the hand-wrapped taping notes are. */
 const flush = (lines: readonly string[]): string[] => lines.map(line => line.trimStart());

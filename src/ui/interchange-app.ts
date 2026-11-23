@@ -14,6 +14,10 @@
  * shape is a perfect maze here, and is not meant to be — and what showing the
  * solution means: the way from start to goal crosses shapes, so it is played
  * rather than drawn, a walk and a fold at a time (`FoldSceneContext.playRoute`).
+ *
+ * The pattern is the folding page's too — eight cubes and a sheet of notes —
+ * with this maze's marks on the cubes and this maze's rule in the notes
+ * (`render/interchange-sheet-model.ts`).
  */
 
 import { buildSurface } from '../core/kinetic/surface.ts';
@@ -30,6 +34,7 @@ import {
 } from '../render/interchange-geometry.ts';
 import type { RouteLeg } from '../render/interchange-geometry.ts';
 import { createFoldScene } from '../render/fold-scene.ts';
+import { exportInterchangePDF } from '../render/pdf-kinetic-sheets.ts';
 import { MAZE_STYLE } from '../render/scene-constants.ts';
 import { SCENE_PRESETS } from '../render/scene-presets.ts';
 import { createInterchangeControls } from './interchange-controls.ts';
@@ -52,6 +57,8 @@ interface Build {
   ruling: Ruling;
   maze: InterchangeMaze;
   legs: RouteLeg[];
+  /** What this maze was asked for: with the ruling, its name. */
+  asked: { stations: number; folds: number; seed: number };
 }
 
 /** How long one frame may spend looking for a maze before the browser gets a turn. */
@@ -157,7 +164,8 @@ export function initInterchangeApp(viewportEl: HTMLElement, controlsEl: HTMLElem
   function rebuild(keepPose: boolean) {
     const token = ++buildToken;
     const ruling = rulingFor(cells);
-    const search = createInterchangeSearch(ruling.world, { stations, folds, seed });
+    const asked = { stations, folds, seed };
+    const search = createInterchangeSearch(ruling.world, asked);
     const slice = (): boolean => {
       const until = performance.now() + SLICE_MS;
       while (performance.now() < until) if (search.step()) return true;
@@ -172,6 +180,7 @@ export function initInterchangeApp(viewportEl: HTMLElement, controlsEl: HTMLElem
         ruling,
         maze,
         legs: interchangeRouteLegs(ruling.mech, ruling.surface, ruling.world, maze),
+        asked,
       }, keepPose);
     };
     if (slice()) {
@@ -275,6 +284,27 @@ export function initInterchangeApp(viewportEl: HTMLElement, controlsEl: HTMLElem
   controls.onAction('auto-rotate', () => {
     scene.setAutoRotate(controls.isAutoRotating());
     syncUrl();
+  });
+
+  // The pattern is a sheet a cube and takes a moment to draw, so the button
+  // says so before the work starts rather than after it.
+  controls.onAction('export-pdf', () => {
+    if (!build) return;
+    const { ruling, maze, asked } = build;
+    controls.setExportBusy(true);
+    setTimeout(() => {
+      try {
+        const plan = exportInterchangePDF(ruling.mech, ruling.world, maze, asked);
+        controls.showToast(
+          `${plan.sheets.length} sheets — ${ruling.mech.pieceCount} cubes `
+          + `${plan.edgeMm.toFixed(0)} mm on a side`,
+        );
+      } catch (error) {
+        controls.showToast(`Export failed: ${(error as Error).message}`);
+      } finally {
+        controls.setExportBusy(false);
+      }
+    }, 0);
   });
 
   controls.onAction('copy-url', () => {

@@ -35,6 +35,21 @@ export const FOLD_SHEET_STYLE = {
   tapeWidth: 1.8,
   tapeLabelSize: 3.0,
 
+  /**
+   * A symbol printed on a cell: a station of the interchange maze.
+   *
+   * Blue, as its pin is on screen, and a deeper blue than that one because it
+   * is a thin line on white paper and not a bead against a lit surface. It is
+   * the one colour on the cubes that is neither a wall nor a tint, which is
+   * what keeps a square or a cross from being read as walls; printed in grey
+   * it is still paler than they are. Drawn in proportion to its cell, between
+   * the finest line that prints and one a little heavier than a wall.
+   */
+  glyphColor: [28, 96, 214] as RGB,
+  glyphWidthPerCell: 0.045,
+  glyphMinWidth: 0.3,
+  glyphMaxWidth: 0.9,
+
   /** The plank diagrams: which cube is which, and which way up. */
   diagramLabelColor: [140, 140, 140] as RGB,
   diagramLabelSize: 3.2,
