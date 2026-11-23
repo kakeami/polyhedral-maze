@@ -11,7 +11,7 @@
  * top before tone mapping. Masking rather than omitting matters twice over:
  * UnrealBloomPass returns its input *plus* the glow, so anything left visible
  * is composited into the frame a second time, and anything left out stops
- * occluding — see `mask` below.
+ * occluding — see `scene-bloom-mask.ts`.
  */
 
 import * as THREE from 'three';
@@ -20,7 +20,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { BloomMask } from './scene-bloom-mask.ts';
 import type { BloomSpec } from './scene-presets.ts';
 
 /**
@@ -36,17 +36,7 @@ export class BloomChain {
   private bloomPass: UnrealBloomPass | null = null;
   private spec: BloomSpec | null = null;
 
-  private readonly maskMaterial = new THREE.MeshBasicMaterial({
-    color: 0x000000,
-    side: THREE.DoubleSide,
-    // Matches the surface, so the lines lying on it still win the depth test.
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
-  });
-  private readonly maskedMeshes: { mesh: THREE.Mesh; material: THREE.Material | THREE.Material[] }[] = [];
-  private readonly maskedLines: { material: LineMaterial; color: number }[] = [];
-  private readonly maskedHidden: THREE.Object3D[] = [];
+  private readonly masking = new BloomMask();
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -76,9 +66,9 @@ export class BloomChain {
   render(root: THREE.Object3D | null, sky: THREE.Object3D | null): boolean {
     if (!this.active) return false;
     if (sky) sky.visible = false;
-    this.mask(root);
+    this.masking.apply(root, BLOOM_LAYER);
     this.bloomComposer!.render();
-    this.unmask();
+    this.masking.restore();
     if (sky) sky.visible = true;
     this.finalComposer!.render();
     return true;
@@ -92,7 +82,7 @@ export class BloomChain {
   dispose(): void {
     this.bloomComposer?.dispose();
     this.finalComposer?.dispose();
-    this.maskMaterial.dispose();
+    this.masking.dispose();
   }
 
   private ensure(): UnrealBloomPass {
@@ -126,44 +116,6 @@ export class BloomChain {
     return this.bloomPass;
   }
 
-  /**
-   * Everything not tagged to glow is drawn black instead of being skipped,
-   * because the chain still needs the scene's depth: without it the outlines
-   * on the far side of the object, and the ones behind a marker pin, are
-   * composited into the frame no matter what stands in front of them. Black
-   * adds nothing when the glow goes back on; occluding is the whole job.
-   * Transparent overlays write no depth, so they are hidden instead — which
-   * also stops them being composited twice.
-   */
-  private mask(root: THREE.Object3D | null): void {
-    root?.traverse((obj) => {
-      if (obj.layers.isEnabled(BLOOM_LAYER)) return;
-      const mesh = obj as THREE.Mesh;
-      const material = mesh.material;
-      if (!material || Array.isArray(material)) return;
-
-      if (material.transparent) {
-        obj.visible = false;
-        this.maskedHidden.push(obj);
-      } else if ((material as LineMaterial).isLineMaterial) {
-        const line = material as LineMaterial;
-        this.maskedLines.push({ material: line, color: line.color.getHex() });
-        line.color.setHex(0x000000);
-      } else {
-        this.maskedMeshes.push({ mesh, material });
-        mesh.material = this.maskMaterial;
-      }
-    });
-  }
-
-  private unmask(): void {
-    for (const { mesh, material } of this.maskedMeshes) mesh.material = material;
-    for (const { material, color } of this.maskedLines) material.color.setHex(color);
-    for (const obj of this.maskedHidden) obj.visible = true;
-    this.maskedMeshes.length = 0;
-    this.maskedLines.length = 0;
-    this.maskedHidden.length = 0;
-  }
 }
 
 /** Adds the bloom layer's glow onto the real frame, still in linear HDR. */
