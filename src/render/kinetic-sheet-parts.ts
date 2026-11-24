@@ -21,6 +21,7 @@ import {
   STACK_SHEET_STYLE as S,
   STACK_SHEET_DEFAULTS as D,
 } from './kinetic-sheet-constants.ts';
+import { sheetLink } from './sheet-link.ts';
 
 const TAU = Math.PI * 2;
 
@@ -186,6 +187,46 @@ export function fitCellMm(opts: {
 }
 
 /**
+ * A line of notes, broken to fit the sheet.
+ *
+ * `SheetFlow.notes` draws what it is given and does not measure it, so a long
+ * sentence runs off the right margin and is silently cut. The width here is in
+ * characters rather than millimetres because the note face is the one size:
+ * ninety-five of them is some 120 mm of the sheet's 190 at `noteSize`, which
+ * leaves the top right corner of the first sheet for the link back to the page
+ * (`SheetFlow.link`).
+ */
+export function wrapped(lines: readonly string[], columns = 95): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    const indent = line.startsWith('  ') ? '  ' : '';
+    const words = line.trim().split(' ');
+    let at = indent;
+    for (const word of words) {
+      if (at.trim() !== '' && (at + ' ' + word).length > columns) {
+        out.push(at);
+        at = `${indent}${indent === '' ? '   ' : '  '}${word}`;
+      } else {
+        at = at.trim() === '' ? `${indent}${word}` : `${at} ${word}`;
+      }
+    }
+    out.push(at);
+  }
+  return out;
+}
+
+/**
+ * Where the three turning patterns break their notes.
+ *
+ * Wider than the folding patterns' ninety-five, because here a line more in
+ * the heading is a line less for the pieces, which are laid down the same
+ * sheet: at ninety-five, nine patterns in 480 across the catalogue came to a
+ * sheet more than they used to, and at this, three. It is still short of the
+ * link in the corner — some 145 mm of the 156 there is to its left.
+ */
+export const TURNING_NOTE_COLUMNS = 115;
+
+/**
  * Blocks laid down a page, and onto the next page when one runs out.
  *
  * A block is never split across sheets: `ensure` asks for the room a whole
@@ -242,6 +283,21 @@ export class SheetFlow {
       });
       this.y += S.noteLeading;
     }
+  }
+
+  /**
+   * The link back to the page, as a QR code in the top right corner of the
+   * sheet in hand; nothing, when there is no link to give.
+   *
+   * Asked for once the title and the notes are down. They are broken well
+   * short of the corner (`wrapped`), so it is theirs to stand beside, and
+   * whatever is laid down next starts below it however few the notes were.
+   */
+  link(url: string | undefined): void {
+    if (!url) return;
+    const link = sheetLink(url, this.sheet);
+    this.add(...link.items);
+    this.y = Math.max(this.y, link.keepClear.bottom);
   }
 
   /** A heading over the block that follows, at the left margin unless moved. */

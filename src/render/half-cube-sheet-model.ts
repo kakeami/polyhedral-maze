@@ -46,11 +46,9 @@ import { dot, mean, norm, sub } from '../core/vec3.ts';
 import type { PageItem } from './face-page-model.ts';
 import { buildEdgeIndex } from './edge-index.ts';
 import { drawPieceNet } from './piece-net-model.ts';
-import {
-  bestLayout, hingesByPiece, sameVec, tapeLabels, wrapped,
-} from './ring-piece-sheet.ts';
+import { bestLayout, hingesByPiece, sameVec, tapeLabels } from './ring-piece-sheet.ts';
 import type { Hinge } from './ring-piece-sheet.ts';
-import { SheetFlow, fitCellMm } from './kinetic-sheet-parts.ts';
+import { SheetFlow, fitCellMm, wrapped } from './kinetic-sheet-parts.ts';
 import { A4_SHEET, STACK_SHEET_DEFAULTS as D, STACK_SHEET_STYLE as S } from './kinetic-sheet-constants.ts';
 import type { SheetBox } from './kinetic-sheet-constants.ts';
 import { FOLD_SHEET_STYLE as F } from './fold-sheet-constants.ts';
@@ -62,6 +60,11 @@ export interface HalfCubeSheetOptions {
   gapMm?: number;
   sheet?: SheetBox;
   title?: string;
+  /**
+   * Where this maze is on the web. Given, the first sheet carries it as a QR
+   * code beside the notes (`sheet-link.ts`); left out, nothing is drawn.
+   */
+  url?: string;
   /** Where the markers are printed; found from the design when not given. */
   ends?: PrintedEnds;
 }
@@ -204,6 +207,7 @@ export function buildHalfCubeSheets(
       'finish at either G. Every shape below is a perfect maze, so each of those walks has ' +
       'exactly one way. (The web page draws the shortest of them.)',
   ]));
+  flow.link(options.url);
   flow.y += gap / 2;
 
   flow.label(`One printed pattern, a perfect maze in ${rate.perfect === surface.stateCount

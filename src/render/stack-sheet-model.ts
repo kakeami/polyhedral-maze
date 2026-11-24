@@ -24,7 +24,7 @@ import {
   STACK_SHEET_DEFAULTS as D,
   A4_SHEET,
 } from './kinetic-sheet-constants.ts';
-import { SheetFlow, bulkheadItems, turningLine } from './kinetic-sheet-parts.ts';
+import { SheetFlow, bulkheadItems, TURNING_NOTE_COLUMNS, turningLine, wrapped } from './kinetic-sheet-parts.ts';
 
 export interface StackSheetOptions {
   cellMm?: number;
@@ -34,6 +34,11 @@ export interface StackSheetOptions {
   gapMm?: number;
   sheet?: SheetBox;
   title?: string;
+  /**
+   * Where this maze is on the web. Given, the first sheet carries it as a QR
+   * code beside the notes (`sheet-link.ts`); left out, nothing is drawn.
+   */
+  url?: string;
   /** Cell index of the entrance; defaults to the bottom rim. */
   start?: number;
   /** Cell index of the exit; defaults to the top rim, across the barrel. */
@@ -107,7 +112,8 @@ export function buildStackSheets(
     '6. Cap the dowel above and below so the rings cannot slide off.',
     puzzleLine,
   ];
-  flow.notes(notes);
+  flow.notes(wrapped(notes, TURNING_NOTE_COLUMNS));
+  flow.link(options.url);
   flow.y += gap;
 
   // ---- Bands --------------------------------------------------------------

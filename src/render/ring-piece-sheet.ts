@@ -231,33 +231,6 @@ export function tapeLabels(
   return items;
 }
 
-/**
- * A line of notes, broken to fit the sheet.
- *
- * `SheetFlow.notes` draws what it is given and does not measure it, so a long
- * sentence runs off the right margin and is silently cut. The width here is in
- * characters rather than millimetres because the note face is the one size:
- * ninety-five of them is the sheet's usable width at `noteSize`, measured.
- */
-export function wrapped(lines: readonly string[], columns = 95): string[] {
-  const out: string[] = [];
-  for (const line of lines) {
-    const indent = line.startsWith('  ') ? '  ' : '';
-    const words = line.trim().split(' ');
-    let at = indent;
-    for (const word of words) {
-      if (at.trim() !== '' && (at + ' ' + word).length > columns) {
-        out.push(at);
-        at = `${indent}${indent === '' ? '   ' : '  '}${word}`;
-      } else {
-        at = at.trim() === '' ? `${indent}${word}` : `${at} ${word}`;
-      }
-    }
-    out.push(at);
-  }
-  return out;
-}
-
 /** A unit vector from the inside of a face towards a point on its rim. */
 export function awayFrom(inside: Vec2, at: Vec2): Vec2 {
   const dx = at[0] - inside[0];

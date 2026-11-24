@@ -42,10 +42,8 @@ import { norm, sub } from '../core/vec3.ts';
 import type { PageItem } from './face-page-model.ts';
 import { buildEdgeIndex } from './edge-index.ts';
 import { drawPieceNet } from './piece-net-model.ts';
-import {
-  bestLayout, hingesByPiece, sameVec, tapeLabels, wrapped,
-} from './ring-piece-sheet.ts';
-import { SheetFlow, fitCellMm } from './kinetic-sheet-parts.ts';
+import { bestLayout, hingesByPiece, sameVec, tapeLabels } from './ring-piece-sheet.ts';
+import { SheetFlow, fitCellMm, wrapped } from './kinetic-sheet-parts.ts';
 import { A4_SHEET, STACK_SHEET_DEFAULTS as D, STACK_SHEET_STYLE as S } from './kinetic-sheet-constants.ts';
 import type { SheetBox } from './kinetic-sheet-constants.ts';
 import { FOLD_SHEET_STYLE as F } from './fold-sheet-constants.ts';
@@ -56,6 +54,11 @@ export interface HoneycombSheetOptions {
   gapMm?: number;
   sheet?: SheetBox;
   title?: string;
+  /**
+   * Where this maze is on the web. Given, the first sheet carries it as a QR
+   * code beside the notes (`sheet-link.ts`); left out, nothing is drawn.
+   */
+  url?: string;
   /** Where the markers are printed; found from the design when not given. */
   ends?: PrintedEnds;
 }
@@ -225,6 +228,7 @@ export function buildHoneycombSheets(
     `5. The maze runs from S to G. Each is printed twice, on two cells that are never both ` +
       `on the outside — whichever of the pair you can see is the one in play.`,
   ]));
+  flow.link(options.url);
   flow.y += gap / 2;
 
   flow.label(`One printed pattern, a perfect maze in ${rate.perfect === surface.stateCount

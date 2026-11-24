@@ -37,8 +37,8 @@ import { scale2 } from '../core/vec2.ts';
 import type { Vec3 } from '../core/types.ts';
 import { add, cross, dot, scale, sub } from '../core/vec3.ts';
 import type { PageItem } from './face-page-model.ts';
-import { glueTabQuad } from './kinetic-sheet-parts.ts';
-import { wrapped } from './ring-piece-sheet.ts';
+import { glueTabQuad, wrapped } from './kinetic-sheet-parts.ts';
+import { sheetLink } from './sheet-link.ts';
 import type { SheetBox } from './kinetic-sheet-constants.ts';
 import { A4_SHEET } from './kinetic-sheet-constants.ts';
 import { FOLD_SHEET_STYLE as S, FOLD_SHEET_DEFAULTS as D } from './fold-sheet-constants.ts';
@@ -54,6 +54,11 @@ export interface CubeRingSheetOptions {
   edgeMm?: number;
   tabMm?: number;
   sheet?: SheetBox;
+  /**
+   * Where this maze is on the web. Given, the first sheet carries it as a QR
+   * code beside the notes (`sheet-link.ts`); left out, nothing is drawn.
+   */
+  url?: string;
 }
 
 export interface FoldSheetOptions extends CubeRingSheetOptions {
@@ -390,7 +395,7 @@ export function buildCubeRingSheets(
 
   sheets.push({
     piece: null,
-    items: assemblySheet(mech, surface, printed, seams, sheet, edge, notes),
+    items: assemblySheet(mech, surface, printed, seams, sheet, edge, notes, options.url),
   });
 
   for (let piece = 0; piece < mech.pieceCount; piece++) {
@@ -800,6 +805,7 @@ function assemblySheet(
   sheet: SheetBox,
   edge: number,
   said: CubeRingNotes,
+  url: string | undefined,
 ): PageItem[] {
   const items: PageItem[] = [];
   let y = sheet.margin;
@@ -881,6 +887,13 @@ function assemblySheet(
   if (said.key) {
     items.push(...symbolKey(said.key, [sheet.margin, y + S.noteSize]));
     y += S.noteLeading;
+  }
+  if (url) {
+    // In the corner the notes leave: they are broken well short of it. The
+    // views start below it however few the notes were.
+    const link = sheetLink(url, sheet);
+    items.push(...link.items);
+    y = Math.max(y, link.keepClear.bottom);
   }
   y += 3;
 

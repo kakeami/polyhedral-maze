@@ -31,7 +31,8 @@ import {
   A4_SHEET,
 } from './kinetic-sheet-constants.ts';
 import {
-  SheetFlow, bulkheadItems, discItems, fitCellMm, turningLine,
+  SheetFlow, bulkheadItems, discItems, fitCellMm, turningLine, wrapped,
+  TURNING_NOTE_COLUMNS,
 } from './kinetic-sheet-parts.ts';
 
 export interface PairSheetOptions {
@@ -42,6 +43,11 @@ export interface PairSheetOptions {
   gapMm?: number;
   sheet?: SheetBox;
   title?: string;
+  /**
+   * Where this maze is on the web. Given, the first sheet carries it as a QR
+   * code beside the notes (`sheet-link.ts`); left out, nothing is drawn.
+   */
+  url?: string;
   start?: number;
   goal?: number;
 }
@@ -135,7 +141,7 @@ export function buildPairSheets(
 
   const perfect = rate.perfect;
   const puzzleLine = turningLine(perfect, surface.stateCount, 'the halves');
-  flow.notes([
+  flow.notes(wrapped([
     'Print at 100%. Glue the sheets to thin card, then cut.',
     '1. Cut each half on the dashed outline, round the shaded tabs.',
     '2. Fold along every seam between two faces, all one way — the heavy lines inside a piece ' +
@@ -149,7 +155,8 @@ export function buildPairSheets(
       'into the second half with the disc inside.',
     '7. Nothing else is glued: the two halves have to turn against each other.',
     puzzleLine,
-  ]);
+  ], TURNING_NOTE_COLUMNS));
+  flow.link(options.url);
   flow.y += gap;
 
   // ---- The two halves -----------------------------------------------------

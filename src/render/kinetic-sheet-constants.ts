@@ -131,3 +131,32 @@ export interface SheetBox {
 }
 
 export const A4_SHEET: SheetBox = { width: 210, height: 297, margin: 10 };
+
+/**
+ * The QR code on a pattern's first sheet, which is the way back from the paper
+ * to the page the maze came from.
+ *
+ * It stands in the top right corner, inside the margins, beside the title and
+ * the notes: those are broken at ninety-five characters (`wrapped`), which is
+ * some 120 of the sheet's 190 mm, so the corner is the one place every pattern
+ * leaves empty. Thirty millimetres is as large as the shortest set of notes is tall,
+ * and puts a module of a link as long as the pages make them (version 8, 49
+ * modules) at 0.6 mm — three times what a phone needs.
+ */
+export const SHEET_LINK_STYLE = {
+  /** Side of the symbol itself, without the quiet zone round it. */
+  sizeMm: 30,
+  /** Modules kept clear round the symbol; four is what the standard asks. */
+  quietModules: 4,
+  dark: [0, 0, 0] as RGB,
+  /**
+   * A hairline round every run of dark modules, in their own colour. A viewer
+   * that smooths edges leaves a pale seam between two filled boxes that only
+   * touch; this laps them. It widens a module by a fortieth on each side,
+   * which is nothing a reader measures.
+   */
+  lapMm: 0.03,
+  caption: 'Scan to view online',
+  captionSize: 2.4,
+  captionColor: [110, 110, 110] as RGB,
+} as const;

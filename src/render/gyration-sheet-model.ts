@@ -36,7 +36,8 @@ import {
   A4_SHEET,
 } from './kinetic-sheet-constants.ts';
 import {
-  SheetFlow, bulkheadItems, discItems, fitCellMm, turningLine,
+  SheetFlow, bulkheadItems, discItems, fitCellMm, turningLine, wrapped,
+  TURNING_NOTE_COLUMNS,
 } from './kinetic-sheet-parts.ts';
 
 export interface GyrationSheetOptions {
@@ -46,6 +47,11 @@ export interface GyrationSheetOptions {
   gapMm?: number;
   sheet?: SheetBox;
   title?: string;
+  /**
+   * Where this maze is on the web. Given, the first sheet carries it as a QR
+   * code beside the notes (`sheet-link.ts`); left out, nothing is drawn.
+   */
+  url?: string;
   start?: number;
   goal?: number;
 }
@@ -169,7 +175,7 @@ export function buildGyrationSheets(
   const perfect = rate.perfect;
   const cuts = mech.axis.seams.length;
   const puzzleLine = turningLine(perfect, surface.stateCount, 'the pieces');
-  flow.notes([
+  flow.notes(wrapped([
     'Print at 100%. Glue the sheets to thin card, then cut.',
     '1. Cut each piece on the dashed outline, round the shaded tabs.',
     '2. Fold along every seam between two faces, all one way — the heavy lines inside a piece ' +
@@ -184,7 +190,8 @@ export function buildGyrationSheets(
       'bulkhead into the piece above, disc inside.',
     '7. Nothing else is glued: the pieces have to turn against each other.',
     puzzleLine,
-  ]);
+  ], TURNING_NOTE_COLUMNS));
+  flow.link(options.url);
   flow.y += gap;
 
   // ---- The pieces ---------------------------------------------------------
