@@ -111,6 +111,20 @@ export function encodeFoldParams(params: FoldParams): string {
   return qs ? '?' + qs : '';
 }
 
+/**
+ * The link a printed pattern carries: the maze, and nothing of how it was
+ * being looked at when it was printed.
+ *
+ * Which shape it stood in, the style and whether it was turning belong to the
+ * moment and not to the paper — and a sheet that opened the page with the
+ * answer drawn on it would give the puzzle away.
+ */
+export function encodeFoldMaze(maze: Pick<FoldParams, 'object' | 'cells' | 'seed'>): string {
+  return encodeFoldParams({
+    ...DEFAULT_FOLD_PARAMS, object: maze.object, cells: maze.cells, seed: maze.seed,
+  });
+}
+
 export function decodeFoldParams(search: string): FoldParams {
   const p = new URLSearchParams(search);
   const d = DEFAULT_FOLD_PARAMS;

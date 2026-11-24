@@ -4,6 +4,7 @@ import {
   FOLD_LIMITS,
   clampFoldParams,
   decodeFoldParams,
+  encodeFoldMaze,
   encodeFoldParams,
   nearestRuling,
 } from '../../ui/fold-param-codec.ts';
@@ -79,5 +80,32 @@ describe('the folding maze in a URL', () => {
   it('ignores nonsense rather than breaking on it', () => {
     const wild = decodeFoldParams('?n=abc&seed=&pose=NaN&style=gilded&fold=maybe');
     expect(wild).toEqual({ ...DEFAULT_FOLD_PARAMS, fold: false });
+  });
+});
+
+describe('the link a printed pattern carries', () => {
+  // Someone printing it with the answer on show, in the plank, in another style.
+  const looking = clampFoldParams({
+    ...DEFAULT_FOLD_PARAMS,
+    object: FRAME_LOOP.id, cells: 3, seed: 5, pose: 2, showSolution: true,
+    fold: !DEFAULT_FOLD_PARAMS.fold, autoRotate: !DEFAULT_FOLD_PARAMS.autoRotate, style: 'obsidian',
+  });
+
+  it('names the maze: the object, the ruling and the seed', () => {
+    const opened = decodeFoldParams(encodeFoldMaze(looking));
+    expect(opened.object).toBe(looking.object);
+    expect(opened.cells).toBe(looking.cells);
+    expect(opened.seed).toBe(looking.seed);
+  });
+
+  it('carries nothing of how it was being looked at, least of all the answer', () => {
+    const link = encodeFoldMaze(looking);
+    expect(link).toBe(`?object=${FRAME_LOOP.id}&n=3&seed=5`);
+    expect(decodeFoldParams(link).showSolution).toBe(DEFAULT_FOLD_PARAMS.showSolution);
+    expect(encodeFoldParams(looking)).toContain('solution=1');
+  });
+
+  it('is the bare page for the maze the page opens with', () => {
+    expect(encodeFoldMaze(DEFAULT_FOLD_PARAMS)).toBe('');
   });
 });

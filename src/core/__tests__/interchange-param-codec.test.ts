@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_INTERCHANGE_PARAMS, INTERCHANGE_LIMITS, clampInterchangeParams,
-  decodeInterchangeParams, encodeInterchangeParams, nearestRuling,
+  decodeInterchangeParams, encodeInterchangeMaze, encodeInterchangeParams, nearestRuling,
 } from '../../ui/interchange-param-codec.ts';
 import { interchangeRulings } from '../../ui/interchange-objects.ts';
 
@@ -39,5 +39,28 @@ describe('the interchange maze in a URL', () => {
     expect(interchangeRulings()).toContain(nearestRuling(0));
     // A parameter that is there and empty names nothing.
     expect(decodeInterchangeParams('?seed=').seed).toBe(DEFAULT_INTERCHANGE_PARAMS.seed);
+  });
+});
+
+describe('the link a printed pattern carries', () => {
+  const looking = clampInterchangeParams({
+    ...DEFAULT_INTERCHANGE_PARAMS,
+    cells: 3, stations: 7, folds: 3, seed: 5, pose: 2, showSolution: true,
+    autoRotate: !DEFAULT_INTERCHANGE_PARAMS.autoRotate, style: 'obsidian',
+  });
+
+  it('names the maze: the ruling, the stations, the folds and the seed', () => {
+    const opened = decodeInterchangeParams(encodeInterchangeMaze(looking));
+    expect(opened.cells).toBe(looking.cells);
+    expect(opened.stations).toBe(looking.stations);
+    expect(opened.folds).toBe(looking.folds);
+    expect(opened.seed).toBe(looking.seed);
+  });
+
+  it('carries nothing of how it was being looked at, least of all the answer playing', () => {
+    const link = encodeInterchangeMaze(looking);
+    expect(link).toBe('?n=3&stations=7&folds=3&seed=5');
+    expect(decodeInterchangeParams(link).showSolution).toBe(DEFAULT_INTERCHANGE_PARAMS.showSolution);
+    expect(encodeInterchangeParams(looking)).toContain('solution=1');
   });
 });

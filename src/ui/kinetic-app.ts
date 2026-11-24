@@ -42,7 +42,9 @@ import { exportPairPDF } from '../render/pdf-kinetic-sheets.ts';
 import { exportGyrationPDF } from '../render/pdf-kinetic-sheets.ts';
 import { A4_SHEET, STACK_SHEET_DEFAULTS } from '../render/kinetic-sheet-constants.ts';
 import { createKineticControls } from './kinetic-controls.ts';
-import { decodeKineticParams, encodeKineticParams, isMaxEffort } from './kinetic-param-codec.ts';
+import {
+  decodeKineticParams, encodeKineticMaze, encodeKineticParams, isMaxEffort,
+} from './kinetic-param-codec.ts';
 import type { KineticParams } from './kinetic-param-codec.ts';
 
 /**
@@ -342,6 +344,10 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
     );
   });
 
+  /** Where the maze a pattern is printed from is on the web: what its QR code says. */
+  const linkTo = (made: KineticParams): string =>
+    window.location.origin + window.location.pathname + encodeKineticMaze(made);
+
   controls.onAction('export-pdf', () => {
     if (!build) return;
     if (build.params.mechanism === 'pair') {
@@ -372,7 +378,7 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
     controls.setExportBusy(true);
     setTimeout(() => {
       try {
-        const plan = exportStackPDF(mech, surface, design, p.seed, { cellMm });
+        const plan = exportStackPDF(mech, surface, design, p.seed, { cellMm, url: linkTo(p) });
         controls.showToast(
           `${plan.sheets.length} sheets — a ${plan.barrelWidthMm.toFixed(0)} mm barrel, ` +
           `${plan.barrelHeightMm.toFixed(0)} mm tall, on a ${STACK_SHEET_DEFAULTS.dowelMm} mm dowel`,
@@ -393,6 +399,7 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
       try {
         const plan = exportGyrationPDF(
           mech, current.surface, current.design, current.params.seed,
+          { url: linkTo(current.params) },
         );
         const dowels = plan.dowelLengthsMm.map(mm => `${mm} mm`).join(' and ');
         controls.showToast(
@@ -415,6 +422,7 @@ export function initKineticApp(viewportEl: HTMLElement, controlsEl: HTMLElement)
       try {
         const plan = exportPairPDF(
           mech, current.surface, current.design, current.params.seed,
+          { url: linkTo(current.params) },
         );
         controls.showToast(
           `${plan.sheets.length} sheets — a ${plan.jointWidthMm.toFixed(0)} mm joint, ` +

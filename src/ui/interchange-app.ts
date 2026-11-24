@@ -40,7 +40,8 @@ import { SCENE_PRESETS } from '../render/scene-presets.ts';
 import { createInterchangeControls } from './interchange-controls.ts';
 import { INTERCHANGE_OBJECT, interchangeRulings, walkedStates } from './interchange-objects.ts';
 import {
-  INTERCHANGE_LIMITS, decodeInterchangeParams, encodeInterchangeParams, randomSeed,
+  INTERCHANGE_LIMITS, decodeInterchangeParams, encodeInterchangeMaze, encodeInterchangeParams,
+  randomSeed,
 } from './interchange-param-codec.ts';
 import type { InterchangeParams } from './interchange-param-codec.ts';
 
@@ -294,7 +295,9 @@ export function initInterchangeApp(viewportEl: HTMLElement, controlsEl: HTMLElem
     controls.setExportBusy(true);
     setTimeout(() => {
       try {
-        const plan = exportInterchangePDF(ruling.mech, ruling.world, maze, asked);
+        const url = window.location.origin + window.location.pathname
+          + encodeInterchangeMaze({ cells: ruling.mech.cellsPerFace, ...asked });
+        const plan = exportInterchangePDF(ruling.mech, ruling.world, maze, asked, { url });
         controls.showToast(
           `${plan.sheets.length} sheets — ${ruling.mech.pieceCount} cubes `
           + `${plan.edgeMm.toFixed(0)} mm on a side`,

@@ -96,6 +96,19 @@ export function encodeInterchangeParams(params: InterchangeParams): string {
   return qs ? '?' + qs : '';
 }
 
+/**
+ * The link a printed pattern carries: the maze, and nothing of how it was
+ * being looked at when it was printed — least of all the answer playing.
+ */
+export function encodeInterchangeMaze(
+  maze: Pick<InterchangeParams, 'cells' | 'stations' | 'folds' | 'seed'>,
+): string {
+  return encodeInterchangeParams({
+    ...DEFAULT_INTERCHANGE_PARAMS,
+    cells: maze.cells, stations: maze.stations, folds: maze.folds, seed: maze.seed,
+  });
+}
+
 export function decodeInterchangeParams(search: string): InterchangeParams {
   const p = new URLSearchParams(search);
   const d = DEFAULT_INTERCHANGE_PARAMS;

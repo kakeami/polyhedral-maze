@@ -412,6 +412,26 @@ export function encodeKineticParams(params: KineticParams): string {
   return qs ? '?' + qs : '';
 }
 
+/**
+ * The link a printed pattern carries: the maze, and nothing of how it was
+ * being looked at when it was printed.
+ *
+ * The answer, the motion and the style are left at what the page opens with,
+ * and so are the dials of the two mechanisms this maze is not on — the panel
+ * remembers them, and a link is longer for each, which on paper is a QR code
+ * with finer modules. The effort stays: the same seed searched harder is a
+ * different maze.
+ */
+export function encodeKineticMaze(params: KineticParams): string {
+  const d = DEFAULT_KINETIC_PARAMS;
+  const { mechanism, k, seed, effort } = params;
+  const own: Partial<KineticParams> =
+    mechanism === 'pair' ? { pair: params.pair, pairN: params.pairN }
+    : mechanism === 'cut' ? { cut: params.cut, cutN: params.cutN }
+    : { sides: params.sides, layers: params.layers, cols: params.cols, rows: params.rows };
+  return encodeKineticParams({ ...d, mechanism, k, seed, effort, ...own });
+}
+
 export function decodeKineticParams(search: string): KineticParams {
   const p = new URLSearchParams(search);
   const d = DEFAULT_KINETIC_PARAMS;

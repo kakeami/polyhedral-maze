@@ -53,7 +53,9 @@ import { exportFoldPDF, exportHalfCubePDF, exportHoneycombPDF } from '../render/
 import { createFoldScene } from '../render/fold-scene.ts';
 import { createFoldControls } from './fold-controls.ts';
 import type { FoldPose } from './fold-controls.ts';
-import { decodeFoldParams, encodeFoldParams, randomSeed } from './fold-param-codec.ts';
+import {
+  decodeFoldParams, encodeFoldMaze, encodeFoldParams, randomSeed,
+} from './fold-param-codec.ts';
 import type { FoldParams } from './fold-param-codec.ts';
 import { SCENE_PRESETS } from '../render/scene-presets.ts';
 
@@ -405,11 +407,15 @@ export function initFoldApp(viewportEl: HTMLElement, controlsEl: HTMLElement) {
     controls.setExportBusy(true);
     setTimeout(() => {
       try {
+        // The maze that is printed, not the panel as it stands: a search for
+        // another one may be under way.
+        const url = window.location.origin + window.location.pathname
+          + encodeFoldMaze({ object: mech.object.id, cells: mech.cellsPerFace, seed: from });
         const plan = isCubeRingMechanism(mech)
-          ? exportFoldPDF(mech, surface, design, from, { ends })
+          ? exportFoldPDF(mech, surface, design, from, { ends, url })
           : isHalfCubeRingMechanism(mech)
-            ? exportHalfCubePDF(mech, surface, design, from, { ends })
-            : exportHoneycombPDF(mech, surface, design, from, { ends });
+            ? exportHalfCubePDF(mech, surface, design, from, { ends, url })
+            : exportHoneycombPDF(mech, surface, design, from, { ends, url });
         controls.showToast(
           `${plan.sheets.length} sheets — ${mech.pieceCount} ` +
           `${isCubeRingMechanism(mech) ? 'cubes' : isHalfCubeRingMechanism(mech) ? 'half cubes' : 'prisms'} ` +

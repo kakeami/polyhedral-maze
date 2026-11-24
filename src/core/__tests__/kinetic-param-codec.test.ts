@@ -14,6 +14,7 @@ import {
   cellCount,
   clampKineticParams,
   decodeKineticParams,
+  encodeKineticMaze,
   encodeKineticParams,
   harderEffort,
   isMaxEffort,
@@ -292,5 +293,49 @@ describe('the cut solid on the same page', () => {
       expect(facts.pieces).toBe(3);
       expect(facts.stateCount).toBe(facts.turnSteps ** 2);
     }
+  });
+});
+
+describe('the link a printed pattern carries', () => {
+  const d = DEFAULT_KINETIC_PARAMS;
+  // Someone who tried the other mechanisms first, then printed a cut solid
+  // with the rings stopped, in another style.
+  const looking = clampKineticParams({
+    ...d,
+    mechanism: 'cut', cut: 'rhombicuboctahedron', cutN: 2, k: 1, seed: 5, effort: 4,
+    pair: 'j4@8', pairN: 2, sides: 8, layers: 3, cols: 2, rows: 2,
+    showSolution: !d.showSolution, motion: !d.motion, autoRotate: !d.autoRotate, style: 'obsidian',
+  });
+
+  it('names the maze: the mechanism, its own dials, the seed and the effort', () => {
+    const link = encodeKineticMaze(looking);
+    expect(link).toBe('?mech=cut&cut=rhombicuboctahedron&cn=2&k=1&seed=5&effort=4');
+    const opened = decodeKineticParams(link);
+    expect(opened.mechanism).toBe('cut');
+    expect(opened.cut).toBe(looking.cut);
+    expect(opened.cutN).toBe(looking.cutN);
+    expect(opened.k).toBe(looking.k);
+    expect(opened.seed).toBe(looking.seed);
+    expect(opened.effort).toBe(looking.effort);
+  });
+
+  it('carries nothing of how it was being looked at', () => {
+    const opened = decodeKineticParams(encodeKineticMaze(looking));
+    expect(opened.showSolution).toBe(d.showSolution);
+    expect(opened.motion).toBe(d.motion);
+    expect(opened.autoRotate).toBe(d.autoRotate);
+    expect(opened.style).toBe(d.style);
+  });
+
+  it('leaves out the dials of the mechanisms the maze is not on', () => {
+    // The panel remembers them; a QR code is finer for every one it carries.
+    const rings = encodeKineticMaze({ ...looking, mechanism: 'stack' });
+    expect(rings).toBe('?sides=8&rings=3&cols=2&rows=2&k=1&seed=5&effort=4');
+    const halves = encodeKineticMaze(clampKineticParams({ ...looking, mechanism: 'pair', k: 1 }));
+    expect(halves).toBe('?mech=pair&pair=j4%408&n=2&k=1&seed=5&effort=4');
+  });
+
+  it('is the bare page for the maze the page opens with', () => {
+    expect(encodeKineticMaze(d)).toBe('');
   });
 });
